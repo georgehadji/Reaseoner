@@ -39,7 +39,9 @@
       "mcp__Desktop_Commander__list_processes",
       "mcp__Desktop_Commander__list_sessions",
       "mcp__Desktop_Commander__stop_search",
-      "mcp__Desktop_Commander__get_more_search_results"
+      "mcp__Desktop_Commander__get_more_search_results",
+      "Bash(git add ui/index.html .claude/settings.local.json)",
+      "Bash(git commit -m \"Fix remaining syntax errors in UI features \\(phase names, template literals\\)\")"
     ]
   }
 }

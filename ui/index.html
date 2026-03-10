@@ -959,8 +959,7 @@ function createHistoryItem(conv) {
   const _synthP = (conv.phases || []).find(p => p.phase === 5);
   let _synthPreview = '';
   if (_synthP?.data?.core_solution) {
-    const _raw = String(_synthP.data.core_solution).replace(/
-/g,' ').trim();
+    const _raw = String(_synthP.data.core_solution).replace(/\n/g,' ').trim();
     _synthPreview = _raw.length > 60 ? _raw.slice(0, 60) + '…' : _raw;
   }
   const el = document.createElement('div');
@@ -2068,37 +2067,36 @@ function downloadResult(progressId) {
 
 function downloadMarkdown(progressId) {
   const data = _results[progressId];
-  if (\!data) return;
+  if (!data) return;
   const blob = new Blob([_resultToText(data)], { type: 'text/markdown' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = \;
+  a.download = `ara-result-${progressId}.md`;
   a.click();
   URL.revokeObjectURL(a.href);
 }
 
 function _resultToShareText(data) {
   const synthesis = (data.phases || []).find(p => p.phase === 5);
-  const lines = [\, ''];
+  const lines = ['### ' + (data.problem || 'ARA Analysis'), ''];
   if (synthesis?.data?.core_solution) {
     lines.push('## Solution', '', String(synthesis.data.core_solution), '');
   }
   if (synthesis?.data?.critical_insights?.length) {
     lines.push('## Key Insights', '');
-    synthesis.data.critical_insights.forEach((ins, i) => lines.push(\));
+    synthesis.data.critical_insights.forEach((ins) => lines.push(`- ${ins}`));
     lines.push('');
   }
-  lines.push('---', \);
-  return lines.join('
-');
+  lines.push('---', `Generated with ARA • ${new Date().toLocaleString()}`);
+  return lines.join('\n');
 }
 
 async function shareResult(progressId) {
   const data = _results[progressId];
-  if (\!data) return;
+  if (!data) return;
   try {
     await navigator.clipboard.writeText(_resultToShareText(data));
-    const btn = document.getElementById(\);
+    const btn = document.getElementById('share-btn');
     if (btn) {
       const orig = btn.textContent;
       btn.textContent = '✓ Copied';

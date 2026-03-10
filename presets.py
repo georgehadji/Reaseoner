@@ -513,6 +513,139 @@ PRESETS: dict[str, PipelinePreset] = {
         ],
         required_env_vars=["DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY", "ZHIPUAI_API_KEY"],
     ),
+
+    # ────────────────────────────────────────────────────────────────
+    # MID-TIER PRESETS — Balanced quality/cost for each method
+    # ────────────────────────────────────────────────────────────────
+
+    "debate-balanced": PipelinePreset(
+        name="Debate — Balanced",
+        description=(
+            "Adversarial debate with balanced cost/quality. "
+            "Claude Sonnet (Model A) vs DeepSeek (Model B), Opus judges. "
+            "Top-tier reasoning without premium pricing."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "classification":  "claude-sonnet",
+            "decomposition":   "claude-sonnet",
+            "constructive":    "claude-sonnet",    # Model A: quality reasoning
+            "destructive":     "deepseek-v3",      # Model B: adversarial diversity
+            "systemic":        "claude-opus",      # Judge: best evaluation
+            "minimalist":      "claude-sonnet",
+            "scoring":         "claude-opus",      # Judge: confident scoring
+            "stress_testing":  "claude-opus",
+            "synthesis":       "claude-sonnet",
+        },
+        notes=[
+            "Cross-lab (Anthropic + DeepSeek) for genuine adversarial dynamic",
+            "Claude Opus judges both sides: highest quality evaluation",
+            "Cost: 2.5x budget tier, but 40% cheaper than premium",
+            "Best for: medium-stakes decisions, balanced quality/cost",
+        ],
+        required_env_vars=["ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"],
+        fallback_routing={
+            "constructive": "claude-opus",
+        },
+    ),
+
+    "evolutionary-balanced": PipelinePreset(
+        name="Evolutionary — Balanced",
+        description=(
+            "Iterative refinement with balanced cost/quality. "
+            "Claude Sonnet drives optimization, Opus evaluates. "
+            "Genetic algorithm without premium-only pricing."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "classification":  "claude-sonnet",
+            "decomposition":   "claude-sonnet",
+            "constructive":    "claude-sonnet",    # Generator: capable creativity
+            "destructive":     "deepseek-v3",      # Critic: cross-lab perspective
+            "systemic":        "claude-opus",      # Judge: best scorer
+            "minimalist":      "claude-sonnet",    # Refiner: efficient simplification
+            "scoring":         "claude-opus",      # Judge: confident refinement
+            "stress_testing":  "claude-opus",
+            "synthesis":       "claude-sonnet",
+        },
+        notes=[
+            "Generator + Critic from different labs avoids echo chamber",
+            "Claude Opus judges all scoring/stress phases for highest quality",
+            "Supports 5-iteration refinement loop for complex problems",
+            "Cost: 2.5x budget tier, competitive with premium",
+            "Best for: optimization problems with medium complexity",
+        ],
+        required_env_vars=["ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"],
+    ),
+
+    "research-balanced": PipelinePreset(
+        name="Research — Balanced",
+        description=(
+            "Evidence-grounded analysis with balanced cost/quality. "
+            "Sonar handles search-heavy phases, Claude refines. "
+            "Fact-checked synthesis without Sonar Deep Research latency."
+        ),
+        primary_id="sonar",
+        routing={
+            "classification":  "sonar",             # fast search classification
+            "decomposition":   "claude-sonnet",     # calibrated structure
+            "constructive":    "sonar-pro",         # grounded ideas
+            "destructive":     "deepseek-v3",       # adversarial (no search bias)
+            "systemic":        "claude-sonnet",     # systemic without search latency
+            "minimalist":      "sonar",             # fast, cited minimalist take
+            "scoring":         "claude-sonnet",     # evaluate candidate quality
+            "stress_testing":  "deepseek-v3",       # adversarial testing
+            "synthesis":       "sonar-pro",         # fully grounded synthesis with citations
+        },
+        notes=[
+            "Balanced: Sonar for search-critical phases, Claude for reasoning",
+            "Avoids Deep Research latency (20-30 web searches) in every phase",
+            "Synthesis is fully grounded with web citations",
+            "Cost: 2-3x cheaper than full Sonar pipeline",
+            "Best for: current events, market research, hybrid fact/reasoning questions",
+        ],
+        required_env_vars=["PERPLEXITY_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"],
+        fallback_routing={
+            "classification":  "claude-sonnet",
+            "constructive":    "claude-sonnet",
+            "minimalist":      "claude-sonnet",
+            "stress_testing":  "claude-sonnet",
+            "synthesis":       "claude-sonnet",
+        },
+    ),
+
+    "research-budget": PipelinePreset(
+        name="Research — Cost Efficient",
+        description=(
+            "Evidence-grounded analysis with minimal cost. "
+            "Sonar for search phases only, DeepSeek for reasoning. "
+            "Single web-search provider with cross-lab diversity."
+        ),
+        primary_id="sonar",
+        routing={
+            "classification":  "sonar",             # fast search classification
+            "decomposition":   "deepseek-v3",       # cost-efficient structure
+            "constructive":    "deepseek-v3",       # cost-efficient generation
+            "destructive":     "qwen3-max",         # cross-lab adversarial
+            "systemic":        "deepseek-v3",       # long-range reasoning
+            "minimalist":      "qwen3-turbo",       # cheapest refiner
+            "scoring":         "qwen3-max",         # cross-lab scoring
+            "stress_testing":  "deepseek-v3",       # adversarial testing
+            "synthesis":       "sonar",             # basic grounded synthesis
+        },
+        notes=[
+            "Sonar only in classification + synthesis for minimum search cost",
+            "DeepSeek + Qwen for all reasoning: different labs, different biases",
+            "Trade-off: less search depth than balanced/premium tiers",
+            "Cost: ~3x cheaper than balanced research tier",
+            "Best for: cost-sensitive research, fact-checking without deep dives",
+        ],
+        required_env_vars=["PERPLEXITY_API_KEY", "DEEPSEEK_API_KEY", "DASHSCOPE_API_KEY"],
+        fallback_routing={
+            "classification":  "deepseek-v3",
+            "synthesis":       "deepseek-v3",
+        },
+    ),
 }
 
 

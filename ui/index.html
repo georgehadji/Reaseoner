@@ -99,6 +99,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .sidebar.collapsed .sidebar-label,
 .sidebar.collapsed .preset-hint,
 .sidebar.collapsed .sidebar-field,
+.sidebar.collapsed .method-tabs,
 .sidebar.collapsed .advanced-section,
 .sidebar.collapsed .sidebar-scroll { display: none !important; }
 .sidebar.collapsed .sidebar-logo { justify-content: center; padding: 0 8px; }
@@ -125,6 +126,19 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 5px;
 }
 .sidebar-field { margin-bottom: 10px; }
+#method-field { margin-bottom: 12px; }
+.method-tabs {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 8px;
+}
+.method-tab {
+  padding: 6px 6px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text-2); font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
+  transition: all 0.15s ease; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; margin: 0;
+}
+.method-tab:hover { border-color: var(--text-2); color: var(--text); }
+.method-tab.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .select-wrap { position: relative; }
 .select-wrap::after {
   content: "▾"; position: absolute; right: 9px; top: 50%;
@@ -712,6 +726,15 @@ kbd {
         <div class="server-dot" id="server-dot" title="Checking server…"></div>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar (B)">«</button>
       </div>
+      <div class="sidebar-field" id="method-field">
+        <div class="sidebar-label">Method</div>
+        <div class="method-tabs">
+          <button class="method-tab active" data-method="standard" onclick="selectMethod('standard')" title="Standard: 6-phase reasoning">Standard</button>
+          <button class="method-tab" data-method="debate" onclick="selectMethod('debate')" title="Debate: Adversarial thinking">Debate</button>
+          <button class="method-tab" data-method="evolutionary" onclick="selectMethod('evolutionary')" title="Evolution: Iterative refinement">Evo</button>
+          <button class="method-tab" data-method="research" onclick="selectMethod('research')" title="Research: Evidence-grounded">Research</button>
+        </div>
+      </div>
       <div class="sidebar-field">
         <div class="sidebar-label">Preset</div>
         <div class="select-wrap">
@@ -812,6 +835,59 @@ kbd {
 const appState = { running: false, history: [] };
 const _results = {}; // progressId → { problem, phases, errors }
 let _allHistory = []; // All conversation history (cached for search filtering)
+
+// ── METHOD-TO-PRESETS MAPPING ──────────────────────────────────────
+const _METHOD_PRESETS = {
+  standard: [
+    { id: 'max-quality',         label: 'max-quality' },
+    { id: 'cost-efficient',      label: 'cost-efficient' },
+    { id: 'epistemic-diversity', label: 'epistemic-diversity' }
+  ],
+  debate: [
+    { id: 'debate',       label: 'debate' },
+    { id: 'debate-budget', label: 'debate-budget' }
+  ],
+  evolutionary: [
+    { id: 'evolutionary',        label: 'evolutionary' },
+    { id: 'evolutionary-budget', label: 'evolutionary-budget' }
+  ],
+  research: [
+    { id: 'research', label: 'research' }
+  ]
+};
+
+let _currentMethod = localStorage.getItem('ara-method') || 'standard';
+
+function selectMethod(method) {
+  if (!_METHOD_PRESETS[method]) return;
+  _currentMethod = method;
+  localStorage.setItem('ara-method', method);
+  document.querySelectorAll('.method-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.method === method);
+  });
+  updatePresetDropdown(method);
+}
+
+function updatePresetDropdown(method) {
+  const sel = document.getElementById('preset-select');
+  if (!sel) return;
+  const presets = _METHOD_PRESETS[method] || _METHOD_PRESETS.standard;
+  const currentValue = sel.value;
+  sel.innerHTML = '';
+  presets.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p.id;
+    const meta = _presetMeta[p.id];
+    opt.textContent = p.id + (meta && !meta.available ? ' ⚠' : '');
+    sel.appendChild(opt);
+  });
+  if (presets.some(p => p.id === currentValue)) {
+    sel.value = currentValue;
+  } else {
+    sel.value = presets[0]?.id || '';
+  }
+  updatePresetHint();
+}
 
 function _estimateCost(tokens) {
   const INPUT_RATE  = 3.00 / 1_000_000;
@@ -1164,18 +1240,16 @@ async function loadPresets() {
   try {
     const res = await fetch('/api/presets');
     const presets = await res.json();
-    const sel = document.getElementById('preset-select');
-    sel.innerHTML = '';
     Object.entries(presets).forEach(([id, p]) => {
       _presetMeta[id] = p;
-      const opt = document.createElement('option');
-      opt.value = id;
-      opt.textContent = id + (p.available ? '' : ' ⚠');
-      sel.appendChild(opt);
     });
-    sel.value = 'cost-efficient';
-    updatePresetHint();
-  } catch (_) { /* offline — keep default */ }
+    document.querySelectorAll('.method-tab').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.method === _currentMethod);
+    });
+    updatePresetDropdown(_currentMethod);
+  } catch (_) {
+    updatePresetDropdown(_currentMethod);
+  }
 }
 
 function updatePresetHint() {

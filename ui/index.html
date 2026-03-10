@@ -209,7 +209,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .composer.bottom ~ .messages { padding-bottom: 320px; }  /* Account for composer height + extra 200px */
 
 /* ── EMPTY STATE ── */
-.empty-state { text-align: center; padding: 72px 32px; color: var(--text-2); transition: opacity 0.3s; }
+.empty-state { text-align: center; padding: 72px 32px; color: var(--text-2); transition: opacity 0.3s; position: relative; z-index: 1; }
 .composer.centered ~ .messages .empty-state { opacity: 0.3; }
 .empty-icon {
   width: 52px; height: 52px; background: var(--accent-light);
@@ -222,6 +222,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .starter-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
   max-width: 480px; margin: 16px auto 0; width: 100%;
+  position: relative; z-index: 1;
 }
 @media (max-width: 520px) { .starter-grid { grid-template-columns: 1fr; } }
 .starter-card {

@@ -83,12 +83,16 @@
   --sidebar-w: 248px;
   --font: "Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  --safe-top: max(12px, env(safe-area-inset-top));
+  --safe-bottom: max(12px, env(safe-area-inset-bottom));
+  --safe-left: max(12px, env(safe-area-inset-left));
+  --safe-right: max(12px, env(safe-area-inset-right));
 }
-html, body { height: 100%; overflow: hidden; }
+html, body { height: 100%; }  /* Allow overflow for mobile */
 body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 11px; line-height: 1.6; }
 
 /* β”€β”€ LAYOUT β”€β”€ */
-.layout { display: flex; height: 100vh; }
+.layout { display: flex; min-height: 100vh; min-height: 100dvh; }  /* Use dynamic viewport height for mobile browsers */
 
 /* β”€β”€ SIDEBAR β”€β”€ */
 .sidebar {
@@ -185,7 +189,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .history-item:hover { background: var(--sidebar-hover); color: var(--text-2); }
 
 /* β”€β”€ MAIN β”€β”€ */
-.main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; min-width: 0; position: relative; }
+.main { flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; overflow: hidden; min-width: 0; position: relative; }
 .top-bar {
   padding: 6px 24px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 8px; flex-shrink: 0;
@@ -196,6 +200,8 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   overflow: hidden; text-overflow: ellipsis; max-width: 500px;
 }
 .top-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.hamburger-btn { display: none; background: none; border: none; color: var(--text-2); cursor: pointer; width: 44px; height: 44px; padding: 0; font-size: 20px; align-items: center; justify-content: center; transition: color 0.15s; }
+.hamburger-btn:hover { color: var(--text); }
 .method-badge {
   font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.06em; padding: 2px 9px; border-radius: 20px;
@@ -229,6 +235,106 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 @media (max-width: 1100px) { .starter-grid { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 520px) { .starter-grid { grid-template-columns: 1fr; } }
+
+/* ── RESPONSIVE DESIGN: MOBILE-FIRST IMPROVEMENTS ── */
+
+/* Touch-only devices: make hover-states permanent */
+@media (hover: none) {
+  .msg-actions { opacity: 1 !important; }
+  .code-block-copy { opacity: 1; }
+  .new-btn:hover, .history-item:hover { background: var(--surface-2); }
+  .starter-card:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-2); }
+}
+
+/* Tablet breakpoint: 768px and below */
+@media (max-width: 768px) {
+  /* Hide sidebar on tablet/mobile, show hamburger */
+  .sidebar { position: fixed; left: 0; top: 0; width: 248px; height: 100vh; z-index: 999; transform: translateX(-248px); transition: transform 0.3s ease; }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Sidebar overlay backdrop */
+  .sidebar::before { content: ''; position: fixed; left: -100%; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: -1; }
+  .sidebar.open::before { left: 0; }
+
+  /* Hamburger button in top bar */
+  .hamburger-btn { display: flex !important; }
+
+  /* Main takes full width */
+  .main { width: 100%; }
+
+  /* Reduce message padding */
+  .messages { padding: 16px 16px 200px; max-width: min(100% - 32px, 820px); margin: 0 auto; }
+
+  /* Reduce empty state padding */
+  .empty-state { padding: 32px 16px; }
+
+  /* Adjust top bar for mobile */
+  .top-bar { padding: 6px 12px; }
+
+  /* Composer stays same for now */
+  .composer { padding: 12px 160px 12px 12px; }
+
+  /* Increase font size slightly for readability */
+  body { font-size: 12px; }
+}
+
+/* Mobile breakpoint: 480px and below */
+@media (max-width: 480px) {
+  /* More aggressive padding reduction */
+  .messages { padding: 12px 8px 180px; }
+  .empty-state { padding: 32px 12px; }
+  .top-bar { padding: 6px 8px; }
+
+  /* Full-width composer with buttons stacked */
+  .composer-wrapper { position: static; display: flex; flex-direction: column; gap: 8px; padding: 8px; }
+  .composer { position: static; width: 100%; padding: 12px; height: auto; }
+  .composer textarea { min-height: 100px; }
+
+  /* Stack run button and dropdown vertically */
+  .run-btn, .method-dropdown { position: static; width: 100%; height: 44px; }
+  .method-dropdown { margin-top: 4px; }
+
+  /* Increase font size for small screens */
+  body { font-size: 13px; }
+
+  /* Adjust gap between elements */
+  .sub-problems { gap: 5px; }
+  .perspectives-grid { gap: 8px; }
+
+  /* Make perspective items full-width on mobile */
+  .persp-card { width: 100%; }
+
+  /* Increase button/toggle sizes to 44px minimum */
+  button { min-height: 44px; min-width: 44px; }
+  .sidebar-toggle { width: 44px; height: 44px; }
+  .new-btn { padding: 10px 8px; min-height: 44px; }
+  .history-item { padding: 8px 4px; min-height: 44px; }
+
+  /* Hamburger icon styling */
+  .hamburger-btn { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; padding: 0; }
+}
+
+/* Small phone breakpoint: 320px and below */
+@media (max-width: 320px) {
+  .messages { padding: 8px 4px 160px; }
+  .empty-state { padding: 24px 8px; }
+  body { font-size: 12px; }
+  .composer { padding: 8px; }
+}
+
+/* Landscape orientation: optimize for narrow height */
+@media (orientation: landscape) and (max-height: 600px) {
+  .messages { padding: 8px 12px 120px; }
+  .top-bar { min-height: 28px; padding: 4px 8px; }
+  .sidebar { height: 100vh; }
+  .empty-state { padding: 16px 12px; }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  /* Keep existing color scheme for now - colors are already dark-friendly */
+}
+
 .starter-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 10px 13px;
@@ -715,6 +821,18 @@ kbd {
 .messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 .sidebar-scroll::-webkit-scrollbar { width: 4px; }
 .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 2px; }
+
+/* ── PRINT STYLESHEET ── */
+@media print {
+  .sidebar, .composer, .top-bar, .new-btn, .history-item, .shortcuts-modal { display: none !important; }
+  .main { width: 100%; height: auto; min-height: auto; }
+  .layout { flex-direction: column; height: auto; min-height: auto; }
+  .messages { padding: 0; max-width: 100%; }
+  .messages-inner { max-width: 100%; }
+  .msg-problem, .progress-card, .phase-card { page-break-inside: avoid; }
+  body { font-size: 12pt; color: #000; background: #fff; }
+  a { color: #0000ff; }
+}
 </style>
 </head>
 <body>
@@ -775,6 +893,7 @@ kbd {
   <!-- β”€β”€ MAIN β”€β”€ -->
   <main class="main">
     <div class="top-bar" id="top-bar" style="display:none">
+      <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle sidebar" aria-label="Toggle navigation menu">☰</button>
       <span class="top-bar-title" id="top-bar-title"></span>
       <div class="top-bar-right">
         <span class="method-badge" id="method-badge" onclick="focusPreset()" title="Click to change preset"></span>
@@ -1114,7 +1233,42 @@ async function deleteConv(id) {
 }
 
 // β”€β”€ INIT β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
+// ── RESPONSIVE SIDEBAR CONTROL ──
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) {
+    sidebar.classList.toggle('open');
+    localStorage.setItem('ara_sidebar_open', sidebar.classList.contains('open'));
+  }
+}
+
+function closeSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebar) {
+    sidebar.classList.remove('open');
+    localStorage.setItem('ara_sidebar_open', false);
+  }
+}
+
+// Close sidebar when clicking overlay
+document.addEventListener('click', (e) => {
+  const sidebar = document.querySelector('.sidebar');
+  const hamburger = document.querySelector('.hamburger-btn');
+  if (sidebar && sidebar.classList.contains('open')) {
+    if (!sidebar.contains(e.target) && !hamburger.contains(e.target)) {
+      closeSidebar();
+    }
+  }
+});
+
 window.addEventListener('DOMContentLoaded', async () => {
+  // Restore sidebar state from localStorage
+  const sidebarOpen = localStorage.getItem('ara_sidebar_open') === 'true';
+  const sidebar = document.querySelector('.sidebar');
+  if (sidebarOpen && sidebar && window.innerWidth > 768) {
+    sidebar.classList.add('open');
+  }
+
   await loadPresets();
   updateMethodBadge();
   // Initialize method dropdown

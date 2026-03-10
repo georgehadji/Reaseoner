@@ -836,20 +836,20 @@ const appState = { running: false, history: [] };
 const _results = {}; // progressId → { problem, phases, errors }
 let _allHistory = []; // All conversation history (cached for search filtering)
 
-// ── METHOD-TO-PRESETS MAPPING ──────────────────────────────────────
+// ── METHOD-TO-PRESETS MAPPING (ordered by cost-effectiveness: cheapest first) ──────────────────────────────────────
 const _METHOD_PRESETS = {
   standard: [
-    { id: 'max-quality',         label: 'max-quality' },
     { id: 'cost-efficient',      label: 'cost-efficient' },
-    { id: 'epistemic-diversity', label: 'epistemic-diversity' }
+    { id: 'epistemic-diversity', label: 'epistemic-diversity' },
+    { id: 'max-quality',         label: 'max-quality' }
   ],
   debate: [
-    { id: 'debate',       label: 'debate' },
-    { id: 'debate-budget', label: 'debate-budget' }
+    { id: 'debate-budget', label: 'debate-budget' },
+    { id: 'debate',       label: 'debate' }
   ],
   evolutionary: [
-    { id: 'evolutionary',        label: 'evolutionary' },
-    { id: 'evolutionary-budget', label: 'evolutionary-budget' }
+    { id: 'evolutionary-budget', label: 'evolutionary-budget' },
+    { id: 'evolutionary',        label: 'evolutionary' }
   ],
   research: [
     { id: 'research', label: 'research' }

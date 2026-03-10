@@ -21,7 +21,10 @@
       "Bash(python -c \":*)",
       "Bash(python -c \"from presets import PRESETS; print\\([k for k in PRESETS if ''budget'' in k]\\); [p.__post_init__\\(\\) for p in PRESETS.values\\(\\)]; print\\(''All valid''\\)\")",
       "Bash(python -c \"from parsing import extract_solution_prose; from pipeline import ARAPipeline; print\\(''imports OK''\\)\")",
-      "Bash(python -c \"from presets import PRESETS; [p.__post_init__\\(\\) for p in PRESETS.values\\(\\)]; print\\(''All valid''\\); print\\([k for k in PRESETS if ''budget'' in k]\\)\")"
+      "Bash(python -c \"from presets import PRESETS; [p.__post_init__\\(\\) for p in PRESETS.values\\(\\)]; print\\(''All valid''\\); print\\([k for k in PRESETS if ''budget'' in k]\\)\")",
+      "Skill(commit-commands:commit-push-pr)",
+      "Skill(commit-commands:commit-push-pr:*)",
+      "Bash(ls -la SECURITY* test_cache* .env.example requirements.txt)"
     ]
   }
 }

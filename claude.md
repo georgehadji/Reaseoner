@@ -44,6 +44,11 @@ All output is JSON. Each phase's output becomes the next phase's input via model
 
 ## Development Workflow
 
+### Bulk Text Replacement in Large Files
+- Use PowerShell -replace for multiple similar replacements
+- Use Select-String with -AllMatches to count matches
+- edit_block struggles with files >80KB; use shell
+
 ### Tweaking a Phase
 - Edit prompt in `presets.py` → test with `--preset <name>`
 - Adjust temperature/max_tokens in `presets.py`
@@ -155,6 +160,7 @@ python main.py --problem "Your test problem" --preset claude-only
 
 ## Key Files to Know
 
+- `ui/index.html` — Single-file web UI (~2300 lines): all HTML/CSS/JS inline. Desktop Commander read_file may have issues; use bash/PowerShell for pattern matching and bulk replacements.
 - `main.py:main()` — Entry point; orchestrates all 6 phases, passes preset_name to pipeline
 - `pipeline.py` — `PipelineState` and phase sequencing; `ARAPipeline` tracks preset for method-aware rendering
 - `phases.py` — Each of the 6 phase implementations; synthesis prompt receives method hint (debate/evolutionary/research)
@@ -176,4 +182,5 @@ python main.py --problem "Your test problem" --preset claude-only
 2. **Rate limit hit** → Add `--sequential`. Consider batching runs.
 3. **Silent provider mismatch** → Check `PerspectiveType` enum keys in presets.
 4. **"Model not found" error** → Verify model name in presets matches provider's actual model list.
-5. **Hung pipeline** → Provider is slow/down. No timeout mechanism exists — kill it and retry.
+6. **Git push timeout** — Large commits may timeout; push may retry.
+7. **Hung pipeline** → Provider is slow/down. No timeout mechanism exists — kill it and retry.

@@ -44,6 +44,16 @@ All output is JSON. Each phase's output becomes the next phase's input via model
 
 ## Development Workflow
 
+### Responsive Design Patterns (ui/index.html)
+- Five breakpoints: 320px (small phones), 480px (mobile), 768px (tablet), 1024px (laptop), 1280px+ (desktop)
+- Safe area insets for notched devices: use CSS variables `--safe-top: max(12px, env(safe-area-inset-top))` etc.
+- Touch interactions: @media (hover: none) makes hidden elements permanently visible on touch devices
+- Sidebar state: keep `.sidebar.open` (drawer visibility) separate from `.sidebar.collapsed` (width toggle) for independent control
+- localStorage persistence: save UI state (sidebar, theme) and restore on page load
+- Viewport height fix: replace `height: 100vh` with `min-height: 100vh; min-height: 100dvh;` to prevent mobile overflow
+- Tap targets: maintain 44px minimum on mobile for touch-friendly buttons
+- Character encoding: avoid em-dash/special chars in CSS comments; edit_tool may fail to match them
+
 ### Bulk Text Replacement in Large Files
 - Use PowerShell -replace for multiple similar replacements
 - Use Select-String with -AllMatches to count matches

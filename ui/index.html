@@ -92,7 +92,23 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   width: var(--sidebar-w); min-width: var(--sidebar-w);
   background: var(--sidebar-bg); display: flex; flex-direction: column;
   padding: 0; overflow: hidden; color: var(--text);
+  transition: width 0.22s ease, min-width 0.22s ease;
 }
+.sidebar.collapsed { width: 50px !important; min-width: 50px !important; }
+.sidebar.collapsed .logo-text,
+.sidebar.collapsed .sidebar-label,
+.sidebar.collapsed .preset-hint,
+.sidebar.collapsed .sidebar-field,
+.sidebar.collapsed .advanced-section,
+.sidebar.collapsed .sidebar-scroll { display: none !important; }
+.sidebar.collapsed .sidebar-logo { justify-content: center; padding: 0 8px; }
+.sidebar-toggle {
+  background: none; border: none; color: var(--text-3); cursor: pointer;
+  font-size: 13px; padding: 4px 6px; transition: color 0.15s; margin-left: auto; flex-shrink: 0;
+  line-height: 1;
+}
+.sidebar-toggle:hover { color: var(--text-2); }
+
 .sidebar-top { padding: 16px 14px 12px; border-bottom: 1px solid var(--border); }
 .sidebar-logo { display: flex; align-items: center; gap: 9px; margin-bottom: 16px; }
 .logo-mark {
@@ -149,6 +165,14 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .new-btn:hover { border-color: var(--text-3); color: var(--text-2); }
 .history-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 6px; }
+.history-search {
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); border-radius: var(--radius-sm); padding: 5px 9px;
+  font-size: 11px; font-family: var(--font); outline: none; margin-bottom: 6px;
+  transition: border-color 0.12s;
+}
+.history-search:focus { border-color: var(--accent); }
+.history-search::placeholder { color: var(--text-3); }
 .history-item {
   padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
   font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden;
@@ -158,6 +182,24 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 
 /* ── MAIN ── */
 .main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; min-width: 0; position: relative; }
+.top-bar {
+  padding: 6px 24px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  min-height: 34px; background: var(--bg);
+}
+.top-bar-title {
+  font-size: 12px; color: var(--text-3); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 500px;
+}
+.top-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.method-badge {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 2px 9px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--border-strong);
+  color: var(--text-2); cursor: pointer; transition: all 0.15s;
+  white-space: nowrap;
+}
+.method-badge:hover { border-color: var(--accent); color: var(--accent); }
 .messages { flex: 1; overflow-y: auto; padding: 28px 24px 300px; scroll-behavior: smooth; }
 .messages-inner { max-width: 820px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
 
@@ -175,6 +217,21 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .empty-state h2 { font-size: 21px; font-weight: 600; color: var(--text); margin-bottom: 9px; }
 .empty-state p { font-size: 14px; max-width: 380px; margin: 0 auto 20px; line-height: 1.6; }
+
+.starter-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  max-width: 480px; margin: 16px auto 0; width: 100%;
+}
+@media (max-width: 520px) { .starter-grid { grid-template-columns: 1fr; } }
+.starter-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 13px;
+  cursor: pointer; font-size: 12px; color: var(--text-2);
+  line-height: 1.5; text-align: left; transition: all 0.15s;
+  font-family: var(--font); width: 100%;
+}
+.starter-card:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-2); }
+.sc-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); display: block; margin-bottom: 3px; }
 
 /* ── PROBLEM BUBBLE ── */
 .msg-problem { display: flex; justify-content: flex-end; animation: fadeUp 0.25s ease both; }
@@ -276,6 +333,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .persp-insights { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border); }
 .insight-li { display: flex; gap: 6px; margin-bottom: 4px; font-size: 13px; color: var(--text-2); }
 .insight-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; margin-top: 6px; }
+.persp-card.persp-collapsed .persp-body { display: none; }
+.persp-head { cursor: pointer; user-select: none; }
+.persp-chevron {
+  font-size: 10px; color: var(--text-3);
+  transition: transform 0.2s; margin-left: auto; flex-shrink: 0;
+}
+.persp-card.persp-collapsed .persp-chevron { transform: rotate(-90deg); }
 
 /* ── SCORING ── */
 .scores-wrap { overflow-x: auto; }
@@ -327,6 +391,26 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   padding: 14px; background: var(--bg); border-radius: var(--radius-sm);
   border-left: 3px solid var(--accent); margin-bottom: 16px; white-space: pre-wrap;
 }
+.code-block-wrap {
+  position: relative; margin: 10px 0;
+  background: #111; border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); overflow: hidden;
+}
+.code-block-lang {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 5px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border);
+}
+.code-block-lang span { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.code-block-copy {
+  font-size: 10px; background: none; border: 1px solid var(--border-strong); color: var(--text-3);
+  padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: var(--font); transition: all 0.12s;
+}
+.code-block-copy:hover { border-color: var(--accent); color: var(--accent); }
+.code-block-wrap pre {
+  margin: 0; padding: 12px 14px; overflow-x: auto;
+  font-family: var(--mono); font-size: 12px; line-height: 1.55; color: var(--text-2);
+}
+
 .insights-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
 .insight-row {
   display: flex; gap: 10px; align-items: flex-start;
@@ -562,9 +646,48 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .token-count strong { color: var(--accent); }
 
+.shortcuts-modal {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.65);
+  z-index: 1000; align-items: center; justify-content: center;
+}
+.shortcuts-modal.open { display: flex; }
+.shortcuts-box {
+  background: var(--surface); border: 1px solid var(--border-strong);
+  border-radius: var(--radius); padding: 20px 24px; min-width: 320px; max-width: 420px;
+  box-shadow: var(--shadow);
+}
+.shortcuts-header {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; font-size: 13px; font-weight: 700; color: var(--text);
+}
+.shortcuts-close {
+  background: none; border: none; color: var(--text-3); cursor: pointer;
+  font-size: 16px; line-height: 1; padding: 2px 4px; transition: color 0.12s;
+}
+.shortcuts-close:hover { color: var(--text); }
+.shortcuts-list { display: flex; flex-direction: column; gap: 2px; }
+.shortcut-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-2);
+}
+.shortcut-row:last-child { border-bottom: none; }
+kbd {
+  background: var(--surface-2); border: 1px solid var(--border-strong);
+  border-radius: 4px; padding: 2px 8px; font-family: var(--mono);
+  font-size: 11px; color: var(--text-2); white-space: nowrap;
+}
+
 /* ── ANIMATIONS ── */
 @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes spin { to { transform:rotate(360deg); } }
+@keyframes borderPulse {
+  0%, 100% { border-left-color: var(--accent); }
+  50%       { border-left-color: var(--text-3); }
+}
+.phase-arriving {
+  border-left: 2px solid var(--accent) !important;
+  animation: borderPulse 1s ease 2;
+}
 
 /* ── SCROLLBARS ── */
 .messages::-webkit-scrollbar { width: 5px; }
@@ -587,6 +710,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
           <div class="logo-sub">Adaptive Reasoning v2.0</div>
         </div>
         <div class="server-dot" id="server-dot" title="Checking server…"></div>
+        <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar (B)">«</button>
       </div>
       <div class="sidebar-field">
         <div class="sidebar-label">Preset</div>
@@ -623,19 +747,32 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
         <span>⌫</span> Clear cache
       </button>
       <div class="history-label">Recent</div>
+      <input class="history-search" id="history-search" type="search" placeholder="Search…" oninput="filterHistory(this.value)" autocomplete="off">
       <div id="history-list"></div>
     </div>
   </aside>
 
   <!-- ── MAIN ── -->
   <main class="main">
+    <div class="top-bar" id="top-bar" style="display:none">
+      <span class="top-bar-title" id="top-bar-title"></span>
+      <div class="top-bar-right">
+        <span class="method-badge" id="method-badge" onclick="focusPreset()" title="Click to change preset"></span>
+      </div>
+    </div>
     <div class="messages" id="messages">
       <div class="messages-inner" id="messages-inner">
         <!-- empty state -->
         <div class="empty-state" id="empty-state">
           <div class="empty-icon">⟡</div>
           <h2>Adaptive Reasoning Architecture</h2>
-          <p>Submit a problem and the pipeline will classify it, decompose it, generate adversarial perspectives, score them, stress-test survivors, and synthesize a final answer.</p>
+          <p>Submit a problem and the pipeline will run 6 phases of adversarial reasoning.</p>
+          <div class="starter-grid">
+            <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Strategy</span>Should I rewrite our backend in Rust?</button>
+            <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Decision</span>Should we raise a Series A now or wait 12 months?</button>
+            <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Architecture</span>Microservices vs monolith for a team of 5 engineers?</button>
+            <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Analysis</span>What are the second-order risks of remote-first hiring?</button>
+          </div>
         </div>
       </div>
     </div>
@@ -652,12 +789,50 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
       <div class="composer-hint">Enter to send · Shift+Enter for newline</div>
     </div>
   </main>
+  <div class="shortcuts-modal" id="shortcuts-modal" onclick="if(event.target===this)closeShortcuts()">
+    <div class="shortcuts-box">
+      <div class="shortcuts-header">
+        <span>Keyboard Shortcuts</span>
+        <button class="shortcuts-close" onclick="closeShortcuts()">&#x2715;</button>
+      </div>
+      <div class="shortcuts-list">
+        <div class="shortcut-row"><kbd>Enter</kbd><span>Run pipeline</span></div>
+        <div class="shortcut-row"><kbd>Shift+Enter</kbd><span>New line in composer</span></div>
+        <div class="shortcut-row"><kbd>Esc</kbd><span>Stop running pipeline</span></div>
+        <div class="shortcut-row"><kbd>&#x2191;</kbd><span>Recall last problem (when composer empty)</span></div>
+        <div class="shortcut-row"><kbd>B</kbd><span>Toggle sidebar</span></div>
+        <div class="shortcut-row"><kbd>?</kbd><span>Show this panel</span></div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
 // ── STATE ──────────────────────────────────────────────────────────
 const appState = { running: false, history: [] };
-const _results = {}; // progressId → { problem, phases, errors }
+const _results = {}; // progressId
+let _allHistory = []; → { problem, phases, errors }
+
+function _estimateCost(tokens) {
+  const INPUT_RATE  = 3.00 / 1_000_000;
+  const OUTPUT_RATE = 15.00 / 1_000_000;
+  const cost = (tokens.input || 0) * INPUT_RATE + (tokens.output || 0) * OUTPUT_RATE;
+  if (cost < 0.001) return '<$0.001';
+  return '~$' + cost.toFixed(3);
+}
+
+const EMPTY_STATE_HTML = `
+  <div class="empty-state" id="empty-state">
+    <div class="empty-icon">&#x27E1;</div>
+    <h2>Adaptive Reasoning Architecture</h2>
+    <p>Submit a problem and the pipeline will run 6 phases of adversarial reasoning.</p>
+    <div class="starter-grid">
+      <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Strategy</span>Should I rewrite our backend in Rust?</button>
+      <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Decision</span>Should we raise a Series A now or wait 12 months?</button>
+      <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Architecture</span>Microservices vs monolith for a team of 5 engineers?</button>
+      <button class="starter-card" onclick="fillStarter(this)"><span class="sc-label">Analysis</span>What are the second-order risks of remote-first hiring?</button>
+    </div>
+  </div>`;
 
 // ── INDEXEDDB WRAPPER ─────────────────────────────────────────────
 const DB_NAME = 'ARA_Pipeline';
@@ -747,16 +922,33 @@ async function clearAllConversations() {
 async function loadHistoryFromDB() {
   try {
     const conversations = await loadAllConversations();
-    const list = document.getElementById('history-list');
-    if (!list) return;
-    list.innerHTML = '';
-    conversations.forEach(conv => {
-      const el = createHistoryItem(conv);
-      list.appendChild(el);
-    });
+    _allHistory = conversations;
+    renderHistoryList(conversations);
   } catch (err) {
     console.error('Failed to load history:', err);
   }
+}
+
+function renderHistoryList(conversations) {
+  const list = document.getElementById('history-list');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!conversations.length) {
+    list.innerHTML = '<div style="font-size:11px;color:var(--text-3);padding:4px 0;">No history yet</div>';
+    return;
+  }
+  conversations.forEach(conv => list.appendChild(createHistoryItem(conv)));
+}
+
+function filterHistory(query) {
+  const q = (query || '').toLowerCase().trim();
+  if (!q) { renderHistoryList(_allHistory); return; }
+  const filtered = _allHistory.filter(c => {
+    if ((c.problem || '').toLowerCase().includes(q)) return true;
+    const s = (c.phases || []).find(p => p.phase === 5);
+    return (s?.data?.core_solution || '').toLowerCase().includes(q);
+  });
+  renderHistoryList(filtered);
 }
 
 function createHistoryItem(conv) {
@@ -764,13 +956,23 @@ function createHistoryItem(conv) {
   const date = new Date(conv.timestamp).toLocaleDateString(undefined, { 
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
   });
+  const _synthP = (conv.phases || []).find(p => p.phase === 5);
+  let _synthPreview = '';
+  if (_synthP?.data?.core_solution) {
+    const _raw = String(_synthP.data.core_solution).replace(/
+/g,' ').trim();
+    _synthPreview = _raw.length > 60 ? _raw.slice(0, 60) + '…' : _raw;
+  }
   const el = document.createElement('div');
   el.className = 'history-item';
   el.style.display = 'flex';
   el.style.alignItems = 'center';
   el.style.gap = '6px';
   el.innerHTML = `
-    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(conv.problem)}">${esc(truncated)}</span>
+    <span style="flex:1;overflow:hidden;min-width:0;">
+      <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text-2);" title="${esc(conv.problem)}">${esc(truncated)}</div>
+      ${_synthPreview ? `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--text-3);margin-top:1px;opacity:0.7;">${esc(_synthPreview)}</div>` : ''}
+    </span>
     <button class="msg-action" style="padding:2px 5px;font-size:10px;" onclick="event.stopPropagation();loadConv('${conv.id}')" title="Load">⟲</button>
     <button class="msg-action" style="padding:2px 5px;font-size:10px;" onclick="event.stopPropagation();deleteConv('${conv.id}')" title="Delete">✕</button>
   `;
@@ -788,6 +990,8 @@ async function loadConv(id) {
     // Clear current view
     const inner = document.getElementById('messages-inner');
     inner.innerHTML = '';
+
+    setTopBarTitle(conv.problem);
 
     // Show problem bubble
     append(msgProblem(conv.problem));
@@ -831,12 +1035,30 @@ async function deleteConv(id) {
 // ── INIT ──────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
   await loadPresets();
+  updateMethodBadge();
+  // Restore sidebar collapsed state
+  try {
+    if (localStorage.getItem('ara_sidebar_collapsed') === 'true') {
+      document.querySelector('.sidebar')?.classList.add('collapsed');
+      const btn = document.getElementById('sidebar-toggle');
+      if (btn) btn.textContent = '»';
+    }
+  } catch(e) {}
   autoResize(document.getElementById('textarea'));
   checkServer();
   setInterval(checkServer, 30000);
   loadHistoryFromDB(); // Load conversation history from IndexedDB
   setComposerPosition(); // Set initial composer position
 });
+
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const btn = document.getElementById('sidebar-toggle');
+  if (!sidebar) return;
+  const collapsed = sidebar.classList.toggle('collapsed');
+  if (btn) btn.textContent = collapsed ? '»' : '«';
+  try { localStorage.setItem('ara_sidebar_collapsed', String(collapsed)); } catch(e) {}
+}
 
 // ── COMPOSER POSITION ─────────────────────────────────────────────
 function setComposerPosition() {
@@ -894,6 +1116,36 @@ function setComposerIdle() {
   }
 }
 
+function setTopBarTitle(text) {
+  const bar = document.getElementById('top-bar');
+  const titleEl = document.getElementById('top-bar-title');
+  if (!bar || !titleEl) return;
+  if (text) {
+    titleEl.textContent = text.length > 80 ? text.slice(0, 80) + '…' : text;
+    bar.style.display = 'flex';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+function updateMethodBadge() {
+  const badge = document.getElementById('method-badge');
+  if (!badge) return;
+  const sel = document.getElementById('preset-select');
+  const presetId = sel ? sel.value : '';
+  if (presetId) {
+    badge.textContent = presetId + ' ▾';
+    badge.style.display = 'inline-flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function focusPreset() {
+  const sel = document.getElementById('preset-select');
+  if (sel) { sel.focus(); sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+
 // ── SERVER STATUS ─────────────────────────────────────────────────
 async function checkServer() {
   const dot = document.getElementById('server-dot');
@@ -940,6 +1192,7 @@ function updatePresetHint() {
     hint.className = 'preset-hint';
     hint.textContent = meta.description;
   }
+  updateMethodBadge();
 }
 
 // ── ADVANCED SECTION ──────────────────────────────────────────────
@@ -978,16 +1231,23 @@ function newConversation() {
   // Re-attach empty state if removed
   const inner = document.getElementById('messages-inner');
   if (!inner.querySelector('.empty-state')) {
-    inner.innerHTML = `
-      <div class="empty-state" id="empty-state">
-        <div class="empty-icon">⟡</div>
-        <h2>Adaptive Reasoning Architecture</h2>
-        <p>Submit a problem and the pipeline will classify it, decompose it, generate adversarial perspectives, score them, stress-test survivors, and synthesize a final answer.</p>
-      </div>`;
+    inner.innerHTML = EMPTY_STATE_HTML;
   }
+  setTopBarTitle(null);
   document.getElementById('textarea').focus();
   loadHistoryFromDB(); // Refresh history sidebar
   setComposerPosition(); // Center the composer
+}
+
+function fillStarter(btn) {
+  const ta = document.getElementById('textarea');
+  if (!ta) return;
+  // Get text content excluding the .sc-label child
+  const label = btn.querySelector('.sc-label');
+  const text = btn.textContent.replace(label ? label.textContent : '', '').trim();
+  ta.value = text;
+  autoResize(ta);
+  ta.focus();
 }
 
 async function clearCache() {
@@ -1034,6 +1294,8 @@ async function run() {
   const ta = document.getElementById('textarea');
   const problem = ta.value.trim();
   if (!problem || appState.running) return;
+
+  setTopBarTitle(problem);
 
   // Pre-flight: check API key availability
   const selectedPreset = document.getElementById('preset-select').value;
@@ -1139,8 +1401,14 @@ function handleEvent(ev, progressId) {
     setPhaseActive(progressId, ev.phase + 1); // advance
     setPhasesDone(progressId, ev.phase);
     if (_results[progressId]) _results[progressId].phases.push({ phase: ev.phase, name: ev.name, data: ev.data });
-    const card = renderPhase(ev.phase, ev.name, ev.data);
-    if (card) { prependBefore(progressId, card); scrollBottom(); }
+    const _displayName = getPhaseNames()[ev.phase] || ev.name;
+    const card = renderPhase(ev.phase, _displayName, ev.data);
+    if (card) {
+      card.classList.add('phase-arriving');
+      card.addEventListener('animationend', () => card.classList.remove('phase-arriving'), { once: true });
+      prependBefore(progressId, card);
+      scrollBottom();
+    }
   } else if (ev.type === 'phase_error') {
     setPhaseError(progressId, ev.phase);
   } else if (ev.type === 'cancelled') {
@@ -1296,9 +1564,10 @@ function renderPerspectives(d) {
     
     return `
       <div class="persp-card ${esc(c.perspective)}">
-        <div class="persp-head">
+        <div class="persp-head" onclick="this.closest('.persp-card').classList.toggle('persp-collapsed')">
           <span>${esc(c.perspective)}</span>
           <span class="persp-model">${esc(c.model_used || '')}</span>
+          <span class="persp-chevron">▾</span>
         </div>
         <div class="persp-body">
           ${esc(content)}
@@ -1309,6 +1578,59 @@ function renderPerspectives(d) {
   return `<div class="perspectives-grid">${cards}</div>
     <div class="sec">Tokens</div>
     <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+}
+
+function buildRadarChart(scores) {
+  if (!scores || !scores.length) return '';
+  const W = 200, CX = 100, CY = 105, R = 72;
+  const AXES = ['Logic','Evidence','Resilience','Feasibility'];
+  const FIELDS = ['logical_consistency','evidence_support','failure_resilience','feasibility'];
+  // fallback field names if api uses different names
+  const FIELDS2 = ['logic_consistency','evidence_support','resilience','feasibility'];
+  const N = AXES.length;
+  const PCOLS = ['#fafafa','#cfcfcf','#9a9a9a','#6e6e6e'];
+
+  let svg = `<svg width="${W}" height="${W+10}" viewBox="0 0 ${W} ${W+10}" style="display:block;margin:0 auto 12px">`;
+
+  // Grid rings
+  for (let r = 1; r <= 4; r++) {
+    const pts = AXES.map((_, i) => {
+      const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+      return `${CX + (R * r / 4) * Math.cos(angle)},${CY + (R * r / 4) * Math.sin(angle)}`;
+    }).join(' ');
+    svg += `<polygon points="${pts}" fill="none" stroke="#3a3a3a" stroke-width="0.8"/>`;
+  }
+
+  // Axis lines + labels
+  AXES.forEach((label, i) => {
+    const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+    const x2 = CX + R * Math.cos(angle), y2 = CY + R * Math.sin(angle);
+    const lx = CX + (R + 16) * Math.cos(angle), ly = CY + (R + 16) * Math.sin(angle);
+    svg += `<line x1="${CX}" y1="${CY}" x2="${x2}" y2="${y2}" stroke="#3a3a3a" stroke-width="0.8"/>`;
+    svg += `<text x="${lx}" y="${ly + 4}" text-anchor="middle" font-size="9" fill="#6e6e6e" font-family="system-ui">${label}</text>`;
+  });
+
+  // Score polygons
+  scores.forEach((s, idx) => {
+    const vals = FIELDS.map((f, fi) => {
+      const v = s[f] ?? s[FIELDS2[fi]] ?? 5;
+      return Math.min(10, Math.max(0, Number(v)));
+    });
+    const pts = vals.map((v, i) => {
+      const angle = (i / N) * 2 * Math.PI - Math.PI / 2;
+      const dist = (v / 10) * R;
+      return `${CX + dist * Math.cos(angle)},${CY + dist * Math.sin(angle)}`;
+    }).join(' ');
+    const col = PCOLS[idx % PCOLS.length];
+    const op = s.is_top ? 0.18 : 0.07;
+    const sw = s.is_top ? 1.5 : 0.8;
+    svg += `<polygon points="${pts}" fill="${col}" fill-opacity="${op}" stroke="${col}" stroke-width="${sw}" stroke-opacity="0.8"/>`;
+  });
+
+  // Center dot
+  svg += `<circle cx="${CX}" cy="${CY}" r="2" fill="#3a3a3a"/>`;
+  svg += `</svg>`;
+  return svg;
 }
 
 // Phase 3 — Scoring
@@ -1332,7 +1654,9 @@ function renderScoring(d) {
       ${s.steel_man ? `<tr class="${s.is_top ? 'top-row' : ''}"><td colspan="7" style="padding:2px 10px 8px"><div class="steel-man">⟳ ${esc(s.steel_man)}</div></td></tr>` : ''}`;
   }).join('');
 
+  const chartHtml = buildRadarChart(d.scores || []);
   return `
+    ${chartHtml}
     <div class="scores-wrap">
       <table class="scores-table">
         <thead><tr>
@@ -1377,6 +1701,27 @@ function renderStress(d) {
   return `<div class="stress-list">${items}</div>
     <div class="sec">Tokens</div>
     <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+}
+
+function renderWithCode(text) {
+  if (!text) return '';
+  const parts = text.split(/(```[\w]*\n[\s\S]*?```)/g);
+  return parts.map(part => {
+    const m = part.match(/^```([\w]*)\n([\s\S]*?)```$/);
+    if (m) {
+      const lang = m[1] || 'code';
+      const code = m[2];
+      const id = 'cb-' + Math.random().toString(36).slice(2, 9);
+      const escaped = code.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return `<div class="code-block-wrap"><div class="code-block-lang"><span>${lang}</span><button class="code-block-copy" onclick="copyCodeBlock('${id}')">Copy</button></div><pre id="${id}"><code>${escaped}</code></pre></div>`;
+    }
+    return esc(part);
+  }).join('');
+}
+
+function copyCodeBlock(id) {
+  const el = document.getElementById(id);
+  if (el) navigator.clipboard.writeText(el.textContent).catch(() => {});
 }
 
 // Phase 5 — Synthesis
@@ -1447,7 +1792,7 @@ function renderSynthesis(d) {
 
   return `
     <div class="sec">Core Solution</div>
-    <div class="solution-block">${esc(coreSolution)}</div>
+    <div class="solution-block">${renderWithCode(coreSolution)}</div>
     ${insights ? `<div class="sec">Critical Insights</div><div class="insights-list">${insights}</div>` : ''}
     ${blueprint}
     ${openQs}
@@ -1461,7 +1806,19 @@ function metaRow(key, val) {
 }
 
 // ── PROGRESS CARD ─────────────────────────────────────────────────
-const PHASE_NAMES = ['Classification', 'Decomposition', 'Perspectives', 'Critique', 'Stress Test', 'Synthesis'];
+const _METHOD_PHASE_NAMES = {
+  'debate':              ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
+  'debate-budget':       ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
+  'evolutionary':        ['Classification','Problem Decomposition','Candidate Solutions','Fitness Scoring','Stress Test','Optimized Solution'],
+  'evolutionary-budget': ['Classification','Problem Decomposition','Candidate Solutions','Fitness Scoring','Stress Test','Optimized Solution'],
+  'research':            ['Classification','Evidence Decomposition','Source Analysis','Evidence Scoring','Claim Verification','Evidence Report'],
+};
+const _DEFAULT_PHASE_NAMES = ['Classification','Decomposition','Perspectives','Critique','Stress Test','Synthesis'];
+
+function getPhaseNames() {
+  const sel = document.getElementById('preset-select');
+  return _METHOD_PHASE_NAMES[sel ? sel.value : ''] || _DEFAULT_PHASE_NAMES;
+}
 const PHASE_TIPS = [
   'Classifies the problem as strategic, tactical, creative, or analytical',
   'Breaks the problem into sub-problems, surfaces assumptions and failure modes',
@@ -1472,7 +1829,7 @@ const PHASE_TIPS = [
 ];
 
 function progressCard(id) {
-  const steps = PHASE_NAMES.map((n, i) =>
+  const steps = getPhaseNames().map((n, i) =>
     `<span class="phase-step" id="${id}-step-${i}" data-tip="${PHASE_TIPS[i]}">${n}</span>`).join('');
   const el = document.createElement('div');
   el.className = 'progress-card';
@@ -1488,8 +1845,8 @@ function progressCard(id) {
 
 function setPhaseActive(progressId, phaseNum) {
   const label = document.getElementById(`${progressId}-label`);
-  if (label && phaseNum < PHASE_NAMES.length) label.textContent = `Running: ${PHASE_NAMES[phaseNum]}…`;
-  for (let i = 0; i < PHASE_NAMES.length; i++) {
+  if (label && phaseNum < getPhaseNames().length) label.textContent = `Running: ${getPhaseNames()[phaseNum]}…`;
+  for (let i = 0; i < getPhaseNames().length; i++) {
     const el = document.getElementById(`${progressId}-step-${i}`);
     if (!el) continue;
     if (i < phaseNum) { el.className = 'phase-step done'; }
@@ -1639,7 +1996,8 @@ function totalTokensCard(tokens) {
     `<span class="export-label">Total Tokens Used</span>` +
     `<span style="font-size:12px;color:var(--text-2);margin-right:12px;">Input: <strong style="color:var(--accent)">${tokens.input.toLocaleString()}</strong></span>` +
     `<span style="font-size:12px;color:var(--text-2);margin-right:12px;">Output: <strong style="color:var(--accent)">${tokens.output.toLocaleString()}</strong></span>` +
-    `<span style="font-size:12px;color:var(--text);">Total: <strong style="color:var(--accent);font-size:13px;">${tokens.total.toLocaleString()}</strong></span>`;
+    `<span style="font-size:12px;color:var(--text);">Total: <strong style="color:var(--accent);font-size:13px;">${tokens.total.toLocaleString()}</strong></span>` +
+    `<span style="font-size:11px;color:var(--text-3);margin-left:auto;" title="Estimated cost at Claude Sonnet rates ($3/M input, $15/M output)">${_estimateCost(tokens)}</span>`;
   return el;
 }
 
@@ -1649,7 +2007,9 @@ function exportCard(progressId) {
   el.innerHTML =
     `<span class="export-label">Export result</span>` +
     `<button class="export-btn" id="copy-btn-${progressId}" onclick="copyResult('${progressId}')">⎘ Copy</button>` +
-    `<button class="export-btn" onclick="downloadResult('${progressId}')">↓ JSON</button>`;
+    `<button class="export-btn" onclick="downloadResult('${progressId}')">↓ JSON</button>` +
+    `<button class="export-btn" onclick="downloadMarkdown('${progressId}')">↓ Markdown</button>` +
+    `<button class="export-btn" id="share-btn-${progressId}" onclick="shareResult('${progressId}')">↗ Share</button>`;
   return el;
 }
 
@@ -1704,6 +2064,47 @@ function downloadResult(progressId) {
   a.download = `ara-result-${progressId}.json`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+function downloadMarkdown(progressId) {
+  const data = _results[progressId];
+  if (\!data) return;
+  const blob = new Blob([_resultToText(data)], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = \;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function _resultToShareText(data) {
+  const synthesis = (data.phases || []).find(p => p.phase === 5);
+  const lines = [\, ''];
+  if (synthesis?.data?.core_solution) {
+    lines.push('## Solution', '', String(synthesis.data.core_solution), '');
+  }
+  if (synthesis?.data?.critical_insights?.length) {
+    lines.push('## Key Insights', '');
+    synthesis.data.critical_insights.forEach((ins, i) => lines.push(\));
+    lines.push('');
+  }
+  lines.push('---', \);
+  return lines.join('
+');
+}
+
+async function shareResult(progressId) {
+  const data = _results[progressId];
+  if (\!data) return;
+  try {
+    await navigator.clipboard.writeText(_resultToShareText(data));
+    const btn = document.getElementById(\);
+    if (btn) {
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied';
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    }
+  } catch(e) { console.error('Share failed', e); }
 }
 
 const _ERROR_PATTERNS = [
@@ -1763,6 +2164,35 @@ function esc(str) {
     .replace(/"/g, '&quot;')
     .replace(/\n/g, '<br>');
 }
+function openShortcuts()  { document.getElementById('shortcuts-modal')?.classList.add('open'); }
+function closeShortcuts() { document.getElementById('shortcuts-modal')?.classList.remove('open'); }
+
+document.addEventListener('keydown', function(e) {
+  // ? key opens shortcuts (not when typing)
+  if (e.key === '?' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+    e.preventDefault();
+    openShortcuts();
+    return;
+  }
+  // Escape closes shortcuts modal (checked before anything else)
+  if (e.key === 'Escape' && document.getElementById('shortcuts-modal')?.classList.contains('open')) {
+    e.preventDefault();
+    closeShortcuts();
+    return;
+  }
+  // B key toggles sidebar
+  if (e.key === 'b' && e.target.tagName !== 'TEXTAREA' && e.target.tagName !== 'INPUT') {
+    toggleSidebar();
+  }
+  // ArrowUp in empty textarea: recall last problem
+  if (e.key === 'ArrowUp') {
+    const ta = document.getElementById('textarea');
+    if (e.target === ta && !ta.value.trim()) {
+      const last = appState.history?.[0];
+      if (last?.problem) { ta.value = last.problem; autoResize(ta); e.preventDefault(); }
+    }
+  }
+});
 </script>
 </body>
 </html>

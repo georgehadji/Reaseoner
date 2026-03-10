@@ -24,7 +24,9 @@
       "Bash(python -c \"from presets import PRESETS; [p.__post_init__\\(\\) for p in PRESETS.values\\(\\)]; print\\(''All valid''\\); print\\([k for k in PRESETS if ''budget'' in k]\\)\")",
       "Skill(commit-commands:commit-push-pr)",
       "Skill(commit-commands:commit-push-pr:*)",
-      "Bash(ls -la SECURITY* test_cache* .env.example requirements.txt)"
+      "Bash(ls -la SECURITY* test_cache* .env.example requirements.txt)",
+      "Bash(python3 -c \":*)",
+      "Bash(python3:*)"
     ]
   }
 }

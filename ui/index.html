@@ -810,8 +810,8 @@ kbd {
 <script>
 // ── STATE ──────────────────────────────────────────────────────────
 const appState = { running: false, history: [] };
-const _results = {}; // progressId
-let _allHistory = []; → { problem, phases, errors }
+const _results = {}; // progressId → { problem, phases, errors }
+let _allHistory = []; // All conversation history (cached for search filtering)
 
 function _estimateCost(tokens) {
   const INPUT_RATE  = 3.00 / 1_000_000;

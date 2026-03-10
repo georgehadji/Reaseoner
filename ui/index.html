@@ -128,14 +128,14 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .sidebar-field { margin-bottom: 10px; }
 #method-field { margin-bottom: 12px; }
 .method-tabs {
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 8px;
+  display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;
 }
 .method-tab {
-  padding: 6px 6px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 5px; color: var(--text-2); font-size: 10px; font-weight: 600;
-  text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer;
-  transition: all 0.15s ease; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; margin: 0;
+  padding: 9px 8px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text-2); font-size: 12px; font-weight: 600;
+  text-transform: capitalize; letter-spacing: 0.04em; cursor: pointer;
+  transition: all 0.15s ease; white-space: normal; text-align: center; margin: 0;
+  line-height: 1.2;
 }
 .method-tab:hover { border-color: var(--text-2); color: var(--text); }
 .method-tab.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
@@ -731,7 +731,7 @@ kbd {
         <div class="method-tabs">
           <button class="method-tab active" data-method="standard" onclick="selectMethod('standard')" title="Standard: 6-phase reasoning">Standard</button>
           <button class="method-tab" data-method="debate" onclick="selectMethod('debate')" title="Debate: Adversarial thinking">Debate</button>
-          <button class="method-tab" data-method="evolutionary" onclick="selectMethod('evolutionary')" title="Evolution: Iterative refinement">Evo</button>
+          <button class="method-tab" data-method="evolutionary" onclick="selectMethod('evolutionary')" title="Evolution: Iterative refinement">Evolution</button>
           <button class="method-tab" data-method="research" onclick="selectMethod('research')" title="Research: Evidence-grounded">Research</button>
         </div>
       </div>

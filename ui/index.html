@@ -968,15 +968,19 @@ const _METHOD_PRESETS = {
     { id: 'max-quality',         label: 'max-quality' }
   ],
   debate: [
-    { id: 'debate-budget', label: 'debate-budget' },
-    { id: 'debate',       label: 'debate' }
+    { id: 'debate-budget',    label: 'debate-budget' },
+    { id: 'debate-balanced',  label: 'debate-balanced' },
+    { id: 'debate',           label: 'debate' }
   ],
   evolutionary: [
-    { id: 'evolutionary-budget', label: 'evolutionary-budget' },
-    { id: 'evolutionary',        label: 'evolutionary' }
+    { id: 'evolutionary-budget',    label: 'evolutionary-budget' },
+    { id: 'evolutionary-balanced',  label: 'evolutionary-balanced' },
+    { id: 'evolutionary',           label: 'evolutionary' }
   ],
   research: [
-    { id: 'research', label: 'research' }
+    { id: 'research-budget',    label: 'research-budget' },
+    { id: 'research-balanced',  label: 'research-balanced' },
+    { id: 'research',           label: 'research' }
   ]
 };
 
@@ -2046,10 +2050,14 @@ function metaRow(key, val) {
 // β”€β”€ PROGRESS CARD β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 const _METHOD_PHASE_NAMES = {
   'debate':              ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
+  'debate-balanced':     ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
   'debate-budget':       ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
   'evolutionary':        ['Classification','Problem Decomposition','Candidate Solutions','Fitness Scoring','Stress Test','Optimized Solution'],
+  'evolutionary-balanced': ['Classification','Problem Decomposition','Candidate Solutions','Fitness Scoring','Stress Test','Optimized Solution'],
   'evolutionary-budget': ['Classification','Problem Decomposition','Candidate Solutions','Fitness Scoring','Stress Test','Optimized Solution'],
   'research':            ['Classification','Evidence Decomposition','Source Analysis','Evidence Scoring','Claim Verification','Evidence Report'],
+  'research-balanced':   ['Classification','Evidence Decomposition','Source Analysis','Evidence Scoring','Claim Verification','Evidence Report'],
+  'research-budget':     ['Classification','Evidence Decomposition','Source Analysis','Evidence Scoring','Claim Verification','Evidence Report'],
 };
 const _DEFAULT_PHASE_NAMES = ['Classification','Decomposition','Perspectives','Critique','Stress Test','Synthesis'];
 

@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ARA — Adaptive Reasoning Architecture</title>
+<title>ARA β€” Adaptive Reasoning Architecture</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,52 +13,52 @@
   /*
    * Mission-Critical Color System
    * Principles (Cheong, 2025):
-   *  1. Dark background — maximises status-color legibility
-   *  2. APCA-compliant contrast (Lc ≥75 for body, Lc ≥90 preferred)
-   *  3. Semantic hierarchy: operational → attention → system-event → critical
-   *  4. System-error ≠ red (rose/pink reserved for non-critical system events;
+   *  1. Dark background β€” maximises status-color legibility
+   *  2. APCA-compliant contrast (Lc β‰¥75 for body, Lc β‰¥90 preferred)
+   *  3. Semantic hierarchy: operational β†’ attention β†’ system-event β†’ critical
+   *  4. System-error β‰  red (rose/pink reserved for non-critical system events;
    *     red reserved for highest-severity / C2 events)
-   *  5. Minimal decorative colour — every hue carries meaning
+   *  5. Minimal decorative colour β€” every hue carries meaning
    */
 
-  /* ── BACKGROUNDS — Carbon Black palette ── */
+  /* β”€β”€ BACKGROUNDS β€” Carbon Black palette β”€β”€ */
   --bg:          #181818;   /* Carbon Black - viewport floor       */
   --surface:     #2a2a2a;   /* Graphite - cards / panels           */
   --surface-2:   #333333;   /* lighter graphite - hover surfaces   */
   --sidebar-bg:  #181818;   /* Carbon Black - sidebar anchor        */
   --sidebar-hover: #2a2a2a;
 
-  /* ── BORDERS ── */
+  /* β”€β”€ BORDERS β”€β”€ */
   --border:       #3a3a3a;
   --border-strong:#4a4a4a;
 
-  /* ── TEXT — Bright Snow / Dim Grey / Dust Grey ── */
+  /* β”€β”€ TEXT β€” Bright Snow / Dim Grey / Dust Grey β”€β”€ */
   --text:   #fafafa;   /* Bright Snow - primary content        */
   --text-2: #cfcfcf;   /* Dust Grey - secondary / labels       */
   --text-3: #6e6e6e;   /* Dim Grey - tertiary / muted           */
 
-  /* ── PRIMARY INTERACTIVE — Bright Snow on Carbon Black ── */
+  /* β”€β”€ PRIMARY INTERACTIVE β€” Bright Snow on Carbon Black β”€β”€ */
   --accent:       #fafafa;   /* Bright Snow */
   --accent-light: #2a2a2a;
   --accent-hover: #cfcfcf;
 
-  /* ── STATUS COLOURS — using palette shades ── */
-  /* OPERATIONAL — bright (success) */
+  /* β”€β”€ STATUS COLOURS β€” using palette shades β”€β”€ */
+  /* OPERATIONAL β€” bright (success) */
   --green:        #fafafa;
   --green-bg:     #2a2a2a;
   --green-border: #4a4a4a;
 
-  /* ATTENTION — medium (warning) */
+  /* ATTENTION β€” medium (warning) */
   --yellow:       #cfcfcf;
   --yellow-bg:    #2a2a2a;
   --yellow-border:#4a4a4a;
 
-  /* SYSTEM EVENT — dim (error) */
+  /* SYSTEM EVENT β€” dim (error) */
   --red:          #6e6e6e;
   --red-bg:       #2a2a2a;
   --red-border:   #4a4a4a;
 
-  /* ── PERSPECTIVE CHANNELS ── */
+  /* β”€β”€ PERSPECTIVE CHANNELS β”€β”€ */
   /* All using palette with different brightness */
   --blue:         #fafafa;   /* Bright */
   --blue-bg:      #2a2a2a;
@@ -76,7 +76,7 @@
   --purple-bg:    #2a2a2a;
   --purple-border:#4a4a4a;
 
-  /* ── MISC ── */
+  /* β”€β”€ MISC β”€β”€ */
   --radius: 10px; --radius-sm: 6px;
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow:    0 2px 8px rgba(0,0,0,0.5);
@@ -85,12 +85,12 @@
   --mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
 }
 html, body { height: 100%; overflow: hidden; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 9px; line-height: 1.6; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 11px; line-height: 1.6; }
 
-/* ── LAYOUT ── */
+/* β”€β”€ LAYOUT β”€β”€ */
 .layout { display: flex; height: 100vh; }
 
-/* ── SIDEBAR ── */
+/* β”€β”€ SIDEBAR β”€β”€ */
 .sidebar {
   width: var(--sidebar-w); min-width: var(--sidebar-w);
   background: var(--sidebar-bg); display: flex; flex-direction: column;
@@ -108,7 +108,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .sidebar.collapsed .sidebar-logo { justify-content: center; padding: 0 8px; }
 .sidebar-toggle {
   background: none; border: none; color: var(--text-3); cursor: pointer;
-  font-size: 9px; padding: 4px 6px; transition: color 0.15s; margin-left: auto; flex-shrink: 0;
+  font-size: 11px; padding: 4px 6px; transition: color 0.15s; margin-left: auto; flex-shrink: 0;
   line-height: 1;
 }
 .sidebar-toggle:hover { color: var(--text-2); }
@@ -118,26 +118,26 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .logo-mark {
   width: 30px; height: 30px; background: var(--accent); border-radius: 7px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 600; color: #181818; flex-shrink: 0;
+  font-size: 11px; font-weight: 600; color: #181818; flex-shrink: 0;
   letter-spacing: -0.5px;
 }
 .logo-text { line-height: 1.2; }
-.logo-name { font-size: 9px; font-weight: 600; color: var(--accent); }
-.logo-sub { font-size: 9px; color: var(--text-3); }
+.logo-name { font-size: 11px; font-weight: 600; color: var(--accent); }
+.logo-sub { font-size: 11px; color: var(--text-3); }
 .sidebar-label {
-  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 5px;
 }
 .sidebar-field { margin-bottom: 10px; }
 .select-wrap { position: relative; }
 .select-wrap::after {
-  content: "▾"; position: absolute; right: 9px; top: 50%;
-  transform: translateY(-50%); color: var(--text-3); pointer-events: none; font-size: 9px;
+  content: "β–Ύ"; position: absolute; right: 9px; top: 50%;
+  transform: translateY(-50%); color: var(--text-3); pointer-events: none; font-size: 11px;
 }
 .sidebar select, .sidebar input[type=number] {
   width: 100%; background: var(--surface-2); border: 1px solid var(--border-strong);
   color: var(--text); border-radius: var(--radius-sm);
-  padding: 7px 28px 7px 9px; font-size: 9px; font-family: var(--font);
+  padding: 7px 28px 7px 9px; font-size: 11px; font-family: var(--font);
   outline: none; cursor: pointer; appearance: none; -webkit-appearance: none;
 }
 .sidebar select:focus, .sidebar input:focus { border-color: var(--accent); }
@@ -146,7 +146,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   display: flex; align-items: center; justify-content: space-between;
   padding: 5px 0; cursor: pointer;
 }
-.toggle-row label { font-size: 9px; color: var(--text-2); cursor: pointer; }
+.toggle-row label { font-size: 11px; color: var(--text-2); cursor: pointer; }
 .toggle { position: relative; width: 30px; height: 17px; flex-shrink: 0; }
 .toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
 .toggle-track {
@@ -164,27 +164,27 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .new-btn {
   display: flex; align-items: center; gap: 7px; width: 100%;
   padding: 7px 9px; background: none; border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm); color: var(--text-3); font-size: 9px;
+  border-radius: var(--radius-sm); color: var(--text-3); font-size: 11px;
   cursor: pointer; font-family: var(--font); transition: all 0.15s; margin-bottom: 10px;
 }
 .new-btn:hover { border-color: var(--text-3); color: var(--text-2); }
-.history-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 6px; }
+.history-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 6px; }
 .history-search {
   width: 100%; background: var(--surface); border: 1px solid var(--border);
   color: var(--text); border-radius: var(--radius-sm); padding: 5px 9px;
-  font-size: 9px; font-family: var(--font); outline: none; margin-bottom: 6px;
+  font-size: 11px; font-family: var(--font); outline: none; margin-bottom: 6px;
   transition: border-color 0.12s;
 }
 .history-search:focus { border-color: var(--accent); }
 .history-search::placeholder { color: var(--text-3); }
 .history-item {
   padding: 6px 8px; border-radius: var(--radius-sm); cursor: pointer;
-  font-size: 9px; color: var(--text-3); white-space: nowrap; overflow: hidden;
+  font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; transition: all 0.1s;
 }
 .history-item:hover { background: var(--sidebar-hover); color: var(--text-2); }
 
-/* ── MAIN ── */
+/* β”€β”€ MAIN β”€β”€ */
 .main { flex: 1; display: flex; flex-direction: column; height: 100vh; overflow: hidden; min-width: 0; position: relative; }
 .top-bar {
   padding: 6px 24px; border-bottom: 1px solid var(--border);
@@ -192,12 +192,12 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   min-height: 34px; background: var(--bg);
 }
 .top-bar-title {
-  font-size: 9px; color: var(--text-3); white-space: nowrap;
+  font-size: 11px; color: var(--text-3); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; max-width: 500px;
 }
 .top-bar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .method-badge {
-  font-size: 9px; font-weight: 600; text-transform: uppercase;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
   letter-spacing: 0.06em; padding: 2px 9px; border-radius: 20px;
   background: var(--surface); border: 1px solid var(--border-strong);
   color: var(--text-2); cursor: pointer; transition: all 0.15s;
@@ -211,16 +211,16 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .composer.bottom { z-index: 100; }
 .composer.bottom ~ .messages { padding-bottom: 320px; }  /* Account for composer height + extra 200px */
 
-/* ── EMPTY STATE ── */
+/* β”€β”€ EMPTY STATE β”€β”€ */
 .empty-state { text-align: center; padding: 72px 32px; color: var(--text-2); transition: opacity 0.3s; position: relative; z-index: 1; }
 .composer.centered ~ .messages .empty-state { opacity: 0.3; }
 .empty-icon {
   width: 52px; height: 52px; background: var(--accent-light);
   border-radius: 14px; display: flex; align-items: center; justify-content: center;
-  font-size: 22px; margin: 0 auto 18px;
+  font-size: 26px; margin: 0 auto 18px;
 }
-.empty-state h2 { font-size: 9px; font-weight: 600; color: var(--text); margin-bottom: 9px; }
-.empty-state p { font-size: 9px; max-width: 380px; margin: 0 auto 20px; line-height: 1.6; }
+.empty-state h2 { font-size: 11px; font-weight: 600; color: var(--text); margin-bottom: 9px; }
+.empty-state p { font-size: 11px; max-width: 380px; margin: 0 auto 20px; line-height: 1.6; }
 
 .starter-grid {
   display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px;
@@ -232,33 +232,33 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .starter-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius-sm); padding: 10px 13px;
-  cursor: pointer; font-size: 10px; color: var(--text-2);
+  cursor: pointer; font-size: 12px; color: var(--text-2);
   line-height: 1.5; text-align: left; transition: all 0.15s;
   font-family: var(--font); width: 100%;
 }
 .starter-card:hover { border-color: var(--border-strong); color: var(--text); background: var(--surface-2); }
-.sc-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); display: block; margin-bottom: 3px; }
+.sc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); display: block; margin-bottom: 3px; }
 
-/* ── PROBLEM BUBBLE ── */
+/* β”€β”€ PROBLEM BUBBLE β”€β”€ */
 .msg-problem { display: flex; justify-content: flex-end; animation: fadeUp 0.25s ease both; }
 .msg-bubble {
   background: var(--accent); color: #181818; border-radius: 18px 18px 4px 18px;
-  padding: 12px 16px; font-size: 9px; line-height: 1.55; white-space: pre-wrap;
+  padding: 12px 16px; font-size: 11px; line-height: 1.55; white-space: pre-wrap;
 }
 
-/* ── PHASE PROGRESS ── */
+/* β”€β”€ PHASE PROGRESS β”€β”€ */
 .progress-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 14px 16px; animation: fadeUp 0.25s ease both;
 }
-.progress-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 9px; color: var(--text-2); }
+.progress-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 11px; color: var(--text-2); }
 .spinner {
   width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent);
   border-radius: 50%; animation: spin 0.7s linear infinite; flex-shrink: 0;
 }
 .phase-steps { display: flex; flex-wrap: wrap; gap: 5px; }
 .phase-step {
-  font-size: 9px; padding: 3px 9px; border-radius: 20px;
+  font-size: 11px; padding: 3px 9px; border-radius: 20px;
   background: var(--bg); color: var(--text-3); border: 1px solid var(--border);
   transition: all 0.2s;
 }
@@ -266,7 +266,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .phase-step.done { background: var(--green-bg); color: var(--green); border-color: var(--green-border); }
 .phase-step.error { background: var(--red-bg); color: var(--red); border-color: var(--red-border); }
 
-/* ── PHASE CARDS ── */
+/* β”€β”€ PHASE CARDS β”€β”€ */
 .phase-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   overflow: hidden; box-shadow: var(--shadow-sm); animation: fadeUp 0.3s ease both;
@@ -278,47 +278,47 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .phase-header:hover { background: var(--surface-2); }
 .phase-badge {
-  font-size: 9px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 7px;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.06em; padding: 2px 7px;
   border-radius: 20px; background: var(--bg); color: var(--text-3); flex-shrink: 0;
 }
-.phase-title { font-size: 9px; font-weight: 600; flex: 1; }
-.phase-chevron { color: var(--text-3); font-size: 9px; transition: transform 0.2s; margin-left: auto; }
+.phase-title { font-size: 11px; font-weight: 600; flex: 1; }
+.phase-chevron { color: var(--text-3); font-size: 11px; transition: transform 0.2s; margin-left: auto; }
 .phase-card.collapsed .phase-chevron { transform: rotate(-90deg); }
 .phase-card.collapsed .phase-body { display: none; }
 .phase-body { padding: 16px; }
 
-/* ── CLASSIFICATION ── */
+/* β”€β”€ CLASSIFICATION β”€β”€ */
 .task-badge {
   display: inline-flex; align-items: center; gap: 6px;
   background: var(--accent-light); color: var(--accent);
   border: 1px solid var(--accent); border-radius: 20px;
-  padding: 4px 12px; font-size: 9px; font-weight: 600;
+  padding: 4px 12px; font-size: 11px; font-weight: 600;
   letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 9px;
 }
-.rationale { font-size: 9px; color: var(--text-2); line-height: 1.6; }
+.rationale { font-size: 11px; color: var(--text-2); line-height: 1.6; }
 
-/* ── DECOMPOSITION ── */
+/* β”€β”€ DECOMPOSITION β”€β”€ */
 .sub-problems { display: flex; flex-direction: column; gap: 7px; margin-bottom: 14px; }
 .sub-problem {
   display: flex; gap: 10px; padding: 9px 12px;
   background: var(--bg); border-radius: var(--radius-sm); border: 1px solid var(--border);
 }
-.sp-id { font-size: 9px; font-weight: 600; color: var(--text-3); padding-top: 2px; min-width: 28px; }
-.sp-desc { font-size: 9px; line-height: 1.5; }
+.sp-id { font-size: 11px; font-weight: 600; color: var(--text-3); padding-top: 2px; min-width: 28px; }
+.sp-desc { font-size: 11px; line-height: 1.5; }
 .section-label {
-  font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
   color: var(--text-3); margin-bottom: 7px;
 }
 .assumptions { display: flex; flex-direction: column; gap: 5px; }
-.assumption { display: flex; gap: 8px; align-items: flex-start; font-size: 9px; line-height: 1.5; color: var(--text-2); }
+.assumption { display: flex; gap: 8px; align-items: flex-start; font-size: 11px; line-height: 1.5; color: var(--text-2); }
 .aLabel {
-  font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; margin-top: 1px;
+  font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; margin-top: 1px;
 }
 .aLabel.VERIFIED { background: var(--green-bg); color: var(--green); }
 .aLabel.HYPOTHESIS { background: var(--yellow-bg); color: var(--yellow); }
 .aLabel.UNKNOWN { background: var(--surface); color: var(--text-3); }
 
-/* ── PERSPECTIVES ── */
+/* β”€β”€ PERSPECTIVES β”€β”€ */
 .perspectives-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 600px) { .perspectives-grid { grid-template-columns: 1fr; } }
 .persp-card { border-radius: var(--radius-sm); border: 1px solid; overflow: hidden; }
@@ -327,32 +327,32 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .persp-card.systemic     { border-color: var(--purple-border); }
 .persp-card.minimalist   { border-color: var(--teal-border); }
 .persp-head {
-  padding: 8px 11px; font-size: 9px; font-weight: 600; letter-spacing: 0.07em;
+  padding: 8px 11px; font-size: 11px; font-weight: 600; letter-spacing: 0.07em;
   text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;
 }
 .constructive .persp-head { background: var(--blue-bg); color: var(--blue); }
 .destructive  .persp-head { background: var(--rose-bg);  color: var(--rose); }
 .systemic     .persp-head { background: var(--purple-bg); color: var(--purple); }
 .minimalist   .persp-head { background: var(--teal-bg);  color: var(--teal); }
-.persp-model { font-size: 9px; font-weight: 400; opacity: 0.65; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
-.persp-body { padding: 12px 13px; font-size: 9px; line-height: 1.65; color: var(--text); }
+.persp-model { font-size: 11px; font-weight: 400; opacity: 0.65; text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+.persp-body { padding: 12px 13px; font-size: 11px; line-height: 1.65; color: var(--text); }
 .persp-insights { margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--border); }
-.insight-li { display: flex; gap: 6px; margin-bottom: 4px; font-size: 9px; color: var(--text-2); }
+.insight-li { display: flex; gap: 6px; margin-bottom: 4px; font-size: 11px; color: var(--text-2); }
 .insight-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); flex-shrink: 0; margin-top: 6px; }
 .persp-card.persp-collapsed .persp-body { display: none; }
 .persp-head { cursor: pointer; user-select: none; }
 .persp-chevron {
-  font-size: 9px; color: var(--text-3);
+  font-size: 11px; color: var(--text-3);
   transition: transform 0.2s; margin-left: auto; flex-shrink: 0;
 }
 .persp-card.persp-collapsed .persp-chevron { transform: rotate(-90deg); }
 
-/* ── SCORING ── */
+/* β”€β”€ SCORING β”€β”€ */
 .scores-wrap { overflow-x: auto; }
-.scores-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.scores-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .scores-table th {
   padding: 6px 10px; background: var(--bg); border-bottom: 1px solid var(--border);
-  font-weight: 600; font-size: 9px; color: var(--text-2); text-transform: uppercase;
+  font-weight: 600; font-size: 11px; color: var(--text-2); text-transform: uppercase;
   letter-spacing: 0.05em; white-space: nowrap; text-align: left;
 }
 .scores-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; color: var(--text); }
@@ -361,39 +361,39 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .score-bar { display: flex; align-items: center; gap: 6px; }
 .score-track { flex: 1; height: 4px; background: var(--border); border-radius: 2px; min-width: 50px; overflow: hidden; }
 .score-fill { height: 100%; border-radius: 2px; background: var(--accent); }
-.score-num { font-size: 9px; font-weight: 600; min-width: 22px; text-align: right; }
+.score-num { font-size: 11px; font-weight: 600; min-width: 22px; text-align: right; }
 .winner-tag {
-  display: inline-flex; align-items: center; gap: 3px; font-size: 9px;
+  display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
   background: var(--green-bg); color: var(--green); border-radius: 20px;
   padding: 1px 7px; font-weight: 600; white-space: nowrap;
 }
 .bias-tag {
   display: inline-block; background: var(--yellow-bg); color: var(--yellow);
-  font-size: 9px; padding: 1px 5px; border-radius: 3px; margin: 1px 2px 1px 0;
+  font-size: 11px; padding: 1px 5px; border-radius: 3px; margin: 1px 2px 1px 0;
 }
-.steel-man { font-size: 9px; color: var(--text-2); line-height: 1.5; font-style: italic; margin-top: 4px; }
+.steel-man { font-size: 11px; color: var(--text-2); line-height: 1.5; font-style: italic; margin-top: 4px; }
 
-/* ── STRESS TESTS ── */
+/* β”€β”€ STRESS TESTS β”€β”€ */
 .stress-list { display: flex; flex-direction: column; gap: 10px; }
 .stress-item {
   padding: 12px 13px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg);
 }
 .stress-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.stress-scenario { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
+.stress-scenario { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; }
 .surv-wrap { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
 .surv-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
 .surv-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
 .surv-fill.hi { background: var(--green); }
 .surv-fill.md { background: var(--yellow); }
 .surv-fill.lo { background: var(--red); }
-.surv-pct { font-size: 9px; font-weight: 600; min-width: 36px; text-align: right; }
+.surv-pct { font-size: 11px; font-weight: 600; min-width: 36px; text-align: right; }
 .surv-pct.hi { color: var(--green); } .surv-pct.md { color: var(--yellow); } .surv-pct.lo { color: var(--red); }
-.stress-detail { font-size: 9px; color: var(--text-2); line-height: 1.5; }
+.stress-detail { font-size: 11px; color: var(--text-2); line-height: 1.5; }
 .stress-detail + .stress-detail { margin-top: 4px; }
 
-/* ── SYNTHESIS ── */
+/* β”€β”€ SYNTHESIS β”€β”€ */
 .solution-block {
-  font-size: 9px; line-height: 1.75; color: var(--text);
+  font-size: 11px; line-height: 1.75; color: var(--text);
   padding: 14px; background: var(--bg); border-radius: var(--radius-sm);
   border-left: 3px solid var(--accent); margin-bottom: 16px; white-space: pre-wrap;
 }
@@ -406,15 +406,15 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   display: flex; justify-content: space-between; align-items: center;
   padding: 5px 12px; background: var(--surface-2); border-bottom: 1px solid var(--border);
 }
-.code-block-lang span { font-size: 9px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.code-block-lang span { font-size: 11px; font-weight: 600; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.06em; }
 .code-block-copy {
-  font-size: 9px; background: none; border: 1px solid var(--border-strong); color: var(--text-3);
+  font-size: 11px; background: none; border: 1px solid var(--border-strong); color: var(--text-3);
   padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: var(--font); transition: all 0.12s;
 }
 .code-block-copy:hover { border-color: var(--accent); color: var(--accent); }
 .code-block-wrap pre {
   margin: 0; padding: 12px 14px; overflow-x: auto;
-  font-family: var(--mono); font-size: 9px; line-height: 1.55; color: var(--text-2);
+  font-family: var(--mono); font-size: 11px; line-height: 1.55; color: var(--text-2);
 }
 
 .insights-list { display: flex; flex-direction: column; gap: 7px; margin-bottom: 16px; }
@@ -423,46 +423,46 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   padding: 9px 12px; border-radius: var(--radius-sm);
   background: var(--accent-light); border: 1px solid var(--accent);
 }
-.ins-num { font-size: 9px; font-weight: 600; color: var(--accent); min-width: 16px; }
-.ins-text { font-size: 9px; line-height: 1.55; }
+.ins-num { font-size: 11px; font-weight: 600; color: var(--accent); min-width: 16px; }
+.ins-text { font-size: 11px; line-height: 1.55; }
 .blueprint-wrap { overflow-x: auto; margin-bottom: 16px; }
-.blueprint-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.blueprint-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .blueprint-table th {
   padding: 6px 10px; background: var(--bg); border-bottom: 1px solid var(--border);
-  font-weight: 600; font-size: 9px; color: var(--text-2); text-align: left;
+  font-weight: 600; font-size: 11px; color: var(--text-2); text-align: left;
   text-transform: uppercase; letter-spacing: 0.05em;
 }
 .blueprint-table td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; line-height: 1.4; }
 .blueprint-table tr:last-child td { border-bottom: none; }
 .step-n { font-weight: 600; color: var(--accent); }
-.horizon { display: inline-block; font-size: 9px; padding: 1px 6px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); }
+.horizon { display: inline-block; font-size: 11px; padding: 1px 6px; border-radius: 4px; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); }
 .open-questions { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
 .open-q {
   display: flex; gap: 8px; padding: 8px 12px; background: var(--red-bg);
   border: 1px solid var(--red-border); border-radius: var(--radius-sm);
-  font-size: 9px; color: var(--text-2); align-items: flex-start; line-height: 1.45;
+  font-size: 11px; color: var(--text-2); align-items: flex-start; line-height: 1.45;
 }
 .meta-block {
   background: var(--purple-bg); border: 1px solid var(--purple-border);
   border-radius: var(--radius-sm); padding: 13px;
 }
-.meta-title { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--purple); margin-bottom: 10px; }
-.meta-row { display: flex; gap: 10px; margin-bottom: 7px; font-size: 9px; line-height: 1.45; }
+.meta-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--purple); margin-bottom: 10px; }
+.meta-row { display: flex; gap: 10px; margin-bottom: 7px; font-size: 11px; line-height: 1.45; }
 .meta-key { font-weight: 600; color: var(--purple); min-width: 190px; flex-shrink: 0; }
 .meta-val { color: var(--text); }
 
-/* ── ROUTING SUMMARY ── */
+/* β”€β”€ ROUTING SUMMARY β”€β”€ */
 .routing-summary {
   margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
   display: flex; flex-wrap: wrap; gap: 4px;
 }
 .routing-chip {
-  font-size: 9px; padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; padding: 2px 8px; border-radius: 20px;
   background: var(--bg); border: 1px solid var(--border); color: var(--text-2);
   font-family: var(--mono);
 }
 
-/* ── SYNTHESIS CARD (elevated — Peak-End Rule) ── */
+/* β”€β”€ SYNTHESIS CARD (elevated β€” Peak-End Rule) β”€β”€ */
 .synthesis-card {
   background: var(--surface); border-radius: var(--radius); overflow: hidden;
   border: 1px solid var(--accent);
@@ -474,18 +474,18 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .synthesis-card .phase-header:hover { background: var(--accent-light); filter: brightness(1.15); }
 .synthesis-card .phase-badge { background: var(--accent); color: #181818; }
-.synthesis-card .phase-title { color: var(--accent-hover); font-size: 9px; }
+.synthesis-card .phase-title { color: var(--accent-hover); font-size: 11px; }
 .synthesis-card .phase-body { padding: 20px; }
 
-/* ── PRESET HINT ── */
-.preset-hint { font-size: 9px; color: var(--text-3); margin-top: 4px; line-height: 1.4; min-height: 14px; }
+/* β”€β”€ PRESET HINT β”€β”€ */
+.preset-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; line-height: 1.4; min-height: 14px; }
 .preset-hint.warn { color: var(--yellow); }
 
-/* ── ADVANCED SECTION ── */
+/* β”€β”€ ADVANCED SECTION β”€β”€ */
 .advanced-toggle {
   display: flex; align-items: center; gap: 5px; width: 100%;
   padding: 5px 0; background: none; border: none;
-  font-size: 9px; font-weight: 600; color: var(--text-3); cursor: pointer;
+  font-size: 11px; font-weight: 600; color: var(--text-3); cursor: pointer;
   font-family: var(--font); text-align: left; margin-top: 2px;
   text-transform: uppercase; letter-spacing: 0.07em; transition: color 0.15s;
 }
@@ -493,13 +493,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .advanced-panel { display: none; padding-top: 4px; }
 .advanced-panel.open { display: block; }
 
-/* ── PHASE TOOLTIPS ── */
+/* β”€β”€ PHASE TOOLTIPS β”€β”€ */
 [data-tip] { position: relative; }
 [data-tip]::after {
   content: attr(data-tip);
   position: absolute; bottom: calc(100% + 7px); left: 50%; transform: translateX(-50%);
   background: var(--surface-2); border: 1px solid var(--border-strong);
-  color: var(--text-2); font-size: 9px; line-height: 1.45;
+  color: var(--text-2); font-size: 11px; line-height: 1.45;
   padding: 6px 10px; border-radius: var(--radius-sm);
   width: 200px; white-space: normal; text-align: left;
   pointer-events: none; opacity: 0; transition: opacity 0.15s;
@@ -507,13 +507,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 [data-tip]:hover::after { opacity: 1; }
 
-/* ── COMPOSER ERROR ── */
+/* β”€β”€ COMPOSER ERROR β”€β”€ */
 .composer-error {
   padding: 7px 16px; background: var(--red-bg); border-top: 1px solid var(--red-border);
-  color: var(--red); font-size: 9px; display: none; animation: fadeUp 0.2s ease both;
+  color: var(--red); font-size: 11px; display: none; animation: fadeUp 0.2s ease both;
 }
 
-/* ── SERVER STATUS DOT ── */
+/* β”€β”€ SERVER STATUS DOT β”€β”€ */
 .server-dot {
   width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
   background: var(--border-strong); transition: background 0.4s; margin-top: 2px;
@@ -521,56 +521,56 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .server-dot.ok  { background: var(--green); }
 .server-dot.err { background: var(--red); box-shadow: 0 0 0 2px var(--red-bg); }
 
-/* ── PROBLEM BUBBLE ACTIONS ── */
+/* β”€β”€ PROBLEM BUBBLE ACTIONS β”€β”€ */
 .msg-problem-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 72%; }
 .msg-bubble { max-width: 100%; }
 .msg-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
 .msg-problem:hover .msg-actions { opacity: 1; }
 .msg-action {
-  padding: 3px 8px; font-size: 9px; background: var(--surface-2);
+  padding: 3px 8px; font-size: 11px; background: var(--surface-2);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   color: var(--text-3); cursor: pointer; font-family: var(--font); transition: all 0.12s;
 }
 .msg-action:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
 
-/* ── EXPORT BAR ── */
+/* β”€β”€ EXPORT BAR β”€β”€ */
 .export-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
   padding: 9px 14px; display: flex; align-items: center; gap: 8px;
   animation: fadeUp 0.25s ease both;
 }
-.export-label { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); flex: 1; }
+.export-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-3); flex: 1; }
 .export-btn {
-  padding: 4px 11px; font-size: 9px; background: var(--surface-2);
+  padding: 4px 11px; font-size: 11px; background: var(--surface-2);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   color: var(--text-2); cursor: pointer; font-family: var(--font); transition: all 0.12s;
 }
 .export-btn:hover { border-color: var(--accent); color: var(--accent); }
 .export-btn.copied { border-color: var(--green); color: var(--green); }
 
-/* ── ERRORS ── */
+/* β”€β”€ ERRORS β”€β”€ */
 .errors-card {
   background: var(--yellow-bg); border: 1px solid var(--yellow-border); border-radius: var(--radius-sm);
-  padding: 10px 14px; font-size: 9px; color: var(--text-2); animation: fadeUp 0.3s ease both;
+  padding: 10px 14px; font-size: 11px; color: var(--text-2); animation: fadeUp 0.3s ease both;
 }
 .errors-card ul { padding-left: 16px; margin-top: 5px; }
 .errors-card li { margin-bottom: 3px; line-height: 1.45; }
 
-/* ── INFO ── */
+/* β”€β”€ INFO β”€β”€ */
 .info-card {
   background: var(--green-bg); border: 1px solid var(--green-border); border-radius: var(--radius-sm);
-  padding: 10px 14px; font-size: 9px; animation: fadeUp 0.3s ease both;
+  padding: 10px 14px; font-size: 11px; animation: fadeUp 0.3s ease both;
 }
 
-/* ── CACHE BADGE ── */
+/* β”€β”€ CACHE BADGE β”€β”€ */
 .cache-badge {
-  display: inline-block; font-size: 9px; font-weight: 600;
+  display: inline-block; font-size: 11px; font-weight: 600;
   color: var(--yellow); background: var(--yellow-bg);
   border: 1px solid var(--yellow-border); border-radius: 4px;
   padding: 2px 7px; margin-bottom: 8px; letter-spacing: 0.04em;
 }
 
-/* ── COMPOSER ── */
+/* β”€β”€ COMPOSER β”€β”€ */
 .composer {
   position: absolute;
   left: 0; right: 0;
@@ -604,7 +604,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .composer-area {
   flex: 1; width: 100%; height: 60px; resize: none;  /* Fixed height 60px */
   border: 1.5px solid var(--border-strong); border-radius: 12px;
-  padding: 12px 160px 12px 12px; font-size: 9px; font-family: var(--font);  /* Right padding for dropdown + button */
+  padding: 12px 160px 12px 12px; font-size: 11px; font-family: var(--font);  /* Right padding for dropdown + button */
   color: var(--text); background: var(--surface-2); outline: none;
   overflow-y: hidden; line-height: 1.45; transition: border-color 0.15s;
 }
@@ -614,7 +614,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .composer.centered .composer-area {
   height: 60px;
-  font-size: 9px;
+  font-size: 11px;
   padding: 12px 50px 12px 12px;
   border-radius: 12px;
   box-shadow: 0 3px 15px rgba(0,0,0,0.3);
@@ -626,24 +626,24 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
   width: 36px; height: 36px; flex-shrink: 0;
   background: var(--accent); color: #181818; border: none; border-radius: 8px;
   cursor: pointer; display: flex; align-items: center; justify-content: center;
-  font-size: 9px; transition: background 0.15s, transform 0.1s;
+  font-size: 11px; transition: background 0.15s, transform 0.1s;
 }
 .composer.centered .run-btn {
   width: 36px; height: 36px;
   border-radius: 8px;
-  font-size: 9px;
+  font-size: 11px;
 }
 .run-btn:hover { background: var(--accent-hover); }
 .run-btn:active { transform: translateY(-50%) scale(0.93); }
 .run-btn:disabled { background: var(--border-strong); cursor: not-allowed; }
-.composer-hint { font-size: 9px; color: var(--text-3); text-align: center; margin-top: 7px; }
+.composer-hint { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 7px; }
 .composer.centered .composer-hint { margin-top: 12px; }
 
-/* ── COMPOSER METHOD BAR ── */
+/* β”€β”€ COMPOSER METHOD BAR β”€β”€ */
 .method-dropdown {
   position: absolute; right: 60px; top: 50%; transform: translateY(-50%);
   padding: 6px 10px; margin-left: 10px; background: transparent; border: none;
-  border-radius: 4px; color: var(--text-2); font-size: 9px; font-weight: 500;
+  border-radius: 4px; color: var(--text-2); font-size: 11px; font-weight: 500;
   font-family: var(--font); cursor: pointer; transition: all 0.15s ease;
   outline: none; min-width: 100px; z-index: 10;
 }
@@ -651,13 +651,13 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .method-dropdown:focus { color: var(--accent); outline: 1px solid var(--accent); outline-offset: -1px; }
 .method-dropdown option { background: var(--surface-2); color: var(--text); padding: 8px; }
 
-/* ── SECTION HEADER inside phase body ── */
-.sec { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); margin: 12px 0 7px; }
+/* β”€β”€ SECTION HEADER inside phase body β”€β”€ */
+.sec { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); margin: 12px 0 7px; }
 .sec:first-child { margin-top: 0; }
 
 /* Token counts */
 .token-count {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-2);
   padding: 8px 12px;
   background: var(--surface-2);
@@ -678,26 +678,26 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 }
 .shortcuts-header {
   display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 16px; font-size: 9px; font-weight: 600; color: var(--text);
+  margin-bottom: 16px; font-size: 11px; font-weight: 600; color: var(--text);
 }
 .shortcuts-close {
   background: none; border: none; color: var(--text-3); cursor: pointer;
-  font-size: 9px; line-height: 1; padding: 2px 4px; transition: color 0.12s;
+  font-size: 11px; line-height: 1; padding: 2px 4px; transition: color 0.12s;
 }
 .shortcuts-close:hover { color: var(--text); }
 .shortcuts-list { display: flex; flex-direction: column; gap: 2px; }
 .shortcut-row {
   display: flex; justify-content: space-between; align-items: center;
-  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 9px; color: var(--text-2);
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-2);
 }
 .shortcut-row:last-child { border-bottom: none; }
 kbd {
   background: var(--surface-2); border: 1px solid var(--border-strong);
   border-radius: 4px; padding: 2px 8px; font-family: var(--mono);
-  font-size: 9px; color: var(--text-2); white-space: nowrap;
+  font-size: 11px; color: var(--text-2); white-space: nowrap;
 }
 
-/* ── ANIMATIONS ── */
+/* β”€β”€ ANIMATIONS β”€β”€ */
 @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
 @keyframes spin { to { transform:rotate(360deg); } }
 @keyframes borderPulse {
@@ -709,7 +709,7 @@ kbd {
   animation: borderPulse 1s ease 2;
 }
 
-/* ── SCROLLBARS ── */
+/* β”€β”€ SCROLLBARS β”€β”€ */
 .messages::-webkit-scrollbar { width: 5px; }
 .messages::-webkit-scrollbar-track { background: transparent; }
 .messages::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
@@ -720,7 +720,7 @@ kbd {
 <body>
 <div class="layout">
 
-  <!-- ── SIDEBAR ── -->
+  <!-- β”€β”€ SIDEBAR β”€β”€ -->
   <aside class="sidebar">
     <div class="sidebar-top">
       <div class="sidebar-logo">
@@ -729,8 +729,8 @@ kbd {
           <div class="logo-name">Reasoner</div>
           <div class="logo-sub">Adaptive Reasoning v2.0</div>
         </div>
-        <div class="server-dot" id="server-dot" title="Checking server…"></div>
-        <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar (B)">«</button>
+        <div class="server-dot" id="server-dot" title="Checking serverβ€¦"></div>
+        <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar (B)">Β«</button>
       </div>
       <div class="sidebar-field">
         <div class="sidebar-label">Preset</div>
@@ -740,7 +740,7 @@ kbd {
         <div class="preset-hint" id="preset-hint"></div>
       </div>
       <button class="advanced-toggle" id="advanced-toggle" onclick="toggleAdvanced()" aria-expanded="false">
-        Advanced <span id="advanced-arrow">▸</span>
+        Advanced <span id="advanced-arrow">β–Έ</span>
       </button>
       <div class="advanced-panel" id="advanced-panel">
         <div class="sidebar-field" style="display:flex;gap:8px;">
@@ -761,18 +761,18 @@ kbd {
     <div class="sidebar-divider"></div>
     <div class="sidebar-scroll">
       <button class="new-btn" id="new-btn" onclick="newConversation()">
-        <span>＋</span> New problem
+        <span>οΌ‹</span> New problem
       </button>
       <button class="new-btn" id="clear-cache-btn" onclick="clearCache()" style="opacity:0.6;">
-        <span>⌫</span> Clear cache
+        <span>β«</span> Clear cache
       </button>
       <div class="history-label">Recent</div>
-      <input class="history-search" id="history-search" type="search" placeholder="Search…" oninput="filterHistory(this.value)" autocomplete="off">
+      <input class="history-search" id="history-search" type="search" placeholder="Searchβ€¦" oninput="filterHistory(this.value)" autocomplete="off">
       <div id="history-list"></div>
     </div>
   </aside>
 
-  <!-- ── MAIN ── -->
+  <!-- β”€β”€ MAIN β”€β”€ -->
   <main class="main">
     <div class="top-bar" id="top-bar" style="display:none">
       <span class="top-bar-title" id="top-bar-title"></span>
@@ -784,7 +784,7 @@ kbd {
       <div class="messages-inner" id="messages-inner">
         <!-- empty state -->
         <div class="empty-state" id="empty-state">
-          <div class="empty-icon">⟡</div>
+          <div class="empty-icon">β΅</div>
           <h2>Adaptive Reasoning Architecture</h2>
           <p>Submit a problem and the pipeline will run 6 phases of adversarial reasoning.</p>
           <div class="starter-grid">
@@ -797,13 +797,13 @@ kbd {
       </div>
     </div>
 
-    <!-- ── COMPOSER ── -->
+    <!-- β”€β”€ COMPOSER β”€β”€ -->
     <div class="composer">
       <div class="composer-error" id="composer-error"></div>
       <div class="composer-inner">
         <div class="composer-wrapper">
           <textarea class="composer-area" id="textarea"
-            placeholder="Describe your problem or decision…" rows="1"
+            placeholder="Describe your problem or decisionβ€¦" rows="1"
             onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
           <select class="method-dropdown" id="method-select" onchange="selectMethod(this.value)" title="Select reasoning method">
             <option value="standard">Standard</option>
@@ -811,10 +811,10 @@ kbd {
             <option value="debate">Debate</option>
             <option value="research">Research</option>
           </select>
-          <button class="run-btn" id="run-btn" onclick="runOrStop()" title="Run pipeline (Enter)">⇡</button>
+          <button class="run-btn" id="run-btn" onclick="runOrStop()" title="Run pipeline (Enter)">β‡΅</button>
         </div>
       </div>
-      <div class="composer-hint">Enter to send · Shift+Enter for newline</div>
+      <div class="composer-hint">Enter to send Β· Shift+Enter for newline</div>
     </div>
   </main>
   <div class="shortcuts-modal" id="shortcuts-modal" onclick="if(event.target===this)closeShortcuts()">
@@ -836,12 +836,12 @@ kbd {
 </div>
 
 <script>
-// ── STATE ──────────────────────────────────────────────────────────
+// β”€β”€ STATE β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 const appState = { running: false, history: [] };
-const _results = {}; // progressId → { problem, phases, errors }
+const _results = {}; // progressId β†’ { problem, phases, errors }
 let _allHistory = []; // All conversation history (cached for search filtering)
 
-// ── METHOD-TO-PRESETS MAPPING (ordered by cost-effectiveness: cheapest first) ──────────────────────────────────────
+// β”€β”€ METHOD-TO-PRESETS MAPPING (ordered by cost-effectiveness: cheapest first) β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 const _METHOD_PRESETS = {
   standard: [
     { id: 'cost-efficient',      label: 'cost-efficient' },
@@ -884,7 +884,7 @@ function updatePresetDropdown(method) {
     const opt = document.createElement('option');
     opt.value = p.id;
     const meta = _presetMeta[p.id];
-    opt.textContent = p.id + (meta && !meta.available ? ' ⚠' : '');
+    opt.textContent = p.id + (meta && !meta.available ? ' β ' : '');
     sel.appendChild(opt);
   });
   if (presets.some(p => p.id === currentValue)) {
@@ -916,7 +916,7 @@ const EMPTY_STATE_HTML = `
     </div>
   </div>`;
 
-// ── INDEXEDDB WRAPPER ─────────────────────────────────────────────
+// β”€β”€ INDEXEDDB WRAPPER β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 const DB_NAME = 'ARA_Pipeline';
 const DB_VERSION = 1;
 const STORE_NAME = 'conversations';
@@ -1034,7 +1034,7 @@ function filterHistory(query) {
 }
 
 function createHistoryItem(conv) {
-  const truncated = conv.problem.length > 40 ? conv.problem.slice(0, 40) + '…' : conv.problem;
+  const truncated = conv.problem.length > 40 ? conv.problem.slice(0, 40) + 'β€¦' : conv.problem;
   const date = new Date(conv.timestamp).toLocaleDateString(undefined, { 
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
   });
@@ -1042,7 +1042,7 @@ function createHistoryItem(conv) {
   let _synthPreview = '';
   if (_synthP?.data?.core_solution) {
     const _raw = String(_synthP.data.core_solution).replace(/\n/g,' ').trim();
-    _synthPreview = _raw.length > 60 ? _raw.slice(0, 60) + '…' : _raw;
+    _synthPreview = _raw.length > 60 ? _raw.slice(0, 60) + 'β€¦' : _raw;
   }
   const el = document.createElement('div');
   el.className = 'history-item';
@@ -1054,8 +1054,8 @@ function createHistoryItem(conv) {
       <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--text-2);" title="${esc(conv.problem)}">${esc(truncated)}</div>
       ${_synthPreview ? `<div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;color:var(--text-3);margin-top:1px;opacity:0.7;">${esc(_synthPreview)}</div>` : ''}
     </span>
-    <button class="msg-action" style="padding:2px 5px;font-size:10px;" onclick="event.stopPropagation();loadConv('${conv.id}')" title="Load">⟲</button>
-    <button class="msg-action" style="padding:2px 5px;font-size:10px;" onclick="event.stopPropagation();deleteConv('${conv.id}')" title="Delete">✕</button>
+    <button class="msg-action" style="padding:2px 5px;font-size:10px;" onclick="event.stopPropagation();loadConv('${conv.id}')" title="Load">β²</button>
+    <button class="msg-action" style="padding:2px 5px;font-size:10px;" onclick="event.stopPropagation();deleteConv('${conv.id}')" title="Delete">β•</button>
   `;
   el.onclick = (e) => {
     if (!e.target.closest('button')) loadConv(conv.id);
@@ -1113,7 +1113,7 @@ async function deleteConv(id) {
   }
 }
 
-// ── INIT ──────────────────────────────────────────────────────────
+// β”€β”€ INIT β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 window.addEventListener('DOMContentLoaded', async () => {
   await loadPresets();
   updateMethodBadge();
@@ -1127,7 +1127,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     if (localStorage.getItem('ara_sidebar_collapsed') === 'true') {
       document.querySelector('.sidebar')?.classList.add('collapsed');
       const btn = document.getElementById('sidebar-toggle');
-      if (btn) btn.textContent = '»';
+      if (btn) btn.textContent = 'Β»';
     }
   } catch(e) {}
   autoResize(document.getElementById('textarea'));
@@ -1142,11 +1142,11 @@ function toggleSidebar() {
   const btn = document.getElementById('sidebar-toggle');
   if (!sidebar) return;
   const collapsed = sidebar.classList.toggle('collapsed');
-  if (btn) btn.textContent = collapsed ? '»' : '«';
+  if (btn) btn.textContent = collapsed ? 'Β»' : 'Β«';
   try { localStorage.setItem('ara_sidebar_collapsed', String(collapsed)); } catch(e) {}
 }
 
-// ── COMPOSER POSITION ─────────────────────────────────────────────
+// β”€β”€ COMPOSER POSITION β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function setComposerPosition() {
   const composer = document.querySelector('.composer');
   const messagesInner = document.getElementById('messages-inner');
@@ -1175,7 +1175,7 @@ function setComposerRunning() {
     composer.classList.add('bottom');
   }
   if (btn) {
-    btn.textContent = '⏹';  // Stop icon when running
+    btn.textContent = 'βΉ';  // Stop icon when running
   }
 }
 
@@ -1193,12 +1193,12 @@ function setComposerIdle() {
     // Keep at bottom if there's content
     composer.classList.remove('centered');
     composer.classList.add('bottom');
-    if (btn) btn.textContent = '⇡';  // Up arrow when idle at bottom
+    if (btn) btn.textContent = 'β‡΅';  // Up arrow when idle at bottom
   } else {
     // Center if empty
     composer.classList.remove('bottom');
     composer.classList.add('centered');
-    if (btn) btn.textContent = '⇡';  // Up arrow when centered
+    if (btn) btn.textContent = 'β‡΅';  // Up arrow when centered
   }
 }
 
@@ -1207,7 +1207,7 @@ function setTopBarTitle(text) {
   const titleEl = document.getElementById('top-bar-title');
   if (!bar || !titleEl) return;
   if (text) {
-    titleEl.textContent = text.length > 80 ? text.slice(0, 80) + '…' : text;
+    titleEl.textContent = text.length > 80 ? text.slice(0, 80) + 'β€¦' : text;
     bar.style.display = 'flex';
   } else {
     bar.style.display = 'none';
@@ -1220,7 +1220,7 @@ function updateMethodBadge() {
   const sel = document.getElementById('preset-select');
   const presetId = sel ? sel.value : '';
   if (presetId) {
-    badge.textContent = presetId + ' ▾';
+    badge.textContent = presetId + ' β–Ύ';
     badge.style.display = 'inline-flex';
   } else {
     badge.style.display = 'none';
@@ -1232,7 +1232,7 @@ function focusPreset() {
   if (sel) { sel.focus(); sel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 }
 
-// ── SERVER STATUS ─────────────────────────────────────────────────
+// β”€β”€ SERVER STATUS β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 async function checkServer() {
   const dot = document.getElementById('server-dot');
   try {
@@ -1241,7 +1241,7 @@ async function checkServer() {
     dot.title = r.ok ? 'Server connected' : `Server error ${r.status}`;
   } catch {
     dot.className = 'server-dot err';
-    dot.title = 'Server unreachable — is uvicorn running?';
+    dot.title = 'Server unreachable β€” is uvicorn running?';
   }
 }
 
@@ -1271,7 +1271,7 @@ function updatePresetHint() {
   if (!meta) { hint.textContent = ''; return; }
   if (!meta.available) {
     hint.className = 'preset-hint warn';
-    hint.textContent = '⚠ Missing: ' + meta.missing_keys.join(', ');
+    hint.textContent = 'β  Missing: ' + meta.missing_keys.join(', ');
   } else {
     hint.className = 'preset-hint';
     hint.textContent = meta.description;
@@ -1279,17 +1279,17 @@ function updatePresetHint() {
   updateMethodBadge();
 }
 
-// ── ADVANCED SECTION ──────────────────────────────────────────────
+// β”€β”€ ADVANCED SECTION β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function toggleAdvanced() {
   const panel = document.getElementById('advanced-panel');
   const arrow = document.getElementById('advanced-arrow');
   const btn = document.getElementById('advanced-toggle');
   const open = panel.classList.toggle('open');
-  arrow.textContent = open ? '▾' : '▸';
+  arrow.textContent = open ? 'β–Ύ' : 'β–Έ';
   btn.setAttribute('aria-expanded', String(open));
 }
 
-// ── COMPOSER ERROR ────────────────────────────────────────────────
+// β”€β”€ COMPOSER ERROR β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function showComposerError(msg) {
   const el = document.getElementById('composer-error');
   el.textContent = msg;
@@ -1298,7 +1298,7 @@ function showComposerError(msg) {
   el._timer = setTimeout(() => { el.style.display = 'none'; }, 5000);
 }
 
-// ── INPUT HELPERS ─────────────────────────────────────────────────
+// β”€β”€ INPUT HELPERS β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function autoResize(el) {
   el.style.height = 'auto';
   el.style.height = Math.min(el.scrollHeight, 160) + 'px';
@@ -1344,14 +1344,14 @@ async function clearCache() {
     await clearAllConversations();
     await loadHistoryFromDB();
     const span = btn.querySelector('span');
-    span.textContent = `✓ ${cleared} server + all conversations cleared`;
-    setTimeout(() => { span.textContent = '⌫ Clear cache'; btn.disabled = false; }, 2000);
+    span.textContent = `β“ ${cleared} server + all conversations cleared`;
+    setTimeout(() => { span.textContent = 'β« Clear cache'; btn.disabled = false; }, 2000);
   } catch {
     btn.disabled = false;
   }
 }
 
-// ── RUN / STOP ────────────────────────────────────────────────────
+// β”€β”€ RUN / STOP β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 let _currentAbortController = null;
 
 async function runOrStop() {
@@ -1370,7 +1370,7 @@ function stop() {
   fetch('/api/stop', { method: 'POST' }).catch(() => {});
   appState.running = false;
   const btn = document.getElementById('run-btn');
-  if (btn) btn.textContent = '⇡';  // Up arrow when stopped
+  if (btn) btn.textContent = 'β‡΅';  // Up arrow when stopped
   updateRunButton();
 }
 
@@ -1385,7 +1385,7 @@ async function run() {
   const selectedPreset = document.getElementById('preset-select').value;
   const meta = _presetMeta[selectedPreset];
   if (meta && !meta.available) {
-    showComposerError(`⚠ Missing API key: ${meta.missing_keys.join(', ')} — add to .env and restart uvicorn`);
+    showComposerError(`β  Missing API key: ${meta.missing_keys.join(', ')} β€” add to .env and restart uvicorn`);
     return;
   }
 
@@ -1459,24 +1459,24 @@ async function run() {
 function updateRunButton() {
   const btn = document.getElementById('run-btn');
   if (appState.running) {
-    btn.textContent = '⏹';  // Stop icon when running
+    btn.textContent = 'βΉ';  // Stop icon when running
     btn.title = 'Stop pipeline (Esc)';
     btn.style.opacity = '1';
   } else {
-    btn.textContent = '⇡';  // Up arrow when idle
+    btn.textContent = 'β‡΅';  // Up arrow when idle
     btn.title = 'Run pipeline (Enter)';
     btn.style.opacity = '1';
   }
 }
 
-// ── SSE EVENT HANDLER ─────────────────────────────────────────────
+// β”€β”€ SSE EVENT HANDLER β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function handleEvent(ev, progressId) {
   if (ev.type === 'start' && ev.cached) {
     const prog = document.getElementById(progressId);
     if (prog) {
       const badge = document.createElement('span');
       badge.className = 'cache-badge';
-      badge.textContent = '⚡ cached';
+      badge.textContent = 'β΅ cached';
       prog.prepend(badge);
     }
   } else if (ev.type === 'phase_start') {
@@ -1518,7 +1518,7 @@ function handleEvent(ev, progressId) {
   }
 }
 
-// ── PHASE RENDERING ───────────────────────────────────────────────
+// β”€β”€ PHASE RENDERING β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function renderPhase(num, name, data) {
   switch (num) {
     case 0: return phaseCard(num, name, renderClassification(data));
@@ -1538,7 +1538,7 @@ function phaseCard(num, name, bodyHtml) {
     <div class="phase-header" onclick="togglePhase(this)">
       <span class="phase-badge">Phase ${num}</span>
       <span class="phase-title">${esc(name)}</span>
-      <span class="phase-chevron">▾</span>
+      <span class="phase-chevron">β–Ύ</span>
     </div>
     <div class="phase-body">${bodyHtml}</div>`;
   return el;
@@ -1550,8 +1550,8 @@ function synthesisCard(num, name, bodyHtml) {
   el.innerHTML = `
     <div class="phase-header" onclick="togglePhase(this)">
       <span class="phase-badge">Phase ${num}</span>
-      <span class="phase-title">⟡ ${esc(name)}</span>
-      <span class="phase-chevron">▾</span>
+      <span class="phase-title">β΅ ${esc(name)}</span>
+      <span class="phase-chevron">β–Ύ</span>
     </div>
     <div class="phase-body">${bodyHtml}</div>`;
   return el;
@@ -1561,18 +1561,18 @@ function togglePhase(header) {
   header.closest('.phase-card, .synthesis-card').classList.toggle('collapsed');
 }
 
-// Phase 0 — Classification
+// Phase 0 β€” Classification
 function renderClassification(d) {
   const tokens = d.tokens || {input: 0, output: 0};
   const totalTokens = tokens.input + tokens.output;
   return `
-    <div class="task-badge">◈ ${esc(d.task_type)}</div>
+    <div class="task-badge">β— ${esc(d.task_type)}</div>
     <div class="rationale">${esc(d.rationale)}</div>
     <div class="sec">Tokens</div>
-    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> Β· Output: <strong>${tokens.output.toLocaleString()}</strong> Β· Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
 }
 
-// Phase 1 — Decomposition
+// Phase 1 β€” Decomposition
 function renderDecomposition(d) {
   const tokens = d.tokens || {input: 0, output: 0};
   const totalTokens = tokens.input + tokens.output;
@@ -1599,10 +1599,10 @@ function renderDecomposition(d) {
     <div class="assumptions">${assumptions}</div>
     ${failureModes ? `<div class="sec">Failure Modes</div><div class="assumptions">${failureModes}</div>` : ''}
     <div class="sec">Tokens</div>
-    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> Β· Output: <strong>${tokens.output.toLocaleString()}</strong> Β· Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
 }
 
-// Phase 2 — Perspectives
+// Phase 2 β€” Perspectives
 function renderPerspectives(d) {
   const tokens = d.tokens || {input: 0, output: 0};
   const totalTokens = tokens.input + tokens.output;
@@ -1651,7 +1651,7 @@ function renderPerspectives(d) {
         <div class="persp-head" onclick="this.closest('.persp-card').classList.toggle('persp-collapsed')">
           <span>${esc(c.perspective)}</span>
           <span class="persp-model">${esc(c.model_used || '')}</span>
-          <span class="persp-chevron">▾</span>
+          <span class="persp-chevron">β–Ύ</span>
         </div>
         <div class="persp-body">
           ${esc(content)}
@@ -1661,7 +1661,7 @@ function renderPerspectives(d) {
   }).join('');
   return `<div class="perspectives-grid">${cards}</div>
     <div class="sec">Tokens</div>
-    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> Β· Output: <strong>${tokens.output.toLocaleString()}</strong> Β· Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
 }
 
 function buildRadarChart(scores) {
@@ -1717,14 +1717,14 @@ function buildRadarChart(scores) {
   return svg;
 }
 
-// Phase 3 — Scoring
+// Phase 3 β€” Scoring
 function renderScoring(d) {
   const tokens = d.tokens || {input: 0, output: 0};
   const totalTokens = tokens.input + tokens.output;
   const rows = (d.scores || []).map(s => {
     const pct = Math.round((s.total / 10) * 100);
     const biases = (s.bias_flags || []).map(b => `<span class="bias-tag">${esc(b)}</span>`).join('');
-    const winner = s.is_top ? '<span class="winner-tag">✓ kept</span>' : '';
+    const winner = s.is_top ? '<span class="winner-tag">β“ kept</span>' : '';
     return `
       <tr class="${s.is_top ? 'top-row' : ''}">
         <td><strong>${esc(s.perspective)}</strong> ${winner}</td>
@@ -1733,9 +1733,9 @@ function renderScoring(d) {
         <td>${scoreBar(s.failure_resilience)}</td>
         <td>${scoreBar(s.feasibility)}</td>
         <td><strong>${s.total.toFixed(1)}</strong></td>
-        <td>${biases || '—'}</td>
+        <td>${biases || 'β€”'}</td>
       </tr>
-      ${s.steel_man ? `<tr class="${s.is_top ? 'top-row' : ''}"><td colspan="7" style="padding:2px 10px 8px"><div class="steel-man">⟳ ${esc(s.steel_man)}</div></td></tr>` : ''}`;
+      ${s.steel_man ? `<tr class="${s.is_top ? 'top-row' : ''}"><td colspan="7" style="padding:2px 10px 8px"><div class="steel-man">β³ ${esc(s.steel_man)}</div></td></tr>` : ''}`;
   }).join('');
 
   const chartHtml = buildRadarChart(d.scores || []);
@@ -1751,7 +1751,7 @@ function renderScoring(d) {
       </table>
     </div>
     <div class="sec">Tokens</div>
-    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> Β· Output: <strong>${tokens.output.toLocaleString()}</strong> Β· Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
 }
 
 function scoreBar(v) {
@@ -1762,7 +1762,7 @@ function scoreBar(v) {
   </div>`;
 }
 
-// Phase 4 — Stress Testing
+// Phase 4 β€” Stress Testing
 function renderStress(d) {
   const tokens = d.tokens || {input: 0, output: 0};
   const totalTokens = tokens.input + tokens.output;
@@ -1784,7 +1784,7 @@ function renderStress(d) {
   }).join('');
   return `<div class="stress-list">${items}</div>
     <div class="sec">Tokens</div>
-    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> Β· Output: <strong>${tokens.output.toLocaleString()}</strong> Β· Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
 }
 
 function renderWithCode(text) {
@@ -1808,7 +1808,7 @@ function copyCodeBlock(id) {
   if (el) navigator.clipboard.writeText(el.textContent).catch(() => {});
 }
 
-// Phase 5 — Synthesis
+// Phase 5 β€” Synthesis
 function renderSynthesis(d) {
   const tokens = d.tokens || {input: 0, output: 0};
   const totalTokens = tokens.input + tokens.output;
@@ -1866,7 +1866,7 @@ function renderSynthesis(d) {
   const meta = d.meta_audit ? `
     <div class="sec">Meta-Cognitive Audit</div>
     <div class="meta-block">
-      <div class="meta-title">⟡ Epistemic health check</div>
+      <div class="meta-title">β΅ Epistemic health check</div>
       ${metaRow('Most dangerous assumption', d.meta_audit.most_dangerous_assumption)}
       ${metaRow('Dominant bias', d.meta_audit.dominant_bias)}
       ${metaRow('Remaining uncertainty', d.meta_audit.remaining_uncertainty)}
@@ -1882,14 +1882,14 @@ function renderSynthesis(d) {
     ${openQs}
     ${meta}
     <div class="sec">Tokens</div>
-    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> · Output: <strong>${tokens.output.toLocaleString()}</strong> · Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
+    <div class="token-count">Input: <strong>${tokens.input.toLocaleString()}</strong> Β· Output: <strong>${tokens.output.toLocaleString()}</strong> Β· Total: <strong>${totalTokens.toLocaleString()}</strong></div>`;
 }
 
 function metaRow(key, val) {
-  return `<div class="meta-row"><span class="meta-key">${esc(key)}</span><span class="meta-val">${esc(val || '—')}</span></div>`;
+  return `<div class="meta-row"><span class="meta-key">${esc(key)}</span><span class="meta-val">${esc(val || 'β€”')}</span></div>`;
 }
 
-// ── PROGRESS CARD ─────────────────────────────────────────────────
+// β”€β”€ PROGRESS CARD β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 const _METHOD_PHASE_NAMES = {
   'debate':              ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
   'debate-budget':       ['Classification','Evidence Decomposition','Opening Arguments','Judging','Adversarial Test','Verdict'],
@@ -1907,7 +1907,7 @@ const PHASE_TIPS = [
   'Classifies the problem as strategic, tactical, creative, or analytical',
   'Breaks the problem into sub-problems, surfaces assumptions and failure modes',
   'Generates 4 adversarial perspectives: constructive, destructive, systemic, minimalist',
-  'Scores each perspective on logic, evidence, resilience, feasibility — keeps the best',
+  'Scores each perspective on logic, evidence, resilience, feasibility β€” keeps the best',
   'Stress-tests survivors against edge cases: adversarial, resource-constrained, time-critical',
   'Synthesizes surviving perspectives into a final answer with meta-audit',
 ];
@@ -1921,7 +1921,7 @@ function progressCard(id) {
   el.innerHTML = `
     <div class="progress-header">
       <div class="spinner"></div>
-      <span id="${id}-label">Starting pipeline…</span>
+      <span id="${id}-label">Starting pipelineβ€¦</span>
     </div>
     <div class="phase-steps">${steps}</div>`;
   return el;
@@ -1929,7 +1929,7 @@ function progressCard(id) {
 
 function setPhaseActive(progressId, phaseNum) {
   const label = document.getElementById(`${progressId}-label`);
-  if (label && phaseNum < getPhaseNames().length) label.textContent = `Running: ${getPhaseNames()[phaseNum]}…`;
+  if (label && phaseNum < getPhaseNames().length) label.textContent = `Running: ${getPhaseNames()[phaseNum]}β€¦`;
   for (let i = 0; i < getPhaseNames().length; i++) {
     const el = document.getElementById(`${progressId}-step-${i}`);
     if (!el) continue;
@@ -1951,7 +1951,7 @@ function setPhaseError(progressId, phaseNum) {
   if (el) el.className = 'phase-step error';
 }
 
-// ── DOM HELPERS ───────────────────────────────────────────────────
+// β”€β”€ DOM HELPERS β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function append(el) {
   document.getElementById('messages-inner').appendChild(el);
 }
@@ -1985,8 +1985,8 @@ function msgProblem(text) {
   const actions = document.createElement('div');
   actions.className = 'msg-actions';
   actions.innerHTML =
-    `<button class="msg-action" onclick="editProblem(this)">✎ Edit</button>` +
-    `<button class="msg-action" onclick="rerunProblem(this)">↺ Re-run</button>`;
+    `<button class="msg-action" onclick="editProblem(this)">β Edit</button>` +
+    `<button class="msg-action" onclick="rerunProblem(this)">β†Ί Re-run</button>`;
   wrap.appendChild(bubble);
   wrap.appendChild(actions);
   el.appendChild(wrap);
@@ -2072,7 +2072,7 @@ function rerunProblem(btn) {
   });
 }
 
-// ── EXPORT ────────────────────────────────────────────────────────
+// β”€β”€ EXPORT β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€β”€
 function totalTokensCard(tokens) {
   const el = document.createElement('div');
   el.className = 'export-card';
@@ -2090,10 +2090,10 @@ function exportCard(progressId) {
   el.className = 'export-card';
   el.innerHTML =
     `<span class="export-label">Export result</span>` +
-    `<button class="export-btn" id="copy-btn-${progressId}" onclick="copyResult('${progressId}')">⎘ Copy</button>` +
-    `<button class="export-btn" onclick="downloadResult('${progressId}')">↓ JSON</button>` +
-    `<button class="export-btn" onclick="downloadMarkdown('${progressId}')">↓ Markdown</button>` +
-    `<button class="export-btn" id="share-btn-${progressId}" onclick="shareResult('${progressId}')">↗ Share</button>`;
+    `<button class="export-btn" id="copy-btn-${progressId}" onclick="copyResult('${progressId}')">β Copy</button>` +
+    `<button class="export-btn" onclick="downloadResult('${progressId}')">β†“ JSON</button>` +
+    `<button class="export-btn" onclick="downloadMarkdown('${progressId}')">β†“ Markdown</button>` +
+    `<button class="export-btn" id="share-btn-${progressId}" onclick="shareResult('${progressId}')">β†— Share</button>`;
   return el;
 }
 
@@ -2133,9 +2133,9 @@ async function copyResult(progressId) {
   await navigator.clipboard.writeText(_resultToText(data));
   const btn = document.getElementById(`copy-btn-${progressId}`);
   if (btn) {
-    btn.textContent = '✓ Copied';
+    btn.textContent = 'β“ Copied';
     btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = '⎘ Copy'; btn.classList.remove('copied'); }, 2000);
+    setTimeout(() => { btn.textContent = 'β Copy'; btn.classList.remove('copied'); }, 2000);
   }
 }
 
@@ -2172,7 +2172,7 @@ function _resultToShareText(data) {
     synthesis.data.critical_insights.forEach((ins) => lines.push(`- ${ins}`));
     lines.push('');
   }
-  lines.push('---', `Generated with ARA • ${new Date().toLocaleString()}`);
+  lines.push('---', `Generated with ARA β€Ά ${new Date().toLocaleString()}`);
   return lines.join('\n');
 }
 
@@ -2184,7 +2184,7 @@ async function shareResult(progressId) {
     const btn = document.getElementById('share-btn');
     if (btn) {
       const orig = btn.textContent;
-      btn.textContent = '✓ Copied';
+      btn.textContent = 'β“ Copied';
       setTimeout(() => { btn.textContent = orig; }, 2000);
     }
   } catch(e) { console.error('Share failed', e); }
@@ -2192,19 +2192,19 @@ async function shareResult(progressId) {
 
 const _ERROR_PATTERNS = [
   [/401|Invalid Authentication|invalid_authentication/i,
-    '🔑 Authentication failed', 'Check your API key in .env (model-specific)'],
+    'π”‘ Authentication failed', 'Check your API key in .env (model-specific)'],
   [/Could not resolve authentication|api_key.*not.*set|Expected.*api_key/i,
-    '🔑 API key not set', 'Add the key to your .env file and restart uvicorn'],
-  [/令牌已过期|token.*expired|key.*expired/i,
-    '🔑 API key expired', 'Renew it in your provider dashboard'],
+    'π”‘ API key not set', 'Add the key to your .env file and restart uvicorn'],
+  [/δ»¤η‰ε·²θΏ‡ζ|token.*expired|key.*expired/i,
+    'π”‘ API key expired', 'Renew it in your provider dashboard'],
   [/404.*model|not_found_error|model.*not.?found/i,
-    '🔍 Model not found', 'Check the model ID in llm.py'],
+    'π” Model not found', 'Check the model ID in llm.py'],
   [/429|rate.?limit/i,
-    '⏱ Rate limit hit', 'Enable Sequential mode in the sidebar or wait a moment'],
+    'β± Rate limit hit', 'Enable Sequential mode in the sidebar or wait a moment'],
   [/Connection error|Cannot connect|network|ECONNREFUSED/i,
-    '🔌 Connection error', 'Is the uvicorn server running?'],
+    'π” Connection error', 'Is the uvicorn server running?'],
   [/timeout/i,
-    '⏳ Timeout', 'The provider is slow or down — retry or switch preset'],
+    'β³ Timeout', 'The provider is slow or down β€” retry or switch preset'],
 ];
 
 function _humanizeError(raw) {
@@ -2220,11 +2220,11 @@ function errorCard(errors) {
   const items = errors.map(e => {
     const h = _humanizeError(String(e));
     if (h) {
-      return `<li><strong>${esc(h.title)}</strong> — ${esc(h.hint)}</li>`;
+      return `<li><strong>${esc(h.title)}</strong> β€” ${esc(h.hint)}</li>`;
     }
     return `<li>${esc(e)}</li>`;
   }).join('');
-  el.innerHTML = `<strong>⚠ Pipeline warnings</strong><ul>${items}</ul>`;
+  el.innerHTML = `<strong>β  Pipeline warnings</strong><ul>${items}</ul>`;
   return el;
 }
 
@@ -2233,7 +2233,7 @@ function infoCard(messages) {
   el.className = 'info-card';
   const strong = document.createElement('strong');
   strong.style.color = 'var(--green)';
-  strong.textContent = '✓ ' + (messages[0] || 'Done');
+  strong.textContent = 'β“ ' + (messages[0] || 'Done');
   el.appendChild(strong);
   return el;
 }
@@ -2279,3 +2279,4 @@ document.addEventListener('keydown', function(e) {
 </script>
 </body>
 </html>
+

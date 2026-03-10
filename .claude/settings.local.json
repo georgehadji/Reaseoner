@@ -26,7 +26,20 @@
       "Skill(commit-commands:commit-push-pr:*)",
       "Bash(ls -la SECURITY* test_cache* .env.example requirements.txt)",
       "Bash(python3 -c \":*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(node -c index.html)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(timeout 5 curl -s http://localhost:8000)",
+      "Bash(grep -n \"\\\\\\\\\" index.html)",
+      "Bash(grep -n \"= \\\\\\\\\" index.html)",
+      "Bash(grep -n \"\\\\\\\\!\")",
+      "Bash(python -c \"from presets import PRESETS; print\\(''Total presets:'', len\\(PRESETS\\)\\); import json; methods = {}; from renderer import MethodType; [print\\(f''{k}: {v.method}''\\) for k,v in PRESETS.items\\(\\)]\")",
+      "Bash(python -c \"from presets import PRESETS; [print\\(k\\) for k in PRESETS.keys\\(\\)]\")",
+      "mcp__weebot__file_editor",
+      "mcp__Desktop_Commander__list_processes",
+      "mcp__Desktop_Commander__list_sessions",
+      "mcp__Desktop_Commander__stop_search",
+      "mcp__Desktop_Commander__get_more_search_results"
     ]
   }
 }

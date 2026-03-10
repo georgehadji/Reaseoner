@@ -122,23 +122,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .logo-name { font-size: 14px; font-weight: 700; color: var(--accent); }
 .logo-sub { font-size: 10px; color: var(--text-3); }
 .sidebar-label {
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  font-size: 12px; font-weight: 700; text-transform: uppercase;
   letter-spacing: 0.09em; color: var(--text-3); margin-bottom: 5px;
 }
 .sidebar-field { margin-bottom: 10px; }
-#method-field { margin-bottom: 12px; }
-.method-tabs {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px;
-}
-.method-tab {
-  padding: 9px 8px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: 5px; color: var(--text-2); font-size: 12px; font-weight: 600;
-  text-transform: capitalize; letter-spacing: 0.04em; cursor: pointer;
-  transition: all 0.15s ease; white-space: normal; text-align: center; margin: 0;
-  line-height: 1.2;
-}
-.method-tab:hover { border-color: var(--text-2); color: var(--text); }
-.method-tab.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
 .select-wrap { position: relative; }
 .select-wrap::after {
   content: "▾"; position: absolute; right: 9px; top: 50%;
@@ -486,7 +473,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .synthesis-card .phase-body { padding: 20px; }
 
 /* ── PRESET HINT ── */
-.preset-hint { font-size: 11px; color: var(--text-3); margin-top: 4px; line-height: 1.4; min-height: 14px; }
+.preset-hint { font-size: 12px; color: var(--text-3); margin-top: 4px; line-height: 1.4; min-height: 14px; }
 .preset-hint.warn { color: var(--yellow); }
 
 /* ── ADVANCED SECTION ── */
@@ -645,6 +632,28 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .composer-hint { font-size: 11px; color: var(--text-3); text-align: center; margin-top: 7px; }
 .composer.centered .composer-hint { margin-top: 12px; }
 
+/* ── COMPOSER METHOD BAR ── */
+.composer-method-bar {
+  display: flex; align-items: center; gap: 12px; padding: 0 0 12px 0;
+  max-width: 820px; margin: 0 auto; flex-wrap: wrap;
+}
+.method-label {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.09em; color: var(--text-3); flex-shrink: 0;
+}
+.method-tabs-compact {
+  display: flex; gap: 6px; flex: 1; min-width: 0;
+}
+.method-tab-compact {
+  padding: 6px 11px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 5px; color: var(--text-2); font-size: 12px; font-weight: 600;
+  text-transform: capitalize; letter-spacing: 0.04em; cursor: pointer;
+  transition: all 0.15s ease; white-space: nowrap; text-align: center; margin: 0;
+  font-family: var(--font); min-width: fit-content;
+}
+.method-tab-compact:hover { border-color: var(--text-2); color: var(--text); }
+.method-tab-compact.active { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+
 /* ── SECTION HEADER inside phase body ── */
 .sec { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-3); margin: 12px 0 7px; }
 .sec:first-child { margin-top: 0; }
@@ -726,15 +735,6 @@ kbd {
         <div class="server-dot" id="server-dot" title="Checking server…"></div>
         <button class="sidebar-toggle" id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle sidebar (B)">«</button>
       </div>
-      <div class="sidebar-field" id="method-field">
-        <div class="sidebar-label">Method</div>
-        <div class="method-tabs">
-          <button class="method-tab active" data-method="standard" onclick="selectMethod('standard')" title="Standard: 6-phase reasoning">Standard</button>
-          <button class="method-tab" data-method="debate" onclick="selectMethod('debate')" title="Debate: Adversarial thinking">Debate</button>
-          <button class="method-tab" data-method="evolutionary" onclick="selectMethod('evolutionary')" title="Evolution: Iterative refinement">Evolution</button>
-          <button class="method-tab" data-method="research" onclick="selectMethod('research')" title="Research: Evidence-grounded">Research</button>
-        </div>
-      </div>
       <div class="sidebar-field">
         <div class="sidebar-label">Preset</div>
         <div class="select-wrap">
@@ -803,6 +803,15 @@ kbd {
     <!-- ── COMPOSER ── -->
     <div class="composer">
       <div class="composer-error" id="composer-error"></div>
+      <div class="composer-method-bar">
+        <div class="method-label">Method</div>
+        <div class="method-tabs-compact">
+          <button class="method-tab-compact active" data-method="standard" onclick="selectMethod('standard')" title="Standard: 6-phase reasoning">Standard</button>
+          <button class="method-tab-compact" data-method="debate" onclick="selectMethod('debate')" title="Debate: Adversarial thinking">Debate</button>
+          <button class="method-tab-compact" data-method="evolutionary" onclick="selectMethod('evolutionary')" title="Evolution: Iterative refinement">Evolution</button>
+          <button class="method-tab-compact" data-method="research" onclick="selectMethod('research')" title="Research: Evidence-grounded">Research</button>
+        </div>
+      </div>
       <div class="composer-inner">
         <textarea class="composer-area" id="textarea"
           placeholder="Describe your problem or decision…" rows="1"
@@ -862,7 +871,7 @@ function selectMethod(method) {
   if (!_METHOD_PRESETS[method]) return;
   _currentMethod = method;
   localStorage.setItem('ara-method', method);
-  document.querySelectorAll('.method-tab').forEach(btn => {
+  document.querySelectorAll('.method-tab, .method-tab-compact').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.method === method);
   });
   updatePresetDropdown(method);
@@ -1243,7 +1252,7 @@ async function loadPresets() {
     Object.entries(presets).forEach(([id, p]) => {
       _presetMeta[id] = p;
     });
-    document.querySelectorAll('.method-tab').forEach(btn => {
+    document.querySelectorAll('.method-tab, .method-tab-compact').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.method === _currentMethod);
     });
     updatePresetDropdown(_currentMethod);

@@ -1,0 +1,298 @@
+"""
+ARA v2.0 Pipeline — Entry Point
+Adaptive Reasoning Architecture
+
+════════════════════════════════════════════════════════════════
+USAGE — PRESETS (recommended)
+════════════════════════════════════════════════════════════════
+# List all available presets + key status:
+python main.py --list-presets
+
+# Run with a named preset:
+python main.py --problem "..." --preset max-quality
+python main.py --problem "..." --preset cost-efficient
+python main.py --problem "..." --preset eu-sovereign
+python main.py --problem "..." --preset epistemic-diversity
+python main.py --problem "..." --preset western-only
+python main.py --problem "..." --preset research
+python main.py --problem "..." --preset claude-only
+python main.py --problem "..." --preset deepseek-only
+
+════════════════════════════════════════════════════════════════
+USAGE — CUSTOM ROUTING
+════════════════════════════════════════════════════════════════
+# Fully custom routing (JSON dict, must include "primary"):
+python main.py --problem "..." --routing '{
+  "primary":       "claude-sonnet",
+  "constructive":  "kimi-k2",
+  "destructive":   "deepseek-v3",
+  "scoring":       "sonar-pro",
+  "synthesis":     "glm-5"
+}'
+
+════════════════════════════════════════════════════════════════
+USAGE — MODEL DISCOVERY
+════════════════════════════════════════════════════════════════
+# List all available model IDs grouped by ecosystem:
+python main.py --list-models
+
+════════════════════════════════════════════════════════════════
+USAGE — I/O OPTIONS
+════════════════════════════════════════════════════════════════
+python main.py --problem-file problem.txt --preset max-quality
+python main.py --problem "..." --preset cost-efficient --output result.json
+python main.py --problem "..." --preset claude-only --sequential --quiet
+python main.py --problem "..." --preset research --top-k 3
+"""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import logging
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+
+from pipeline import ARAPipeline
+from renderer import export_to_json, render_pipeline_result
+from llm import ProviderRouter, list_models
+from presets import PRESETS, build_custom_router, get_preset, print_presets_summary
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# ROUTER BUILDER
+# ─────────────────────────────────────────────────────────────────────
+
+def build_router(args: argparse.Namespace) -> ProviderRouter:
+    """
+    Resolve router from CLI args.
+    Priority: --routing > --preset > default (claude-only)
+    """
+    if args.routing:
+        try:
+            routing_dict: dict[str, str] = json.loads(args.routing)
+        except json.JSONDecodeError as exc:
+            print(f"[ERROR] --routing is not valid JSON: {exc}")
+            sys.exit(1)
+        if "primary" not in routing_dict:
+            print("[ERROR] --routing JSON must include a 'primary' key.")
+            sys.exit(1)
+        router = build_custom_router(routing_dict)
+        print(f"\n[Custom routing] primary={routing_dict['primary']}")
+        for role, mid in routing_dict.items():
+            if role != "primary":
+                print(f"  {role:18s} → {mid}")
+        return router
+
+    preset_name = args.preset or "claude-only"
+    preset = get_preset(preset_name)
+
+    missing = preset.missing_keys()
+    if missing:
+        print(f"\n[WARNING] Preset '{preset_name}' requires API keys that are not set:")
+        for key in missing:
+            print(f"  • {key}")
+        print("  Affected phases will fail. Set keys or choose a different preset.\n")
+
+    router = preset.build_router()
+    print(f"\n[Preset: {preset.name}]")
+    print(f"  {preset.description}")
+    routing_info = router.describe()
+    for role, model in routing_info.items():
+        print(f"  {role:22s} → {model}")
+    return router
+
+
+# ─────────────────────────────────────────────────────────────────────
+# DISPLAY HELPERS
+# ─────────────────────────────────────────────────────────────────────
+
+def cmd_list_models() -> None:
+    from rich.console import Console
+    from rich.table import Table
+    from rich import box
+
+    groups = list_models()
+    console = Console()
+
+    for ecosystem, model_ids in sorted(groups.items()):
+        if not model_ids:
+            continue
+        table = Table(
+            title=f"[cyan]{ecosystem.upper()}[/cyan]",
+            box=box.SIMPLE,
+            show_header=False,
+            min_width=40,
+        )
+        table.add_column("Model ID", style="white")
+        for mid in sorted(model_ids):
+            table.add_row(mid)
+        console.print(table)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# MAIN
+# ─────────────────────────────────────────────────────────────────────
+
+async def main(args: argparse.Namespace) -> None:
+    if args.list_presets:
+        print_presets_summary()
+        return
+
+    if args.list_models:
+        cmd_list_models()
+        return
+
+    # Load problem
+    if args.problem_file:
+        problem_path = Path(args.problem_file)
+        if not problem_path.exists():
+            print(f"[ERROR] File not found: {args.problem_file}")
+            sys.exit(1)
+        problem = problem_path.read_text(encoding="utf-8").strip()
+    else:
+        problem = args.problem.strip()
+
+    if not problem:
+        print("[ERROR] No problem provided. Use --problem or --problem-file.")
+        print("        Run 'python main.py --help' for usage.")
+        sys.exit(1)
+
+    router = build_router(args)
+
+    pipeline = ARAPipeline(
+        router=router,
+        top_k=args.top_k,
+        parallel_perspectives=not args.sequential,
+        verbose=not args.quiet,
+        preset_name=args.preset or "claude-only",
+    )
+
+    print(f"\n{'═'*60}")
+    print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
+    print(f"{'═'*60}")
+    short_problem = problem[:120] + ("..." if len(problem) > 120 else "")
+    print(f"  Problem: {short_problem}")
+    print(f"  Top-K candidates: {args.top_k}")
+    print(f"  Parallel perspectives: {not args.sequential}")
+    print(f"{'═'*60}\n")
+
+    state = await pipeline.run(problem)
+
+    render_pipeline_result(state)
+
+    if args.output:
+        export_to_json(state, args.output)
+        print(f"\n✓ Full state exported → {args.output}")
+
+
+# ─────────────────────────────────────────────────────────────────────
+# CLI ARGS
+# ─────────────────────────────────────────────────────────────────────
+
+def parse_args() -> argparse.Namespace:
+    # Build preset choices dynamically
+    preset_choices = sorted(PRESETS.keys())
+
+    parser = argparse.ArgumentParser(
+        description="ARA v2.0 — Adaptive Reasoning Architecture Pipeline",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+
+    # ── Problem input
+    input_group = parser.add_argument_group("Problem Input")
+    input_group.add_argument(
+        "--problem", "-p",
+        type=str, default="",
+        help="Problem statement (wrap in quotes)",
+    )
+    input_group.add_argument(
+        "--problem-file",
+        type=str, default="",
+        metavar="PATH",
+        help="Path to .txt file containing the problem statement",
+    )
+
+    # ── Model/Routing selection
+    routing_group = parser.add_argument_group("Model Selection (mutually exclusive)")
+    routing_ex = routing_group.add_mutually_exclusive_group()
+    routing_ex.add_argument(
+        "--preset",
+        type=str,
+        choices=preset_choices,
+        default="",
+        metavar="PRESET_ID",
+        help=(
+            "Named routing preset. Choices: "
+            + ", ".join(preset_choices)
+            + " (default: claude-only)"
+        ),
+    )
+    routing_ex.add_argument(
+        "--routing",
+        type=str,
+        default="",
+        metavar="JSON",
+        help=(
+            'Custom JSON routing dict. Must include "primary". '
+            'Example: \'{"primary":"claude-sonnet","scoring":"sonar-pro"}\''
+        ),
+    )
+
+    # ── Pipeline options
+    pipeline_group = parser.add_argument_group("Pipeline Options")
+    pipeline_group.add_argument(
+        "--top-k",
+        type=int, default=2,
+        help="Number of candidates to keep after pruning (default: 2)",
+    )
+    pipeline_group.add_argument(
+        "--sequential",
+        action="store_true",
+        help="Run Phase 2 perspectives sequentially (for rate-limited providers)",
+    )
+    pipeline_group.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress phase-by-phase logging",
+    )
+
+    # ── Output
+    output_group = parser.add_argument_group("Output")
+    output_group.add_argument(
+        "--output", "-o",
+        type=str, default="",
+        metavar="PATH",
+        help="Export full pipeline state to JSON file",
+    )
+
+    # ── Discovery
+    info_group = parser.add_argument_group("Discovery")
+    info_group.add_argument(
+        "--list-presets",
+        action="store_true",
+        help="List all available presets with API key status, then exit",
+    )
+    info_group.add_argument(
+        "--list-models",
+        action="store_true",
+        help="List all available model IDs grouped by ecosystem, then exit",
+    )
+
+    return parser.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    asyncio.run(main(args))

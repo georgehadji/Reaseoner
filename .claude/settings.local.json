@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Desktop_Commander__start_process",
+      "mcp__Desktop_Commander__start_search",
+      "mcp__Desktop_Commander__read_file",
+      "mcp__Desktop_Commander__get_file_info",
+      "mcp__weebot__bash",
+      "mcp__weebot__python_execute",
+      "mcp__Desktop_Commander__write_file",
+      "mcp__Desktop_Commander__edit_block",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:webcache.googleusercontent.com)",
+      "WebFetch(domain:www.nngroup.com)",
+      "WebFetch(domain:lawsofux.com)",
+      "WebFetch(domain:docs.perplexity.ai)",
+      "Bash(python -c \"from core import Phase, PhaseResult, PhaseConfig, make_phase_result, PerspectiveDefinition, DEFAULT_PERSPECTIVES; print\\(''core OK''\\)\")",
+      "Bash(python -c \"from presets import PRESETS; print\\(''presets OK:'', list\\(PRESETS.keys\\(\\)\\)\\)\")",
+      "Bash(python -c \"from pipeline import ARAPipeline; print\\(''pipeline OK''\\)\")",
+      "Bash(python -c \"from models import PipelineState; s = PipelineState\\(problem=''test''\\); print\\(''phase_results field:'', s.phase_results\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(python -c \"from presets import PRESETS; print\\([k for k in PRESETS if ''budget'' in k]\\); [p.__post_init__\\(\\) for p in PRESETS.values\\(\\)]; print\\(''All valid''\\)\")",
+      "Bash(python -c \"from parsing import extract_solution_prose; from pipeline import ARAPipeline; print\\(''imports OK''\\)\")",
+      "Bash(python -c \"from presets import PRESETS; [p.__post_init__\\(\\) for p in PRESETS.values\\(\\)]; print\\(''All valid''\\); print\\([k for k in PRESETS if ''budget'' in k]\\)\")"
+    ]
+  }
+}

@@ -815,10 +815,10 @@ kbd {
           placeholder="Describe your problem or decision…" rows="1"
           onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
         <select id="method-select" class="method-select" onchange="selectMethod(this.value)" title="Select reasoning method">
-          <option value="debate">Debate (Budget)</option>
-          <option value="evolutionary">Evolutionary (Budget)</option>
-          <option value="research">Research (Grounded)</option>
-          <option value="standard" selected>Standard (Balanced)</option>
+          <option value="debate" selected>Debate</option>
+          <option value="evolutionary">Evolutionary</option>
+          <option value="research">Research</option>
+          <option value="standard">Standard</option>
         </select>
         <button class="run-btn" id="run-btn" onclick="runOrStop()" title="Run pipeline (Enter)">⇡</button>
       </div>
@@ -869,7 +869,7 @@ const _METHOD_PRESETS = {
   ]
 };
 
-let _currentMethod = localStorage.getItem('ara-method') || 'standard';
+let _currentMethod = localStorage.getItem('ara-method') || 'debate';
 
 function selectMethod(method) {
   if (!_METHOD_PRESETS[method]) return;

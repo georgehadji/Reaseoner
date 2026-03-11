@@ -886,8 +886,8 @@ function updatePresetDropdown(method) {
   const presets = _METHOD_PRESETS[method] || _METHOD_PRESETS.standard;
   const currentValue = sel.value;
   sel.innerHTML = '';
-  // Show only first 3 presets per method
-  presets.slice(0, 3).forEach(p => {
+  // Show all available presets for the selected method
+  presets.forEach(p => {
     const opt = document.createElement('option');
     opt.value = p.id;
     const meta = _presetMeta[p.id];

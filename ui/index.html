@@ -596,7 +596,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .composer-area {
   flex: 1; height: 60px; resize: none;  /* Fixed height 60px */
   border: 1.5px solid var(--border-strong); border-radius: var(--radius-sm);
-  padding: 12px 48px 12px 48px; font-size: 15px; font-family: var(--font);
+  padding: 12px 100px 12px 12px; font-size: 15px; font-family: var(--font);
   color: var(--text); background: var(--surface-2); outline: none;
   overflow-y: hidden; line-height: 1.45; transition: border-color 0.15s;
 }
@@ -607,7 +607,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .composer.centered .composer-area {
   height: 60px;
   font-size: 16px;
-  padding: 12px 48px 12px 48px;
+  padding: 12px 100px 12px 12px;
   border-radius: 12px;
   box-shadow: 0 3px 15px rgba(0,0,0,0.3);
 }
@@ -630,7 +630,7 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); font
 .run-btn:disabled { background: var(--border-strong); cursor: not-allowed; }
 
 .method-select {
-  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  position: absolute; right: 48px; top: 50%; transform: translateY(-50%);
   padding: 7px 28px 7px 9px;
   font-size: 11px;
   font-family: var(--font);

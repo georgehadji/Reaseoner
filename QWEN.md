@@ -230,3 +230,86 @@ The `_REGISTRY` dict in `llm.py` defines 40+ models across 10 ecosystems:
 - JSON parsing handles markdown fences, truncated responses, and malformed JSON
 - Conversation history persists across browser restarts via IndexedDB
 - Cache directory stores successful responses for faster re-runs
+
+---
+
+## Evaluation Architecture: Current vs. Lab-Style
+
+### Current Implementation (ARA Pipeline)
+
+The ARA pipeline is a **sequential 6-phase** reasoning architecture:
+
+```
+Problem → Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Solution
+```
+
+**Characteristics:**
+- Linear execution with fallback routing
+- Single critic model per phase
+- 8 LLM calls total (4 parallel in Phase 2)
+- No external tool integration (verification, search, code execution)
+- Method-specific output rendering (STANDARD/DEBATE/EVOLUTIONARY/RESEARCH)
+
+### Lab-Style Multi-Agent Evaluation (Not Yet Implemented)
+
+Research teams at OpenAI, Anthropic, and DeepMind use a **parallel orchestration architecture**:
+
+```
+                    Orchestrator (LangGraph/Ray/Temporal)
+                         │
+         ┌───────────────┼───────────────┐
+         ▼               ▼               ▼
+    Generation      Critique Agents   Verifiers
+    (3+ models)   (3+ independent    (tools: search,
+                    critics)          code exec, APIs)
+         │               │               │
+         └───────────────┼───────────────┘
+                         ▼
+                   Scoring Engine
+                   (numeric signals)
+                         ▼
+                  Meta-Evaluator
+                (evaluates judges)
+                         ▼
+            Selection/Improvement Loop
+```
+
+**Key Differences from ARA:**
+
+| Aspect | ARA Pipeline | Lab-Style |
+|--------|---|---|
+| **Orchestration** | Sequential phases | Parallel agents + state machine |
+| **Generation** | 1 model per phase | 3+ models per step |
+| **Critique** | 1 critic model | 3+ independent critics |
+| **Verification** | Stress testing only | External tools (web search, code exec, symbolic validation) |
+| **Scoring** | Phase-specific criteria | Numeric evaluation signals (factuality, reasoning, safety, helpfulness) |
+| **Meta-Evaluation** | N/A | Evaluates quality of critics themselves |
+| **Self-Improvement** | Manual synthesis | Automated critique-revise loops |
+| **Evaluation Depth** | 6 phases | Hierarchical scoring with pairwise ranking |
+
+### When Lab-Style Architecture Is Needed
+
+Consider implementing this when ARA requirements expand to:
+1. **Fact-checking**: Verify claims against web sources
+2. **Code correctness**: Execute generated code before synthesis
+3. **Adversarial robustness**: Multiple independent judges competing
+4. **Automated improvement**: Iterative refinement loops without human intervention
+5. **Research evaluation**: Benchmark datasets with ground truth
+6. **Hybrid reasoning**: Mix symbolic verification with LLM reasoning
+
+### Implementation Path (Future)
+
+If implementing lab-style architecture:
+1. Replace sequential `ARAPipeline` with `OrchestrationLayer` (LangGraph)
+2. Create `GenerationPool` (3+ models, run in parallel)
+3. Create `CritiquePool` (3+ critic models, independent scoring)
+4. Add `VerificationTools` (retrieval, code execution, API validation)
+5. Implement `ScoringEngine` (convert critiques to numeric signals)
+6. Add `MetaEvaluator` (judge the judges)
+7. Implement `ImprovementLoop` (critique → revise → re-score)
+
+**Stack for implementation:**
+- **Orchestration**: LangGraph (state machine) or Ray (distributed)
+- **Evaluation**: DeepEval or OpenAI Evals framework
+- **Observability**: LangSmith (tracing) + Weights & Biases (experiment tracking)
+- **Verification**: Custom tools for domain-specific validation

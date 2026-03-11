@@ -41,7 +41,9 @@
       "mcp__Desktop_Commander__stop_search",
       "mcp__Desktop_Commander__get_more_search_results",
       "Bash(git add ui/index.html .claude/settings.local.json)",
-      "Bash(git commit -m \"Fix remaining syntax errors in UI features \\(phase names, template literals\\)\")"
+      "Bash(git commit -m \"Fix remaining syntax errors in UI features \\(phase names, template literals\\)\")",
+      "Bash(grep -n \"api.py\\\\|@app\\\\|/api/presets\" /e/Documents/Vibe-Coding/Reasoner/*.py)",
+      "Bash(curl -s http://localhost:8000)"
     ]
   }
 }

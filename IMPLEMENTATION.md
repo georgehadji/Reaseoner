@@ -761,3 +761,11 @@ Two SRE passes were run against the `security-fixes-implementation` branch. All 
 | BUG-010 | High | `api.py` | `_load_cache` uncaught `JSONDecodeError` on corrupt files; `_save_cache` non-atomic `write_text()` could leave truncated files on crash | Added try/except + corrupt-file deletion for reads; `.tmp` write + `Path.replace()` atomic rename for writes |
 | BUG-011 | Medium | `core/search.py` | `reset_discovery_client()` nulled global reference without calling `aclose()`, leaking httpx connection pool and file descriptors | Save old client before nulling; schedule `aclose()` on running loop (or `asyncio.run()` fallback for sync callers) |
 | BUG-012 | High | `llm.py` | `build_provider()` accepted empty string from `os.environ.get(key, "")` as valid API key; error only surfaced at first SDK call with opaque auth message | Added early `ValueError` if `key` is empty and provider is not `is_local`; Ollama exempt |
+
+### Pass 4 — `models.py`, `pipeline.py`
+
+| ID | Severity | File | Root Cause | Fix |
+|----|----------|------|-----------|-----|
+| BUG-013 | High | `models.py` | `Decomposition(**dec)` in `_from_dict` fails with `TypeError` on `--resume`: LLM returns extra keys (`causal_chain`, `critical_sources`, etc.) not in the dataclass; `raw_response` had no default | Added `raw_response: str = ""` default; filter unknown keys via `dc_fields()` in `_from_dict` before unpacking |
+| BUG-014 | High | `pipeline.py` | `CritiqueScore(**s)` from raw LLM dict has 6 required fields with no defaults; any omitted field crashes `_phase_3_critique` and `_phase_debate_judge`, leaving `state.scores` empty | Replaced both call sites with `_parse_critique_scores()` helper using `.get()` with defaults for all fields and enum coercion for `perspective` |
+| BUG-015 | Medium | `pipeline.py` | `StressTestResult(**st)` bypasses `ScenarioType.coerce()` (used in `_from_dict`), so live run stores raw string if LLM uses variant spelling (e.g., "constraint-violation") | Replaced with explicit construction calling `ScenarioType.coerce()` for consistency between live run and `--resume` |

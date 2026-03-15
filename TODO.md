@@ -161,6 +161,15 @@
   11. **DiscoveryClient resource leak** — `reset_discovery_client()` nulled global reference without calling `aclose()`, leaking httpx connection pool. Save old client, schedule `aclose()` on event loop (or `asyncio.run()` fallback).
   12. **Empty API key accepted** — `build_provider()` accepted empty string from `os.environ.get(key, "")` as valid API key; error only surfaced at first SDK call with opaque auth. Added early `ValueError` if key is empty and provider is not `is_local`.
 
+### 17. SRE Reliability Pass — Resume & Deserialization (2026-03-15, Pass 4)
+- **Status**: ✅ Fixed
+- **Branch**: `security-fixes-implementation`
+- **Files changed**: `models.py`, `pipeline.py`
+- **Bugs fixed**:
+  13. **`--resume` crashes on Decomposition** — `Decomposition(**dec)` in `_from_dict` fails with `TypeError`: LLM returns extra keys (causal_chain, critical_sources, systemic_connections, etc.) not in the dataclass, and `raw_response` had no default. Added `raw_response: str = ""` default; filter unknown keys via `dc_fields()` before unpacking in `_from_dict`.
+  14. **Phase-3 critique TypeError** — `CritiqueScore(**s)` from raw LLM dict has 6 required fields with no defaults; any omitted field crashes with `TypeError`, leaving `state.scores` empty and synthesis without input. Replaced both call sites with `_parse_critique_scores()` helper using `.get()` with defaults for all fields and enum coercion for `perspective`.
+  15. **Stress test scenario type mismatch** — `StressTestResult(**st)` bypasses `ScenarioType.coerce()` (used in `_from_dict`), so live run stores raw string if LLM uses variant spelling (e.g., "constraint-violation"). Replaced with explicit construction calling `coerce()` for consistency between live run and `--resume`.
+
 ---
 
 ## 📊 Implementation Summary

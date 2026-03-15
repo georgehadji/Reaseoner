@@ -682,6 +682,12 @@ These invariants were established after an SRE audit on branch `security-fixes-i
 ### Resource Lifecycle
 - **`httpx.AsyncClient` instances must be closed before their reference is dropped.** When resetting a global client, save the old reference, null the global, then schedule `aclose()` on the event loop (or run it synchronously as fallback). Nulling the reference alone leaks the connection pool.
 
+### Deserialization & Type Safety
+- **All dataclass fields used in `_from_dict` must filter unknown keys before unpacking.** LLMs return extra fields not in the dataclass schema (e.g., `causal_chain` in Decomposition responses). Use `dc_fields()` to build a set of known field names and filter: `{k: v for k, v in data.items() if k in known_fields}` before `Dataclass(**filtered)`. Without this, `--resume` from any saved state containing LLM output crashes.
+- **All dataclass fields should default to reasonable fallbacks** (empty string, 0.0, empty list, etc.). Never require a field unless it's always populated by your code. Coerced fields (like enums) from LLM output may be missing — provide defaults in explicit constructors (not `**s` unpacking).
+- **Enum coercion (e.g. `PerspectiveType(raw_string)`) must be wrapped in try/except.** If the LLM returns an out-of-enum value, catch the `ValueError` and skip or log the offending entry. Never let a malformed enum crash the entire phase.
+- **Use explicit field-by-field construction for objects built from LLM output**, not `DataClass(**raw_llm_dict)`. Explicit construction lets you use `.get()` with defaults and apply coercion (e.g. `ScenarioType.coerce()`) per field. This survives both live runs and `--resume`.
+
 ---
 
 ## Future Enhancements

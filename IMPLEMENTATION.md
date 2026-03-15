@@ -785,3 +785,11 @@ Two SRE passes were run against the `security-fixes-implementation` branch. All 
 | BUG-019 | High | `widgets.py`, `api.py` | Sync `get_weather_data()` at line 194 overwrote the async version (line 117); `/api/weather` called it from FastAPI's event loop → `RuntimeError: This event loop is already running`; `get_weather_data_async()` called `await get_weather_data()` (sync) → infinite recursion | Removed sync wrapper and `get_weather_data_async`; `api.py` now `await`s the async function |
 | BUG-020 | Medium | `widgets.py` | `info.get("currentPrice", 0)` returns `None` when Yahoo Finance key exists with null value; `None - 0` raised `TypeError` in price arithmetic | Replaced with `or 0` guard; division protected with `if _prev else 0.0` |
 | BUG-021 | Medium | `models.py` | `_from_dict` stress_results used direct subscripts (`sr['scenario']`, `sr['survival_rate']`, etc.) — `KeyError` on `--resume` with partial/older state files | Replaced with `.get()` + `ScenarioType.coerce()` + per-entry try/except (mirrors live-pipeline BUG-015 fix) |
+
+### Pass 7 — `api.py`, `llm.py`
+
+| ID | Severity | File | Root Cause | Fix |
+|----|----------|------|-----------|-----|
+| BUG-022 | High | `api.py` | `f.unlink() or True` in `clear_cache()` and `clear_history()` — `OSError` (file locked on Windows) crashes the DELETE endpoint; `or True` is also semantically misleading since `unlink()` always returns `None` | Replaced one-liner with explicit for-loop + `try/except OSError: pass` per file; uses `missing_ok=True` |
+| BUG-023 | High | `llm.py` | `response.choices[0]` in `OpenAICompatibleProvider` and `MistralProvider` raises `IndexError` when provider returns empty choices array (content filtering, moderation, malformed response) | Added `if not response.choices` guard → `ProviderUnavailableError` with provider/model context |
+| BUG-024 | High | `llm.py` | `response.content[0].text` in `AnthropicProvider` raises `IndexError` on empty content array; `.text` can be `None` which propagates to JSON parser as `None` instead of `""` | Added `if not response.content` guard → `ProviderUnavailableError`; added `or ""` fallback on `.text` |

@@ -188,6 +188,15 @@
   20. **Stock widget None arithmetic** — `info.get("currentPrice", 0)` returns `None` when Yahoo Finance returns the key with a null value. `None - 0` raised `TypeError`. Replaced with `or 0` guard; division guarded with `if _prev else 0.0`.
   21. **Stress results `_from_dict` direct subscripts** — `sr['scenario']`, `sr['survival_rate']`, etc. in `_from_dict` raised `KeyError` on `--resume` with partial/older state files. Replaced with `.get()` + `ScenarioType.coerce()` + per-entry try/except, matching the BUG-015 fix applied to the live pipeline.
 
+### 20. SRE Reliability Pass — Provider Safety & API Robustness (2026-03-15, Pass 7)
+- **Status**: ✅ Fixed
+- **Branch**: `security-fixes-implementation`
+- **Files changed**: `api.py`, `llm.py`
+- **Bugs fixed**:
+  22. **Cache/History clear crashes on locked files** — `f.unlink() or True` in `clear_cache()` and `clear_history()` — if `unlink()` raises `OSError` (file locked on Windows, permission denied), the exception propagates and crashes the DELETE endpoint. Also `or True` is semantically misleading (always truthy). Replaced with explicit for-loop + try/except per file.
+  23. **OpenAI/Mistral empty choices IndexError** — `response.choices[0]` in `OpenAICompatibleProvider.complete()` and `MistralProvider.complete()` raises `IndexError` when the provider returns an empty choices array (content filtering, moderation, malformed response). Added `if not response.choices` guard that raises `ProviderUnavailableError` with context.
+  24. **Anthropic empty content IndexError + None propagation** — `response.content[0].text` in `AnthropicProvider.complete()` raises `IndexError` on empty content array; if `.text` is `None`, returns `None` to the JSON parser instead of an empty string. Added `if not response.content` guard + `or ""` fallback.
+
 ---
 
 ## 📊 Implementation Summary

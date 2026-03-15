@@ -686,7 +686,13 @@ async def run_pipeline(request: Request, req: RunRequest):
 
 @app.delete("/api/cache")
 async def clear_cache():
-    cleared = sum(1 for f in CACHE_DIR.glob("*.json") if f.unlink() or True)
+    cleared = 0
+    for f in CACHE_DIR.glob("*.json"):
+        try:
+            f.unlink(missing_ok=True)
+            cleared += 1
+        except OSError:
+            pass
     return {"cleared": cleared}
 
 
@@ -1160,7 +1166,13 @@ async def delete_history_entry(entry_id: str):
 @app.delete("/api/history")
 async def clear_history():
     """Clear all history."""
-    cleared = sum(1 for f in HISTORY_DIR.glob("*.json") if f.unlink() or True)
+    cleared = 0
+    for f in HISTORY_DIR.glob("*.json"):
+        try:
+            f.unlink(missing_ok=True)
+            cleared += 1
+        except OSError:
+            pass
     return {"cleared": cleared}
 
 

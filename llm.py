@@ -247,6 +247,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                     raise
             else:
                 raise
+        if not response.choices:
+            raise ProviderUnavailableError(
+                f"Provider returned empty choices (model={self.model}; possible content filtering)"
+            )
         return response.choices[0].message.content or ""
 
 
@@ -280,7 +284,11 @@ class AnthropicProvider(BaseLLMProvider):
             system=system_prompt,
             messages=[{"role": "user", "content": user_prompt}],
         )
-        return response.content[0].text
+        if not response.content:
+            raise ProviderUnavailableError(
+                f"Anthropic returned empty content (model={self.model}; possible content filtering)"
+            )
+        return response.content[0].text or ""
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -358,6 +366,10 @@ class MistralProvider(BaseLLMProvider):
                 {"role": "user",   "content": user_prompt},
             ],
         )
+        if not response.choices:
+            raise ProviderUnavailableError(
+                f"Mistral returned empty choices (model={self.model}; possible content filtering)"
+            )
         return response.choices[0].message.content or ""
 
 

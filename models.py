@@ -410,13 +410,20 @@ class PipelineState:
         if data.get('decomposition'):
             dec = data['decomposition']
             dec['sub_problems'] = [SubProblem(**sp) for sp in dec.get('sub_problems', [])]
-            dec['assumptions'] = [
-                Assumption(
-                    text=a['text'],
-                    label=ClaimLabel(a['label']),
-                    rationale=a['rationale']
-                ) for a in dec.get('assumptions', [])
-            ]
+            # Use .get() with fallbacks: a missing 'rationale' or 'label' key in a
+            # saved assumption entry must not crash the entire resume.  Direct
+            # subscript access caused KeyError for any partially-written state file.
+            _assumptions = []
+            for a in dec.get('assumptions', []):
+                try:
+                    _assumptions.append(Assumption(
+                        text=a.get('text', ''),
+                        label=ClaimLabel(a.get('label', ClaimLabel.UNKNOWN.value)),
+                        rationale=a.get('rationale', ''),
+                    ))
+                except (ValueError, KeyError):
+                    pass  # skip malformed assumption entries
+            dec['assumptions'] = _assumptions
             _known = {f.name for f in dc_fields(Decomposition)}
             data['decomposition'] = Decomposition(**{k: v for k, v in dec.items() if k in _known})
         
@@ -516,14 +523,34 @@ class PipelineState:
                 GenerationCandidate(**gc) for gc in data['generation_candidates']
             ]
         
-        # Reconstruct critic_scores
+        # Reconstruct critic_scores.
+        # CriticDimensionScore(**v) and CriticScore(**cs) have required fields with
+        # no defaults — a truncated or partially-written state file causes TypeError.
+        # Build each object explicitly with .get() fallbacks and skip bad entries.
         if data.get('critic_scores'):
             new_scores = []
             for cs in data['critic_scores']:
-                cs['candidate_scores'] = {
-                    k: CriticDimensionScore(**v) for k, v in cs['candidate_scores'].items()
-                }
-                new_scores.append(CriticScore(**cs))
+                try:
+                    safe_dim: dict[str, CriticDimensionScore] = {}
+                    for k, v in cs.get('candidate_scores', {}).items():
+                        try:
+                            safe_dim[k] = CriticDimensionScore(
+                                factuality=float(v.get('factuality') or 0),
+                                reasoning=float(v.get('reasoning') or 0),
+                                completeness=float(v.get('completeness') or 0),
+                                helpfulness=float(v.get('helpfulness') or 0),
+                            )
+                        except (TypeError, ValueError):
+                            pass  # skip this dimension entry
+                    new_scores.append(CriticScore(
+                        critic_id=cs.get('critic_id', ''),
+                        critic_model=cs.get('critic_model', ''),
+                        candidate_scores=safe_dim,
+                        ranking=cs.get('ranking') or [],
+                        dissenting_note=cs.get('dissenting_note') or '',
+                    ))
+                except (TypeError, ValueError, KeyError):
+                    pass  # skip malformed critic score entry
             data['critic_scores'] = new_scores
         
         # Reconstruct verification_results with ClaimLabel

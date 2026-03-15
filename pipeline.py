@@ -264,10 +264,14 @@ class ARAPipeline:
             if action == "done" or i == max_iterations:
                 break
             
-            queries = decision_data.get("queries", [])[:3]
+            # Guard: LLM occasionally returns "queries" as a bare string instead of
+            # a list.  Slicing a string produces chars, not query terms, silently
+            # corrupting every downstream search call.
+            _raw_q = decision_data.get("queries", [])
+            queries = _raw_q[:3] if isinstance(_raw_q, list) else []
             if not queries:
                 break
-            
+
             self._log("VETTING", f"Executing queries: {queries}", state)
             
             # Execute searches concurrently
@@ -590,7 +594,9 @@ class ARAPipeline:
             if action == "done" or i == max_iterations:
                 break
                 
-            queries = data.get("queries", [])[:3] # Max 3 queries per iteration
+            # Same guard as context-vetting: LLM may return a string, not a list.
+            _raw_q = data.get("queries", [])
+            queries = _raw_q[:3] if isinstance(_raw_q, list) else []
             if not queries:
                 break
                 

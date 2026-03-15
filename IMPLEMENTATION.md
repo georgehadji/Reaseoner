@@ -241,26 +241,26 @@ async def _run_research(self, state, aggregate, event_store):
 async def _run_socratic(self, state, aggregate, event_store):
     # Step 1: Initial position
     initial_position = await self._socratic_elicit_position(...)
-    
+
     # Step 2: Elenchus
     elenchus_questions = await self._socratic_generate_questions(
         position=initial_position
     )
-    
+
     # Step 3: Aporia
     aporia = await self._socratic_induce_aporia(
         position=initial_position,
         questions=elenchus_questions,
     )
-    
+
     # Step 4: Maieutics
     maieutic_insights = await self._socratic_maieutics(aporia=aporia)
-    
+
     # Step 5: Refined understanding
     refined = await self._socratic_synthesis(
         dialogue=state.socratic_dialogue
     )
-    
+
     state.socratic_result = refined
 ```
 
@@ -270,6 +270,239 @@ async def _run_socratic(self, state, aggregate, event_store):
 - `SocraticAporia`
 - `SocraticInsights`
 - `SocraticUnderstanding`
+
+---
+
+### 5. Pre-Mortem Analysis (NEW — Sprint 1+2)
+
+**Scientific Basis:** Gary Klein (1989) — prospective hindsight increases risk identification ~30% vs. standard brainstorming
+
+**Structure:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│               Pre-Mortem Analysis Flow                       │
+├─────────────────────────────────────────────────────────────┤
+│  0. Classification (shared)                                  │
+│                                                              │
+│  1. Failure Narrative                                        │
+│     "It is 1 year later. The solution catastrophically      │
+│      failed. Write the post-mortem."                         │
+│                                                              │
+│  2. Root Cause Backtrack                                     │
+│     "Which single initial decision was the pivot point?"     │
+│     "Walk backward from catastrophic failure."               │
+│                                                              │
+│  3. Early Warning Signals                                    │
+│     "What observable signals appeared in the first 30 days?"│
+│     "What should we monitor?"                                │
+│                                                              │
+│  4. Hardened Redesign                                        │
+│     "Reconstruct the solution addressing each failure mode"  │
+│     "Build resilience into the original design"              │
+│                                                              │
+│  5. Synthesis (shared)                                       │
+│     Final answer + defensive roadmap                         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Code Example:**
+```python
+async def _run_pre_mortem_pipeline(self, state):
+    # Phase 0: Classification (shared)
+    classification = await self._phase_classification(state)
+    state.classification = classification
+
+    # Phase 1: Failure narrative
+    failure_data = await self._phase_pre_mortem_failure(state)
+    state.pre_mortem_state["failure_narratives"] = failure_data.get("narratives", [])
+
+    # Phase 2: Root cause backtrack
+    root_causes = await self._phase_pre_mortem_root_cause(state)
+    state.pre_mortem_state["root_causes"] = root_causes.get("causes", [])
+
+    # Phase 3: Early warning signals
+    signals = await self._phase_pre_mortem_signals(state)
+    state.pre_mortem_state["early_signals"] = signals.get("signals", [])
+
+    # Phase 4: Hardened redesign
+    redesign = await self._phase_pre_mortem_redesign(state)
+    state.pre_mortem_state["hardened_solution"] = redesign.get("solution", "")
+
+    # Phase 5: Synthesis
+    synthesis = await self._phase_synthesis(state)
+    return synthesis
+```
+
+**State Fields:**
+- `failure_narratives: list[str]` — descriptions of catastrophic failure scenarios
+- `root_causes: list[dict]` — root cause analysis with pivot decisions
+- `early_signals: list[dict]` — early warning signals to monitor
+- `hardened_solution: str` — redesigned solution addressing failure modes
+
+**Presets:** `pre-mortem-budget`, `pre-mortem-premium`
+
+**Rendering:**
+- Panel 1: Failure narrative (red background, warning icon)
+- Panel 2: Root cause tree (shows decision pivot)
+- Panel 3: Early signals table (what to monitor with timeline)
+- Panel 4: Hardened solution (green background, checkmarks for addressed risks)
+
+---
+
+### 6. Bayesian Reasoning (NEW — Sprint 1+2)
+
+**Scientific Basis:** Bayesian epistemology (Jaynes 2003). Gold standard for clinical trials, intelligence analysis (CIA Analysis of Competing Hypotheses), and ML model selection
+
+**Structure:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│              Bayesian Reasoning Flow                         │
+├─────────────────────────────────────────────────────────────┤
+│  0. Classification (shared)                                  │
+│                                                              │
+│  1. Prior Elicitation                                        │
+│     "For each hypothesis, estimate prior P(H)               │
+│      with reasoning. Why do you start here?"                 │
+│                                                              │
+│  2. Likelihood Assessment                                    │
+│     "For each observation, estimate:                         │
+│      - P(E|H): Probability of evidence if H is true        │
+│      - P(E|¬H): Probability of evidence if H is false       │
+│      Likelihood ratio = P(E|H) / P(E|¬H)"                    │
+│                                                              │
+│  3. Posterior Update                                         │
+│     "Apply Bayes rule: P(H|E) ∝ P(E|H) × P(H)              │
+│      Compute posterior belief distribution."                 │
+│                                                              │
+│  4. Sensitivity Analysis                                     │
+│     "Which prior assumption most changes the posterior       │
+│      if we're wrong? What would flip the conclusion?"        │
+│                                                              │
+│  5. Synthesis (shared)                                       │
+│     Updated belief distribution + caveats                    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Code Example:**
+```python
+async def _run_bayesian_pipeline(self, state):
+    # Phase 0: Classification
+    classification = await self._phase_classification(state)
+    state.classification = classification
+
+    # Phase 1: Prior elicitation
+    priors_data = await self._phase_bayesian_priors(state)
+    state.bayesian_state["hypotheses_with_priors"] = priors_data.get("hypotheses", [])
+
+    # Phase 2: Likelihood assessment
+    likelihoods_data = await self._phase_bayesian_likelihood(state)
+    state.bayesian_state["evidence_likelihoods"] = likelihoods_data.get("evidence", [])
+
+    # Phase 3: Posterior update
+    posterior_data = await self._phase_bayesian_posterior(state)
+    state.bayesian_state["posteriors"] = posterior_data.get("posteriors", [])
+
+    # Phase 4: Sensitivity analysis
+    sensitivity_data = await self._phase_bayesian_sensitivity(state)
+    state.bayesian_state["sensitivity_results"] = sensitivity_data.get("sensitivity", [])
+
+    # Phase 5: Synthesis
+    synthesis = await self._phase_synthesis(state)
+    return synthesis
+```
+
+**State Fields:**
+- `hypotheses_with_priors: list[dict]` — hypotheses with P(H) and reasoning
+- `evidence_likelihoods: list[dict]` — evidence with P(E|H), P(E|¬H), likelihood ratios
+- `posteriors: list[dict]` — updated P(H|E) after Bayes rule application
+- `sensitivity_results: list[dict]` — sensitivity analysis (which priors matter most)
+
+**Presets:** `bayesian-budget`, `bayesian-premium`
+
+**Rendering:**
+- Table 1: Priors (hypotheses, prior probabilities, reasoning)
+- Table 2: Evidence matrix (evidence, P(E|H), P(E|¬H), LR)
+- Chart 1: Posterior bars (updated belief distribution)
+- Table 3: Sensitivity tornado (prior assumptions ranked by posterior impact)
+
+---
+
+### 7. Dialectical Reasoning — Hegelian Aufhebung (NEW — Sprint 1+2)
+
+**Scientific Basis:** Hegel's dialectic philosophy — thesis/antithesis/synthesis. The synthesis is qualitative transcendence, not compromise. Extends Debate by requiring internal contradiction resolution.
+
+**Structure:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│          Dialectical Reasoning (Aufhebung) Flow              │
+├─────────────────────────────────────────────────────────────┤
+│  0. Classification (shared)                                  │
+│                                                              │
+│  1. Thesis (Constructive)                                    │
+│     "State the strongest affirmative position.               │
+│      What are its key commitments and assumptions?"          │
+│                                                              │
+│  2. Antithesis (Destructive)                                 │
+│     "Expose internal contradictions of the thesis.           │
+│      Negate its key commitments. What does it deny?"         │
+│                                                              │
+│  3. Contradiction Analysis                                   │
+│     "Which contradictions are irreconcilable?                │
+│      Which are compatible? Where is the deeper tension?"     │
+│                                                              │
+│  4. Aufhebung (Qualitative Transcendence)                    │
+│     "Find a higher position that:                            │
+│      - Preserves truth from both sides                       │
+│      - Transcends the contradiction                          │
+│      - Is not a compromise (aufheben = lift up)"             │
+│                                                              │
+│  5. Synthesis (shared)                                       │
+│     Aufhebung result + reconceptualization                   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Code Example:**
+```python
+async def _run_dialectical_pipeline(self, state):
+    # Phase 0: Classification
+    classification = await self._phase_classification(state)
+    state.classification = classification
+
+    # Phase 1: Thesis (constructive perspective)
+    thesis_data = await self._phase_dialectical_thesis(state)
+    state.dialectical_state["thesis"] = thesis_data.get("thesis", "")
+
+    # Phase 2: Antithesis (destructive perspective)
+    antithesis_data = await self._phase_dialectical_antithesis(state)
+    state.dialectical_state["antithesis"] = antithesis_data.get("antithesis", "")
+
+    # Phase 3: Contradiction analysis
+    contradictions_data = await self._phase_dialectical_contradictions(state)
+    state.dialectical_state["contradictions"] = contradictions_data.get("contradictions", [])
+
+    # Phase 4: Aufhebung (transcendence)
+    aufhebung_data = await self._phase_dialectical_aufhebung(state)
+    state.dialectical_state["aufhebung"] = aufhebung_data.get("aufhebung", "")
+
+    # Phase 5: Synthesis
+    synthesis = await self._phase_synthesis(state)
+    return synthesis
+```
+
+**State Fields:**
+- `thesis: str` — strongest affirmative position with commitments
+- `antithesis: str` — internal contradictions and negation of thesis
+- `contradictions: list[dict]` — irreconcilable vs. compatible contradictions
+- `aufhebung: str` — qualitative transcendence that preserves both truths
+
+**Presets:** `dialectical-budget`, `dialectical-premium`
+
+**Rendering:**
+- Side-by-side panels:
+  - Left (green): Thesis with commitments
+  - Right (red): Antithesis with contradictions
+- Table: Contradiction analysis (irreconcilable, compatible, transcended)
+- Bottom (magenta): Aufhebung — higher position transcending the contradiction
 
 ---
 

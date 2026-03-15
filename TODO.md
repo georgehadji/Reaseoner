@@ -199,6 +199,166 @@
 
 ---
 
+## 🎯 Sprint 1+2: Method Improvements & 6 New Reasoning Methods (2026-03-16)
+
+### Track A — Existing Method Improvements (5 surgical patches)
+
+#### A1. Scientific: Inline Bayesian Posterior Update
+- **Status**: ✅ Implemented
+- **Files changed**: `pipeline.py`, `renderer.py`
+- **Changes**:
+  - Added Bayesian posterior computation in `_phase_scientific_test()` after test results collected
+  - Computes `posterior_probability = supported_count / total_tests` for each hypothesis
+  - Stores updated hypotheses in `state.scientific_state["hypotheses"]`
+  - Renderer now displays posterior probabilities alongside hypotheses
+  - Scientific method now properly integrates test evidence into hypothesis strength
+
+#### A2. Iterative: Early Convergence Exit
+- **Status**: ✅ Implemented
+- **Files changed**: `pipeline.py`
+- **Changes**:
+  - Added convergence check in `_run_iterative_pipeline()` after each round's critique phase
+  - Computes mean `logical_consistency` score across all solution candidates
+  - Exits early if mean score ≥ 8.5 (threshold for "converged solution")
+  - Saves tokens by avoiding unnecessary rounds when solution quality is high
+
+#### A3. Jury: Reliability-Weighted Generator Ranking
+- **Status**: ✅ Implemented
+- **Files changed**: `pipeline.py`, `renderer.py`
+- **Changes**:
+  - Added `_phase_jury_weighted_ranking()` method to apply reliability weights
+  - Computes weighted generator ranking: `weighted_score = sum(score * reliability) / sum(reliabilities)`
+  - Stores result in `state.jury_weighted_ranking` (list of generator IDs, best→worst)
+  - Renderer displays weighted ranking alongside critic reliability scores
+  - Fixes previous issue where biased critics had same weight as reliable ones
+
+#### A4. Socratic: Dual-Role Split (Questioner ≠ Answerer)
+- **Status**: ✅ Implemented
+- **Files changed**: `pipeline.py`
+- **Changes**:
+  - Changed `_phase_socratic_question()` to use role="destructive" (challenges & probes)
+  - Changed `_phase_socratic_answer()` to use role="constructive" (builds & defends)
+  - Two distinct LLM instances now genuinely challenge each other
+  - Restores original Socratic principle: separate questioner and answerer personas
+
+#### A5. Debate: Cross-Examination Round
+- **Status**: ✅ Implemented
+- **Files changed**: `pipeline.py`, `phases.py`
+- **Changes**:
+  - New phase `_phase_debate_cross_examine()` inserted between rebuttal and judge
+  - Added prompts: `DEBATE_CROSS_SYSTEM` + `debate_cross_examine_prompt()`
+  - Both sides directly challenge opponent's specific claims with evidence
+  - Judge sees full debate transcript including cross-examination before verdict
+  - Increases factual precision and claim-by-claim contestation
+
+### Track B — 6 New Reasoning Methods
+
+#### B1. Pre-Mortem Analysis
+- **Status**: ✅ Implemented
+- **Scientific basis**: Gary Klein (1989) — prospective hindsight increases risk identification ~30%
+- **Files changed**: `pipeline.py`, `phases.py`, `models.py`, `presets.py`, `renderer.py`, `ui/js/config.js`, `ui/index.html`
+- **Architecture**:
+  ```
+  Phase 0: Classification (shared)
+  Phase 1: Failure Narrative — "It is 1 year later. Solution catastrophically failed. Write post-mortem."
+  Phase 2: Root Cause Backtrack — "Which single decision was the pivot point?"
+  Phase 3: Early Warning Signals — "What observable signals appeared in first 30 days?"
+  Phase 4: Hardened Redesign — reconstruct solution addressing each failure mode
+  Phase 5: Synthesis (shared)
+  ```
+- **State field**: `pre_mortem_state: dict` with keys: `failure_narratives`, `root_causes`, `early_signals`, `hardened_solution`
+- **Presets**: `pre-mortem-budget`, `pre-mortem-premium`
+- **Routing keys**: Uses existing `primary`, `constructive`, `synthesis` (no new keys)
+- **UI**: Dropdown option + method-specific guidance + phase definitions
+- **Estimated lines**: ~280
+
+#### B2. Bayesian Reasoning
+- **Status**: ✅ Implemented
+- **Scientific basis**: Bayesian epistemology (Jaynes 2003). Used in clinical trials, intelligence analysis (CIA ACH), ML model selection
+- **Files changed**: `pipeline.py`, `phases.py`, `models.py`, `presets.py`, `renderer.py`, `ui/js/config.js`, `ui/index.html`
+- **Architecture**:
+  ```
+  Phase 0: Classification (shared)
+  Phase 1: Prior Elicitation — estimate prior P(H) for each hypothesis with reasoning
+  Phase 2: Likelihood Assessment — for each observation, estimate P(E|H) vs P(E|¬H)
+  Phase 3: Posterior Update — compute P(H|E) via Bayes rule; express updated belief distribution
+  Phase 4: Sensitivity Analysis — which prior assumption most changes the posterior if wrong?
+  Phase 5: Synthesis (shared)
+  ```
+- **State field**: `bayesian_state: dict` with keys: `hypotheses_with_priors`, `evidence_likelihoods`, `posteriors`, `sensitivity_results`
+- **Presets**: `bayesian-budget`, `bayesian-premium`
+- **Routing keys**: Uses existing `primary` (no new keys)
+- **UI**: Dropdown option + method-specific guidance + phase definitions
+- **Renderer**: Prior distribution table → evidence matrix → posterior bars → sensitivity tornado chart
+- **Estimated lines**: ~320
+
+#### B3. Dialectical Reasoning (Hegelian Aufhebung)
+- **Status**: ✅ Implemented
+- **Scientific basis**: Hegel's dialectic — thesis/antithesis/Aufhebung. Synthesis is qualitative transcendence, not compromise
+- **Files changed**: `pipeline.py`, `phases.py`, `models.py`, `presets.py`, `renderer.py`, `ui/js/config.js`, `ui/index.html`
+- **Architecture**:
+  ```
+  Phase 0: Classification (shared)
+  Phase 1: Thesis — strongest affirmative position with key commitments
+  Phase 2: Antithesis — internal contradictions of thesis exposed; negation of its commitments
+  Phase 3: Contradiction Analysis — which contradictions are irreconcilable vs. compatible?
+  Phase 4: Aufhebung — qualitatively higher position that preserves truth from both sides
+  Phase 5: Synthesis (shared)
+  ```
+- **Roles**: `constructive` (thesis), `destructive` (antithesis) — already in routing
+- **State field**: `dialectical_state: dict` with keys: `thesis`, `antithesis`, `contradictions`, `aufhebung`
+- **Presets**: `dialectical-budget`, `dialectical-premium`
+- **Routing keys**: Uses existing `constructive`, `destructive`, `synthesis` (no new keys)
+- **UI**: Dropdown option + method-specific guidance + phase definitions
+- **Renderer**: Thesis panel (green) ← → Antithesis panel (red), Contradiction table, Aufhebung panel (magenta)
+- **Estimated lines**: ~300
+
+### Implementation Summary
+
+| Track | Item | Method | Status | Lines Added |
+|-------|------|--------|--------|-------------|
+| **A** | A1 | Scientific Bayesian Posterior | ✅ | ~40 |
+| **A** | A2 | Iterative Convergence Exit | ✅ | ~20 |
+| **A** | A3 | Jury Weighted Ranking | ✅ | ~35 |
+| **A** | A4 | Socratic Dual Role | ✅ | ~5 |
+| **A** | A5 | Debate Cross-Examination | ✅ | ~45 |
+| **B** | B1 | Pre-Mortem Analysis | ✅ | ~280 |
+| **B** | B2 | Bayesian Reasoning | ✅ | ~320 |
+| **B** | B3 | Dialectical Reasoning | ✅ | ~300 |
+| | **Total** | **Sprint 1+2** | ✅ | **~1,045 lines** |
+
+**All new presets:** 6 (pre-mortem-budget/premium, bayesian-budget/premium, dialectical-budget/premium)
+**All new state fields:** 3 (pre_mortem_state, bayesian_state, dialectical_state)
+**Breaking changes:** 0 (all additive, existing methods unchanged)
+**API changes:** 0 (CLI/API backward compatible)
+
+### Files Modified (Sprint 1+2)
+- `pipeline.py` — 5 Track A patches + 3 `_run_*_pipeline` methods + 12 phase methods (~600 lines)
+- `phases.py` — Track A prompts + 12 new prompt functions (~320 lines)
+- `models.py` — 3 state dict fields + `_from_dict` reconstruction (~50 lines)
+- `presets.py` — 6 new presets + validation (~120 lines)
+- `renderer.py` — 3 MethodType entries + 3 render functions (~450 lines)
+- `ui/js/config.js` — 6 entries across 4 config objects (~100 lines)
+- `ui/index.html` — 6 dropdown options (~42 lines)
+
+### Verification Checklist
+- ✅ All imports resolve cleanly (no syntax errors)
+- ✅ All 6 new presets load in `--list-presets`
+- ✅ MethodType enum includes all 3 new methods
+- ✅ State fields exist on PipelineState with `field(default_factory=dict)`
+- ✅ Renderer dispatch routes all 3 methods to correct `_render_*()` functions
+- ✅ UI config and HTML dropdowns include all 3 methods
+- ✅ API server starts without errors on port 8000
+- ✅ No breaking changes to existing 7 methods
+
+### Next: Sprint 3 Planning
+Sprint 3 will implement B4 Analogical Reasoning + B5 Delphi Method:
+- B4 requires ~340 lines
+- B5 requires ~420 lines and 4 new routing keys: `expert_1`, `expert_2`, `expert_3`, `expert_4`
+- Total: ~760 lines, new routing validation needed
+
+---
+
 ## 📊 Implementation Summary
 
 | Category | Features | Status |

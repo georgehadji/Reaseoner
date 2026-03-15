@@ -753,3 +753,11 @@ Two SRE passes were run against the `security-fixes-implementation` branch. All 
 |----|----------|------|-----------|-----|
 | BUG-008 | Critical | `api.py` | `_cancel_flag: bool` global shared across all concurrent SSE generators | Per-run `_cancelled_runs: dict[str, bool]` keyed by `uuid4()` |
 | BUG-009 | High | `renderer.py` | TOCTOU: `.get("key")` check then `["key"]` subscript — 4 locations in Scientific/Socratic renderers | Stored `.get()` result in local variable before iterating |
+
+### Pass 3 — `api.py`, `core/search.py`, `llm.py`
+
+| ID | Severity | File | Root Cause | Fix |
+|----|----------|------|-----------|-----|
+| BUG-010 | High | `api.py` | `_load_cache` uncaught `JSONDecodeError` on corrupt files; `_save_cache` non-atomic `write_text()` could leave truncated files on crash | Added try/except + corrupt-file deletion for reads; `.tmp` write + `Path.replace()` atomic rename for writes |
+| BUG-011 | Medium | `core/search.py` | `reset_discovery_client()` nulled global reference without calling `aclose()`, leaking httpx connection pool and file descriptors | Save old client before nulling; schedule `aclose()` on running loop (or `asyncio.run()` fallback for sync callers) |
+| BUG-012 | High | `llm.py` | `build_provider()` accepted empty string from `os.environ.get(key, "")` as valid API key; error only surfaced at first SDK call with opaque auth message | Added early `ValueError` if `key` is empty and provider is not `is_local`; Ollama exempt |

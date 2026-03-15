@@ -671,6 +671,17 @@ These invariants were established after an SRE audit on branch `security-fixes-i
 ### CLI / Entry Point
 - **No string/f-string literals may contain literal newlines.** Use `\n` escape sequences. Literal newlines inside quotes are a `SyntaxError` in Python 3.12+ that breaks the CLI on startup.
 
+### API Keys & Providers
+- **`build_provider()` must raise immediately if a required API key is empty.** `os.environ.get(key, "")` silently returns an empty string; an empty key passes to SDK constructors without error but fails at first call. Guard: `if not key and not cfg.get("is_local"): raise ValueError(...)`.
+- **Local providers (Ollama) are exempt from the key guard** — they accept any dummy key string.
+
+### Cache / Persistence
+- **All cache reads must catch `JSONDecodeError`** and delete the corrupt file to allow regeneration.
+- **All cache writes must be atomic.** Write to a `.tmp` sibling file, then rename with `Path.replace()` (wraps `os.replace()`, atomic on both POSIX and Windows NTFS). Never write directly to the target path — a crash mid-write leaves a truncated/corrupt file.
+
+### Resource Lifecycle
+- **`httpx.AsyncClient` instances must be closed before their reference is dropped.** When resetting a global client, save the old reference, null the global, then schedule `aclose()` on the event loop (or run it synchronously as fallback). Nulling the reference alone leaks the connection pool.
+
 ---
 
 ## Future Enhancements

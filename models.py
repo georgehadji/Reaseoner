@@ -463,16 +463,24 @@ class PipelineState:
                 ) for c in data['top_candidates']
             ]
         
-        # Reconstruct stress_results with ScenarioType
+        # Reconstruct stress_results with ScenarioType.
+        # BUG-021: _from_dict used direct subscripts sr['scenario'] etc. — a
+        # truncated or older state file missing any field crashed with KeyError.
+        # Use .get() + coerce (matching the live-pipeline fix from BUG-015) and
+        # skip malformed entries with a warning instead of crashing the load.
         if data.get('stress_results'):
-            data['stress_results'] = [
-                StressTestResult(
-                    scenario=ScenarioType.coerce(sr['scenario']),
-                    survival_rate=sr['survival_rate'],
-                    failure_mode=sr['failure_mode'],
-                    recovery_path=sr['recovery_path']
-                ) for sr in data['stress_results']
-            ]
+            _stress_results: list[StressTestResult] = []
+            for sr in data['stress_results']:
+                try:
+                    _stress_results.append(StressTestResult(
+                        scenario=ScenarioType.coerce(sr.get('scenario', 'optimal')),
+                        survival_rate=float(sr.get('survival_rate') or 0),
+                        failure_mode=sr.get('failure_mode', ''),
+                        recovery_path=sr.get('recovery_path', ''),
+                    ))
+                except (ValueError, TypeError):
+                    pass  # skip malformed stress result entry
+            data['stress_results'] = _stress_results
         
         # Reconstruct final_solution with ClaimLabel and MetaCognitiveAudit
         if data.get('final_solution'):

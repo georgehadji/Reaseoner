@@ -1037,8 +1037,10 @@ async def get_weather(location: str = ""):
     try:
         if not location:
             return {"error": "Location parameter required"}, 400
+        # get_weather_data is async; the former sync wrapper was removed because
+        # it caused RuntimeError ("event loop already running") inside FastAPI.
         from widgets import get_weather_data
-        weather_data = get_weather_data(location)
+        weather_data = await get_weather_data(location)
         return weather_data
     except Exception as e:
         logger.error(f"Weather error: {e}")

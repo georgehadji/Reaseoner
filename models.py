@@ -258,6 +258,14 @@ class PipelineState:
     scientific_state: dict[str, Any] = field(default_factory=dict)
     # Socratic Method: Definitions, questions (elenchus), and aporia state
     socratic_state: dict[str, Any] = field(default_factory=dict)
+    # Jury Method: Reliability-weighted generator ranking (Track A3)
+    jury_weighted_ranking: list[str] = field(default_factory=list)
+    # Pre-Mortem Analysis Method: Prospective hindsight failure analysis (B1)
+    pre_mortem_state: dict[str, Any] = field(default_factory=dict)
+    # Bayesian Reasoning Method: Prior-likelihood-posterior-sensitivity (B2)
+    bayesian_state: dict[str, Any] = field(default_factory=dict)
+    # Dialectical Reasoning Method: Hegelian Aufhebung (B3)
+    dialectical_state: dict[str, Any] = field(default_factory=dict)
     # Web Discovery: Results from SearXNG search
     web_discovery_results: list[dict[str, Any]] = field(default_factory=list)
     # Vetted Context: Flags from context vetting phase
@@ -278,6 +286,10 @@ class PipelineState:
             "debate_rounds": self.debate_rounds,
             "scientific_state": self.scientific_state,
             "socratic_state": self.socratic_state,
+            "jury_weighted_ranking": self.jury_weighted_ranking,
+            "pre_mortem_state": self.pre_mortem_state,
+            "bayesian_state": self.bayesian_state,
+            "dialectical_state": self.dialectical_state,
             "web_discovery_results": self.web_discovery_results,
             "sub_problems": [
                 {
@@ -576,5 +588,11 @@ class PipelineState:
         # Reconstruct meta_evaluation
         if data.get('meta_evaluation'):
             data['meta_evaluation'] = MetaEvaluation(**data['meta_evaluation'])
-        
+
+        # New method state dicts — safe defaults for older state files
+        data.setdefault('jury_weighted_ranking', [])
+        data.setdefault('pre_mortem_state', {})
+        data.setdefault('bayesian_state', {})
+        data.setdefault('dialectical_state', {})
+
         return cls(**data)

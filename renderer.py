@@ -54,6 +54,9 @@ class MethodType(Enum):
     JURY              = "jury"
     SCIENTIFIC        = "scientific"
     SOCRATIC          = "socratic"
+    PRE_MORTEM        = "pre-mortem"
+    BAYESIAN          = "bayesian"
+    DIALECTICAL       = "dialectical"
 
 
 _DEBATE_PRESETS       = {"debate", "debate-budget", "debate-balanced", "debate-premium"}
@@ -68,6 +71,9 @@ _JURY_PRESETS         = {
 }
 _SCIENTIFIC_PRESETS   = {"scientific", "scientific-budget", "scientific-premium"}
 _SOCRATIC_PRESETS     = {"socratic", "socratic-budget", "socratic-premium"}
+_PRE_MORTEM_PRESETS   = {"pre-mortem", "pre-mortem-budget", "pre-mortem-premium"}
+_BAYESIAN_PRESETS     = {"bayesian", "bayesian-budget", "bayesian-premium"}
+_DIALECTICAL_PRESETS  = {"dialectical", "dialectical-budget", "dialectical-premium"}
 # STANDARD presets (now called MULTI_PERSPECTIVE)
 _MULTI_PERSPECTIVE_PRESETS = {
     "max-quality", "cost-efficient", "eu-sovereign", "epistemic-diversity",
@@ -83,6 +89,9 @@ def _method_type(preset_name: str | None) -> MethodType:
     if preset_name in _JURY_PRESETS:         return MethodType.JURY
     if preset_name in _SCIENTIFIC_PRESETS:   return MethodType.SCIENTIFIC
     if preset_name in _SOCRATIC_PRESETS:     return MethodType.SOCRATIC
+    if preset_name in _PRE_MORTEM_PRESETS:   return MethodType.PRE_MORTEM
+    if preset_name in _BAYESIAN_PRESETS:     return MethodType.BAYESIAN
+    if preset_name in _DIALECTICAL_PRESETS:  return MethodType.DIALECTICAL
     if preset_name in _MULTI_PERSPECTIVE_PRESETS: return MethodType.MULTI_PERSPECTIVE
     return MethodType.MULTI_PERSPECTIVE  # default
 
@@ -853,6 +862,217 @@ def _render_socratic(state: PipelineState) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# B1: PRE-MORTEM ANALYSIS RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_pre_mortem(state: PipelineState) -> None:
+    pm = state.pre_mortem_state
+
+    # Failure Narrative
+    fn = pm.get("failure_narrative", {})
+    if fn:
+        content = Text()
+        content.append(f"Scenario: ", style="bold red")
+        content.append(f"{fn.get('scenario', 'N/A')}\n\n")
+        content.append(fn.get("what_happened", ""))
+        triggers = fn.get("immediate_triggers", [])
+        if triggers:
+            content.append("\n\nImmediate Triggers:\n", style="bold")
+            for t in triggers:
+                content.append(f"• {t}\n")
+        console.print(Panel(content, title="[red]Failure Narrative[/red]", box=box.HEAVY))
+
+    # Root Cause
+    rc = pm.get("root_cause", {})
+    if rc:
+        content = Text()
+        content.append("Pivot Decision: ", style="bold yellow")
+        content.append(f"{rc.get('pivot_decision', '')}\n\n")
+        content.append("When: ", style="bold")
+        content.append(f"{rc.get('decision_point', '')}\n\n")
+        content.append("Why it seemed reasonable: ", style="bold")
+        content.append(f"{rc.get('why_it_seemed_reasonable', '')}\n\n")
+        cascade = rc.get("cascade", [])
+        if cascade:
+            content.append("Cascade:\n", style="bold")
+            for step in cascade:
+                content.append(f"  → {step}\n")
+        console.print(Panel(content, title="[yellow]Root Cause Analysis[/yellow]", box=box.ROUNDED))
+
+    # Early Warning Signals table
+    signals = pm.get("early_signals", [])
+    if signals:
+        tbl = Table(title="Early Warning Signals", box=box.SIMPLE_HEAD, show_header=True)
+        tbl.add_column("Day", style="cyan", width=6)
+        tbl.add_column("Signal", style="white")
+        tbl.add_column("How to Detect", style="dim")
+        tbl.add_column("Action Threshold", style="yellow")
+        for s in signals:
+            tbl.add_row(
+                str(s.get("day", "?")),
+                s.get("signal", ""),
+                s.get("how_to_detect", ""),
+                s.get("action_threshold", ""),
+            )
+        console.print(tbl)
+
+    # Hardened Redesign
+    hs = pm.get("hardened_solution", "")
+    if hs:
+        content = Text()
+        content.append(hs)
+        safeguards = pm.get("safeguards", [])
+        if safeguards:
+            content.append("\n\nSafeguards:\n", style="bold green")
+            for s in safeguards:
+                content.append(f"✓ {s}\n", style="green")
+        console.print(Panel(content, title="[green]Hardened Redesign[/green]", box=box.ROUNDED))
+
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# B2: BAYESIAN REASONING RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_bayesian(state: PipelineState) -> None:
+    b = state.bayesian_state
+
+    # Hypotheses with Priors
+    hypotheses = b.get("hypotheses_with_priors", [])
+    if hypotheses:
+        tbl = Table(title="Hypotheses & Prior Probabilities", box=box.SIMPLE_HEAD, show_header=True)
+        tbl.add_column("ID", style="cyan", width=5)
+        tbl.add_column("Statement", style="white")
+        tbl.add_column("P(H)", style="yellow", width=8)
+        tbl.add_column("Reasoning", style="dim")
+        for h in hypotheses:
+            tbl.add_row(
+                h.get("id", "?"),
+                h.get("statement", ""),
+                str(h.get("prior_probability", "")),
+                h.get("reasoning", "")[:120],
+            )
+        console.print(tbl)
+
+    # Posteriors
+    posteriors = b.get("posteriors", [])
+    most_probable = b.get("most_probable", "")
+    if posteriors:
+        tbl = Table(title="Posterior Probabilities P(H|E)", box=box.SIMPLE_HEAD, show_header=True)
+        tbl.add_column("ID", style="cyan", width=5)
+        tbl.add_column("P(H|E)", style="yellow", width=8)
+        tbl.add_column("Explanation", style="white")
+        for p in posteriors:
+            hid = p.get("hypothesis_id", "?")
+            is_top = hid == most_probable
+            label = f"{hid} ★" if is_top else hid
+            tbl.add_row(label, str(p.get("posterior_probability", "")), p.get("explanation", "")[:160])
+        console.print(tbl)
+        if most_probable:
+            console.print(Panel(
+                Text(f"Most probable hypothesis: {most_probable}", style="bold green"),
+                title="[green]Bayesian Verdict[/green]", box=box.ROUNDED,
+            ))
+
+    # Sensitivity Analysis
+    sensitivity = b.get("sensitivity_results", [])
+    if sensitivity:
+        tbl = Table(title="Sensitivity Analysis", box=box.SIMPLE_HEAD, show_header=True)
+        tbl.add_column("Assumption", style="white")
+        tbl.add_column("Posterior Shift", style="cyan", width=14)
+        tbl.add_column("Importance", style="yellow", width=12)
+        for s in sensitivity:
+            shift = s.get("posterior_shift", "")
+            shift_color = "red" if shift == "large" else ("yellow" if shift == "medium" else "green")
+            tbl.add_row(
+                s.get("assumption", ""),
+                f"[{shift_color}]{shift}[/{shift_color}]",
+                s.get("importance", ""),
+            )
+        console.print(tbl)
+        most_sensitive = b.get("most_sensitive_assumption", "")
+        if most_sensitive:
+            console.print(Panel(
+                Text(f"Most critical assumption: {most_sensitive}", style="bold yellow"),
+                title="[yellow]Sensitivity Finding[/yellow]", box=box.ROUNDED,
+            ))
+
+    _render_action_blueprint(state)
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# B3: DIALECTICAL REASONING RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_dialectical(state: PipelineState) -> None:
+    d = state.dialectical_state
+
+    # Thesis (green)
+    thesis = d.get("thesis", "")
+    commitments = d.get("key_commitments", [])
+    if thesis:
+        content = Text()
+        content.append(thesis)
+        if commitments:
+            content.append("\n\nKey Commitments:\n", style="bold")
+            for c in commitments:
+                content.append(f"• {c}\n")
+        console.print(Panel(content, title="[green]Thesis — Affirmative Position[/green]", box=box.ROUNDED))
+
+    # Antithesis (red)
+    antithesis = d.get("antithesis", "")
+    contradictions = d.get("contradictions_exposed", [])
+    if antithesis:
+        content = Text()
+        content.append(antithesis)
+        if contradictions:
+            content.append("\n\nContradictions Exposed:\n", style="bold red")
+            for c in contradictions:
+                content.append(f"✗ {c}\n", style="red")
+        console.print(Panel(content, title="[red]Antithesis — Negation[/red]", box=box.ROUNDED))
+
+    # Contradiction Analysis table
+    irreconcilable = d.get("irreconcilable", [])
+    compatible = d.get("compatible", [])
+    if irreconcilable or compatible:
+        tbl = Table(title="Contradiction Analysis", box=box.SIMPLE_HEAD, show_header=True)
+        tbl.add_column("Type", style="cyan", width=18)
+        tbl.add_column("Contradiction", style="white")
+        for c in irreconcilable:
+            tbl.add_row("[red]Irreconcilable[/red]", c)
+        for c in compatible:
+            tbl.add_row("[yellow]Compatible[/yellow]", c)
+        console.print(tbl)
+
+    # Aufhebung (magenta)
+    aufhebung = d.get("aufhebung", "")
+    if aufhebung:
+        content = Text()
+        content.append(aufhebung, style="bold")
+        preserved_t = d.get("preserved_from_thesis", [])
+        preserved_a = d.get("preserved_from_antithesis", [])
+        new_insights = d.get("new_insights", [])
+        if preserved_t:
+            content.append("\n\nPreserved from Thesis:\n", style="bold green")
+            for p in preserved_t:
+                content.append(f"✓ {p}\n", style="green")
+        if preserved_a:
+            content.append("\nPreserved from Antithesis:\n", style="bold red")
+            for p in preserved_a:
+                content.append(f"✓ {p}\n", style="red")
+        if new_insights:
+            content.append("\nGenuine Novelty:\n", style="bold yellow")
+            for i in new_insights:
+                content.append(f"★ {i}\n", style="yellow")
+        console.print(Panel(content, title="[magenta]Aufhebung — Qualitative Transcendence[/magenta]", box=box.HEAVY))
+
+    _render_action_blueprint(state)
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # PUBLIC ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────
 
@@ -871,6 +1091,12 @@ def render_pipeline_result(state: PipelineState) -> None:
         _render_scientific(state)
     elif method == MethodType.SOCRATIC:
         _render_socratic(state)
+    elif method == MethodType.PRE_MORTEM:
+        _render_pre_mortem(state)
+    elif method == MethodType.BAYESIAN:
+        _render_bayesian(state)
+    elif method == MethodType.DIALECTICAL:
+        _render_dialectical(state)
     else:
         _render_multi_perspective(state)
 

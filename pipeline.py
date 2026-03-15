@@ -92,6 +92,9 @@ class ARAPipeline:
         if "research" in preset: return "research"
         if "scientific" in preset: return "scientific"
         if "socratic" in preset: return "socratic"
+        if "pre-mortem" in preset or "premortem" in preset: return "pre_mortem"
+        if "bayesian" in preset: return "bayesian"
+        if "dialectical" in preset: return "dialectical"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
@@ -129,6 +132,9 @@ class ARAPipeline:
         elif method == "research": await self._run_research_pipeline(state)
         elif method == "scientific": await self._run_scientific_pipeline(state)
         elif method == "socratic": await self._run_socratic_pipeline(state)
+        elif method == "pre_mortem": await self._run_pre_mortem_pipeline(state)
+        elif method == "bayesian": await self._run_bayesian_pipeline(state)
+        elif method == "dialectical": await self._run_dialectical_pipeline(state)
         else: await self._run_multi_perspective_pipeline(state)
 
         # --- UNIVERSAL END PHASE ---
@@ -147,6 +153,7 @@ class ARAPipeline:
 
     async def _run_iterative_pipeline(self, state: PipelineState):
         MAX_ROUNDS = 3
+        CONVERGENCE_THRESHOLD = 8.5
         for i in range(MAX_ROUNDS):
             self._log("ITERATIVE", f"Starting round {i+1}/{MAX_ROUNDS}", state)
             await self._phase_2_perspectives(state, use_reflexion=True)
@@ -154,18 +161,26 @@ class ARAPipeline:
             # Store insights for the next round
             new_memories = [s.steel_man for s in state.scores if s.steel_man]
             state.reflexion_memory.extend(new_memories)
+            # A2: Early convergence exit
+            if state.scores:
+                mean_score = sum(s.logical_consistency for s in state.scores) / len(state.scores)
+                if mean_score >= CONVERGENCE_THRESHOLD:
+                    self._log("ITERATIVE", f"Converged at round {i+1} (mean={mean_score:.2f}≥{CONVERGENCE_THRESHOLD}). Stopping early.", state)
+                    break
             if i < MAX_ROUNDS - 1: # Don't clear on last round
                 state.candidates, state.scores, state.top_candidates = [], [], []
 
     async def _run_debate_pipeline(self, state: PipelineState):
         await self._phase_debate_opening(state)
         await self._phase_debate_rebuttal(state)
+        await self._phase_debate_cross_examine(state)  # A5
         await self._phase_debate_judge(state)
 
     async def _run_jury_pipeline(self, state: PipelineState):
         await self._phase_jury_generate(state)
         await self._phase_jury_critique(state)
         await self._phase_jury_verify_and_meta_eval(state)
+        await self._phase_jury_weighted_ranking(state)  # A3
 
     async def _run_research_pipeline(self, state: PipelineState):
         await self._phase_research_web_search(state)
@@ -734,10 +749,19 @@ class ARAPipeline:
         )
         data = extract_json(raw)
         state.scientific_state["test_results"] = data.get("test_results", [])
+        # A1: Inline Bayesian posterior update — compute posterior for each hypothesis
+        hypotheses = state.scientific_state.get("hypotheses", [])
+        test_results = state.scientific_state.get("test_results", [])
+        for hyp in hypotheses:
+            hyp_id = hyp.get("id", "")
+            tests = [t for t in test_results if t.get("hypothesis_id") == hyp_id]
+            supported = sum(1 for t in tests if t.get("result") == "SUPPORTED")
+            hyp["posterior_probability"] = round(supported / max(len(tests), 1), 2)
+        state.scientific_state["hypotheses"] = hypotheses
     async def _phase_socratic_question(self, state: PipelineState):
         self._log("SOCRATIC", "Generating Socratic questions...", state)
         raw, _ = await self.router.call(
-            role="primary",
+            role="destructive",  # A4: questioner uses destructive role for genuine challenge
             system_prompt=phases.SOCRATIC_QUESTION_SYSTEM,
             user_prompt=phases.socratic_question_prompt(state)
         )
@@ -747,12 +771,249 @@ class ARAPipeline:
     async def _phase_socratic_answer(self, state: PipelineState):
         self._log("SOCRATIC", "Attempting Dialectic answers...", state)
         raw, _ = await self.router.call(
-            role="scoring", # Using scoring role for the 'student' response
+            role="constructive",  # A4: answerer uses constructive role — genuinely different model
             system_prompt=phases.SOCRATIC_ANSWER_SYSTEM,
             user_prompt=phases.socratic_answer_prompt(state)
         )
         data = extract_json(raw)
         state.socratic_state["answers"] = data.get("answers", [])
+
+    # ─────────────────────────────────────────────────────────────────
+    # Track A: Existing Method Improvements
+    # ─────────────────────────────────────────────────────────────────
+
+    async def _phase_debate_cross_examine(self, state: PipelineState):
+        """A5: Cross-examination — each side challenges the other's specific claims."""
+        self._log("DEBATE", "Running cross-examination...", state)
+        side_a_claims = []
+        side_b_claims = []
+        for rd in state.debate_rounds:
+            if rd.get("phase") == "rebuttal":
+                if rd.get("side") == "A":
+                    side_a_claims.append(rd.get("content", "")[:400])
+                elif rd.get("side") == "B":
+                    side_b_claims.append(rd.get("content", "")[:400])
+        tasks = [
+            self.router.call(
+                role="constructive",
+                system_prompt=phases.DEBATE_CROSS_SYSTEM,
+                user_prompt=phases.debate_cross_examine_prompt(state, "A", side_b_claims),
+            ),
+            self.router.call(
+                role="destructive",
+                system_prompt=phases.DEBATE_CROSS_SYSTEM,
+                user_prompt=phases.debate_cross_examine_prompt(state, "B", side_a_claims),
+            ),
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for r in results:
+            if isinstance(r, Exception):
+                self._log("DEBATE", f"Cross-examine error: {r}", state)
+                continue
+            raw, _ = r
+            data = extract_json(raw)
+            state.debate_rounds.append({
+                "phase": "cross_examine",
+                "side": data.get("side", "?"),
+                "challenges": data.get("challenges", []),
+            })
+
+    async def _phase_jury_weighted_ranking(self, state: PipelineState):
+        """A3: Rerank generators by critic reliability weights."""
+        self._log("JURY", "Computing reliability-weighted ranking...", state)
+        reliability: dict[str, float] = {}
+        if state.meta_evaluation:
+            reliability = state.meta_evaluation.critic_reliability or {}
+        generator_scores: dict[str, float] = {}
+        for crit_score in state.scores:
+            crit_id = (
+                crit_score.perspective.value
+                if hasattr(crit_score.perspective, "value")
+                else str(crit_score.perspective)
+            )
+            weight = reliability.get(crit_id, 1.0)
+            for cand in state.candidates:
+                gen_id = (
+                    cand.perspective.value
+                    if hasattr(cand.perspective, "value")
+                    else str(cand.perspective)
+                )
+                generator_scores[gen_id] = generator_scores.get(gen_id, 0.0) + (
+                    crit_score.logical_consistency * weight
+                )
+        state.jury_weighted_ranking = sorted(
+            generator_scores.keys(),
+            key=lambda gid: generator_scores[gid],
+            reverse=True,
+        )
+        self._log("JURY", f"Weighted ranking: {state.jury_weighted_ranking}", state)
+
+    # ─────────────────────────────────────────────────────────────────
+    # B1: Pre-Mortem Analysis
+    # ─────────────────────────────────────────────────────────────────
+
+    async def _run_pre_mortem_pipeline(self, state: PipelineState):
+        await self._phase_pre_mortem_failure(state)
+        await self._phase_pre_mortem_backtrack(state)
+        await self._phase_pre_mortem_signals(state)
+        await self._phase_pre_mortem_redesign(state)
+
+    async def _phase_pre_mortem_failure(self, state: PipelineState):
+        self._log("PRE-MORTEM", "Constructing failure narrative...", state)
+        raw, _ = await self.router.call(
+            role="destructive",
+            system_prompt=phases.PRE_MORTEM_FAILURE_SYSTEM,
+            user_prompt=phases.pre_mortem_failure_prompt(state),
+        )
+        data = extract_json(raw)
+        state.pre_mortem_state["failure_narrative"] = data
+
+    async def _phase_pre_mortem_backtrack(self, state: PipelineState):
+        self._log("PRE-MORTEM", "Identifying root cause pivot point...", state)
+        raw, _ = await self.router.call(
+            role="scoring",
+            system_prompt=phases.PRE_MORTEM_BACKTRACK_SYSTEM,
+            user_prompt=phases.pre_mortem_backtrack_prompt(state),
+        )
+        data = extract_json(raw)
+        state.pre_mortem_state["root_cause"] = data
+
+    async def _phase_pre_mortem_signals(self, state: PipelineState):
+        self._log("PRE-MORTEM", "Identifying early warning signals...", state)
+        raw, _ = await self.router.call(
+            role="scoring",
+            system_prompt=phases.PRE_MORTEM_SIGNALS_SYSTEM,
+            user_prompt=phases.pre_mortem_signals_prompt(state),
+        )
+        data = extract_json(raw)
+        state.pre_mortem_state["early_signals"] = data.get("early_signals", [])
+        state.pre_mortem_state["monitoring_cadence"] = data.get("monitoring_cadence", "")
+
+    async def _phase_pre_mortem_redesign(self, state: PipelineState):
+        self._log("PRE-MORTEM", "Generating hardened redesign...", state)
+        raw, _ = await self.router.call(
+            role="synthesis",
+            system_prompt=phases.PRE_MORTEM_REDESIGN_SYSTEM,
+            user_prompt=phases.pre_mortem_redesign_prompt(state),
+        )
+        data = extract_json(raw)
+        state.pre_mortem_state["hardened_solution"] = data.get("hardened_solution", "")
+        state.pre_mortem_state["safeguards"] = data.get("safeguards", [])
+        state.pre_mortem_state["checkpoints"] = data.get("checkpoints", [])
+        state.pre_mortem_state["rollback_plan"] = data.get("rollback_plan", "")
+
+    # ─────────────────────────────────────────────────────────────────
+    # B2: Bayesian Reasoning
+    # ─────────────────────────────────────────────────────────────────
+
+    async def _run_bayesian_pipeline(self, state: PipelineState):
+        await self._phase_bayesian_priors(state)
+        await self._phase_bayesian_likelihood(state)
+        await self._phase_bayesian_posterior(state)
+        await self._phase_bayesian_sensitivity(state)
+
+    async def _phase_bayesian_priors(self, state: PipelineState):
+        self._log("BAYESIAN", "Eliciting prior distributions...", state)
+        raw, _ = await self.router.call(
+            role="constructive",
+            system_prompt=phases.BAYESIAN_PRIOR_SYSTEM,
+            user_prompt=phases.bayesian_prior_prompt(state),
+        )
+        data = extract_json(raw)
+        state.bayesian_state["hypotheses_with_priors"] = data.get("hypotheses", [])
+
+    async def _phase_bayesian_likelihood(self, state: PipelineState):
+        self._log("BAYESIAN", "Assessing likelihoods...", state)
+        raw, _ = await self.router.call(
+            role="destructive",
+            system_prompt=phases.BAYESIAN_LIKELIHOOD_SYSTEM,
+            user_prompt=phases.bayesian_likelihood_prompt(state),
+        )
+        data = extract_json(raw)
+        state.bayesian_state["evidence_likelihoods"] = data.get("likelihoods", [])
+        state.bayesian_state["observations"] = data.get("observations", [])
+
+    async def _phase_bayesian_posterior(self, state: PipelineState):
+        self._log("BAYESIAN", "Computing posteriors...", state)
+        raw, _ = await self.router.call(
+            role="scoring",
+            system_prompt=phases.BAYESIAN_POSTERIOR_SYSTEM,
+            user_prompt=phases.bayesian_posterior_prompt(state),
+        )
+        data = extract_json(raw)
+        state.bayesian_state["posteriors"] = data.get("posteriors", [])
+        state.bayesian_state["most_probable"] = data.get("most_probable", "")
+
+    async def _phase_bayesian_sensitivity(self, state: PipelineState):
+        self._log("BAYESIAN", "Running sensitivity analysis...", state)
+        raw, _ = await self.router.call(
+            role="synthesis",
+            system_prompt=phases.BAYESIAN_SENSITIVITY_SYSTEM,
+            user_prompt=phases.bayesian_sensitivity_prompt(state),
+        )
+        data = extract_json(raw)
+        state.bayesian_state["sensitivity_results"] = data.get("sensitivity_analysis", [])
+        state.bayesian_state["most_sensitive_assumption"] = data.get("most_sensitive_assumption", "")
+
+    # ─────────────────────────────────────────────────────────────────
+    # B3: Dialectical Reasoning (Hegelian Aufhebung)
+    # ─────────────────────────────────────────────────────────────────
+
+    async def _run_dialectical_pipeline(self, state: PipelineState):
+        await self._phase_dialectical_thesis(state)
+        await self._phase_dialectical_antithesis(state)
+        await self._phase_dialectical_contradictions(state)
+        await self._phase_dialectical_aufhebung(state)
+
+    async def _phase_dialectical_thesis(self, state: PipelineState):
+        self._log("DIALECTICAL", "Formulating thesis...", state)
+        raw, _ = await self.router.call(
+            role="constructive",
+            system_prompt=phases.DIALECTICAL_THESIS_SYSTEM,
+            user_prompt=phases.dialectical_thesis_prompt(state),
+        )
+        data = extract_json(raw)
+        state.dialectical_state["thesis"] = data.get("thesis", "")
+        state.dialectical_state["key_commitments"] = data.get("key_commitments", [])
+        state.dialectical_state["thesis_assumptions"] = data.get("assumptions", [])
+
+    async def _phase_dialectical_antithesis(self, state: PipelineState):
+        self._log("DIALECTICAL", "Formulating antithesis...", state)
+        raw, _ = await self.router.call(
+            role="destructive",
+            system_prompt=phases.DIALECTICAL_ANTITHESIS_SYSTEM,
+            user_prompt=phases.dialectical_antithesis_prompt(state),
+        )
+        data = extract_json(raw)
+        state.dialectical_state["antithesis"] = data.get("antithesis", "")
+        state.dialectical_state["contradictions_exposed"] = data.get("contradictions_exposed", [])
+        state.dialectical_state["negated_commitments"] = data.get("negated_commitments", [])
+
+    async def _phase_dialectical_contradictions(self, state: PipelineState):
+        self._log("DIALECTICAL", "Analyzing contradictions...", state)
+        raw, _ = await self.router.call(
+            role="scoring",
+            system_prompt=phases.DIALECTICAL_CONTRADICTIONS_SYSTEM,
+            user_prompt=phases.dialectical_contradictions_prompt(state),
+        )
+        data = extract_json(raw)
+        state.dialectical_state["irreconcilable"] = data.get("irreconcilable", [])
+        state.dialectical_state["compatible"] = data.get("compatible", [])
+        state.dialectical_state["synthesis_candidates"] = data.get("synthesis_candidates", [])
+
+    async def _phase_dialectical_aufhebung(self, state: PipelineState):
+        self._log("DIALECTICAL", "Formulating Aufhebung...", state)
+        raw, _ = await self.router.call(
+            role="synthesis",
+            system_prompt=phases.DIALECTICAL_AUFHEBUNG_SYSTEM,
+            user_prompt=phases.dialectical_aufhebung_prompt(state),
+        )
+        data = extract_json(raw)
+        state.dialectical_state["aufhebung"] = data.get("aufhebung", "")
+        state.dialectical_state["preserved_from_thesis"] = data.get("preserved_from_thesis", [])
+        state.dialectical_state["preserved_from_antithesis"] = data.get("preserved_from_antithesis", [])
+        state.dialectical_state["transcended"] = data.get("transcended", "")
+        state.dialectical_state["new_insights"] = data.get("new_insights", [])
 
     async def _run_recovery_path(self, state: PipelineState, candidate_to_verify: SolutionCandidate | GenerationCandidate) -> None:
         """Executes a cross-verification path for a potentially problematic candidate."""

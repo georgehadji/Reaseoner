@@ -298,3 +298,230 @@ DEEP_READ_SYSTEM = "You are an expert at extracting and summarizing key informat
 
 def deep_read_prompt(state: PipelineState, url: str, title: str) -> str:
     return f'{get_language_instruction(state)}\n\nOriginal Problem: {state.problem}\n\nURL: {url}\nTitle: {title}\n\nExtract and summarize the key information from this page that is relevant to solving the problem. Focus on facts, data, and evidence. Output ONLY valid JSON.\n\nOutput JSON: {{"summary": "<comprehensive summary>", "key_facts": ["<fact1>", "<fact2>"], "relevant_quotes": ["<quote1>"]}}'
+
+
+# ─────────────────────────────────────────────────────────────────────
+# A5: DEBATE — CROSS-EXAMINATION
+# ─────────────────────────────────────────────────────────────────────
+
+DEBATE_CROSS_SYSTEM = "You are cross-examining opposing counsel. Challenge specific claims with evidence. Be precise and direct. Output ONLY valid JSON."
+
+def debate_cross_examine_prompt(state: PipelineState, side: str, opponent_claims: list) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'You are Side {side}. Your opponent made these claims:\n'
+        f'{json.dumps(opponent_claims, indent=2)}\n\n'
+        f'Challenge each claim with counter-evidence or logical contradiction.\n\n'
+        f'Output JSON: {{"side": "{side}", "challenges": ['
+        f'{{"claim": "<claim>", "challenge": "<counter-evidence>", "verdict": "REFUTED|WEAKENED|STANDS"}}]}}'
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# B1: PRE-MORTEM ANALYSIS
+# ─────────────────────────────────────────────────────────────────────
+
+PRE_MORTEM_FAILURE_SYSTEM = "You are a post-mortem analyst. Assume failure has already occurred and reconstruct why. Be specific and unflinching. Output ONLY valid JSON."
+
+def pre_mortem_failure_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'It is exactly 1 year later. The solution to this problem catastrophically failed. '
+        f'Write the post-mortem as if it already happened. Be vivid, specific, and brutally honest.\n\n'
+        f'Output JSON: {{"scenario": "<failure scenario name>", '
+        f'"what_happened": "<narrative of the failure>", '
+        f'"immediate_triggers": ["<trigger>"], '
+        f'"affected_stakeholders": ["<stakeholder>"], '
+        f'"severity": "catastrophic|severe|moderate"}}'
+    )
+
+PRE_MORTEM_BACKTRACK_SYSTEM = "You are a root cause analyst. Given a failure, identify the single most critical decision that led to it. Output ONLY valid JSON."
+
+def pre_mortem_backtrack_prompt(state: PipelineState) -> str:
+    failure = state.pre_mortem_state.get("failure_narrative", {})
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {state.problem}\n\n'
+        f'Post-Mortem:\n{json.dumps(failure, indent=2)}\n\n'
+        f'Trace back to the single initial decision that was the pivot point. '
+        f'What seemingly reasonable choice, made early, set this failure in motion?\n\n'
+        f'Output JSON: {{"pivot_decision": "<the decision>", '
+        f'"decision_point": "<when it was made>", '
+        f'"why_it_seemed_reasonable": "<the reason>", '
+        f'"cascade": ["<cascade step>"]}}'
+    )
+
+PRE_MORTEM_SIGNALS_SYSTEM = "You are an early warning specialist. Identify observable signals that would have predicted failure before it happened. Output ONLY valid JSON."
+
+def pre_mortem_signals_prompt(state: PipelineState) -> str:
+    root_cause = state.pre_mortem_state.get("root_cause", {})
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Root Cause:\n{json.dumps(root_cause, indent=2)}\n\n'
+        f'What observable signals appeared in the first 30 days after implementation '
+        f'that, in hindsight, were early warnings of the coming failure?\n\n'
+        f'Output JSON: {{"early_signals": ['
+        f'{{"signal": "<observable event>", "day": 1, "how_to_detect": "<measurement>", "action_threshold": "<when to act>"}}], '
+        f'"monitoring_cadence": "<frequency>"}}'
+    )
+
+PRE_MORTEM_REDESIGN_SYSTEM = "You are a solution architect. Redesign the original solution hardened against the identified failure modes. Output ONLY valid JSON."
+
+def pre_mortem_redesign_prompt(state: PipelineState) -> str:
+    pm = state.pre_mortem_state
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'Failure: {json.dumps(pm.get("failure_narrative", {}).get("what_happened", ""), indent=0)}\n'
+        f'Root Cause: {json.dumps(pm.get("root_cause", {}).get("pivot_decision", ""), indent=0)}\n'
+        f'Early Signals: {json.dumps([s.get("signal") for s in pm.get("early_signals", [])], indent=0)}\n\n'
+        f'Redesign the solution to be robust against these failure modes. '
+        f'Add specific safeguards, checkpoints, and rollback mechanisms.\n\n'
+        f'Output JSON: {{"hardened_solution": "<redesigned approach>", '
+        f'"safeguards": ["<specific safeguard>"], '
+        f'"checkpoints": [{{"milestone": "<m>", "go_nogo_criterion": "<criterion>"}}], '
+        f'"rollback_plan": "<what to do if failing>"}}'
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# B2: BAYESIAN REASONING
+# ─────────────────────────────────────────────────────────────────────
+
+BAYESIAN_PRIOR_SYSTEM = "You are a Bayesian epistemologist. Elicit prior probability distributions over competing hypotheses. Be explicit about uncertainty. Output ONLY valid JSON."
+
+def bayesian_prior_prompt(state: PipelineState) -> str:
+    sub_problems = [sp.description for sp in (state.decomposition.sub_problems if state.decomposition else [])]
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'Sub-problems:\n{json.dumps(sub_problems, indent=2)}\n\n'
+        f'Identify 2-4 competing hypotheses that could explain or solve this problem. '
+        f'Assign prior probability P(H) to each (must sum to approximately 1.0). '
+        f'Explain your reasoning for each prior.\n\n'
+        f'Output JSON: {{"hypotheses": [{{"id": "H1", "statement": "<hypothesis>", '
+        f'"prior_probability": 0.4, "reasoning": "<why this prior>"}}]}}'
+    )
+
+BAYESIAN_LIKELIHOOD_SYSTEM = "You are a Bayesian analyst. For each hypothesis, assess the likelihood of key observations. Output ONLY valid JSON."
+
+def bayesian_likelihood_prompt(state: PipelineState) -> str:
+    hypotheses = state.bayesian_state.get("hypotheses_with_priors", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'Hypotheses:\n{json.dumps(hypotheses, indent=2)}\n\n'
+        f'Identify 3-5 key observations or pieces of evidence relevant to this problem. '
+        f'For each observation, assess P(E|H) and P(E|not-H) for each hypothesis.\n\n'
+        f'Output JSON: {{"observations": ["<obs 1>"], "likelihoods": [{{"observation": "<obs>", '
+        f'"hypothesis_id": "H1", "p_e_given_h": 0.8, "p_e_given_not_h": 0.2, '
+        f'"reasoning": "<why>"}}]}}'
+    )
+
+BAYESIAN_POSTERIOR_SYSTEM = "You are a Bayesian statistician. Apply Bayes' theorem to compute posterior probabilities. Show your reasoning. Output ONLY valid JSON."
+
+def bayesian_posterior_prompt(state: PipelineState) -> str:
+    hypotheses = state.bayesian_state.get("hypotheses_with_priors", [])
+    likelihoods = state.bayesian_state.get("evidence_likelihoods", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Priors:\n{json.dumps(hypotheses, indent=2)}\n\n'
+        f'Likelihoods:\n{json.dumps(likelihoods, indent=2)}\n\n'
+        f'Apply Bayes rule P(H|E) ∝ P(E|H) × P(H) to compute posterior for each hypothesis '
+        f'after observing all evidence. Normalize so posteriors sum to 1.0.\n\n'
+        f'Output JSON: {{"posteriors": [{{"hypothesis_id": "H1", "posterior_probability": 0.75, '
+        f'"explanation": "<how evidence updated belief>"}}], '
+        f'"most_probable": "H1"}}'
+    )
+
+BAYESIAN_SENSITIVITY_SYSTEM = "You are a decision analyst. Test which prior assumptions most change the posterior if they are wrong. Output ONLY valid JSON."
+
+def bayesian_sensitivity_prompt(state: PipelineState) -> str:
+    hypotheses = state.bayesian_state.get("hypotheses_with_priors", [])
+    posteriors = state.bayesian_state.get("posteriors", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Priors:\n{json.dumps(hypotheses, indent=2)}\n\n'
+        f'Posteriors:\n{json.dumps(posteriors, indent=2)}\n\n'
+        f'For each major prior assumption, assess: if this prior were very different, '
+        f'how much would the posterior change? Which assumption is most critical?\n\n'
+        f'Output JSON: {{"sensitivity_analysis": [{{"assumption": "<prior assumption>", '
+        f'"if_wrong": "<alternative>", "posterior_shift": "small|medium|large", '
+        f'"importance": "critical|high|medium"}}], '
+        f'"most_sensitive_assumption": "<which assumption>"}}'
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────
+# B3: DIALECTICAL REASONING (Hegelian Aufhebung)
+# ─────────────────────────────────────────────────────────────────────
+
+DIALECTICAL_THESIS_SYSTEM = "You are articulating a Hegelian thesis: the strongest possible affirmative position. Be rigorous and committed. Output ONLY valid JSON."
+
+def dialectical_thesis_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'Articulate the strongest possible affirmative thesis position. '
+        f'Be fully committed — this is the strongest case FOR one approach, not a balanced view.\n\n'
+        f'Output JSON: {{"thesis": "<strongest affirmative position>", '
+        f'"key_commitments": ["<commitment 1>"], '
+        f'"assumptions": ["<assumption>"]}}'
+    )
+
+DIALECTICAL_ANTITHESIS_SYSTEM = "You are exposing the internal contradictions of a thesis. Negate its commitments rigorously. Output ONLY valid JSON."
+
+def dialectical_antithesis_prompt(state: PipelineState) -> str:
+    thesis = state.dialectical_state.get("thesis", "")
+    commitments = state.dialectical_state.get("key_commitments", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'Thesis: {thesis}\n\n'
+        f'Key Commitments: {json.dumps(commitments, indent=2)}\n\n'
+        f'Expose the internal contradictions of this thesis. '
+        f'Negate each commitment. Show why this position is untenable.\n\n'
+        f'Output JSON: {{"antithesis": "<negation of thesis>", '
+        f'"contradictions_exposed": ["<contradiction in thesis>"], '
+        f'"negated_commitments": [{{"commitment": "<c>", "negation": "<n>"}}]}}'
+    )
+
+DIALECTICAL_CONTRADICTIONS_SYSTEM = "You are a dialectical analyst. Classify which contradictions are truly irreconcilable and which can be transcended at a higher level. Output ONLY valid JSON."
+
+def dialectical_contradictions_prompt(state: PipelineState) -> str:
+    thesis = state.dialectical_state.get("thesis", "")
+    antithesis = state.dialectical_state.get("antithesis", "")
+    contradictions = state.dialectical_state.get("contradictions_exposed", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Thesis: {thesis}\n\nAntithesis: {antithesis}\n\n'
+        f'Contradictions: {json.dumps(contradictions, indent=2)}\n\n'
+        f'Classify each contradiction: irreconcilable (cannot coexist) vs '
+        f'compatible (can resolve at higher conceptual level). '
+        f'Identify synthesis candidates — truths from each side worth preserving.\n\n'
+        f'Output JSON: {{"irreconcilable": ["<contradiction>"], '
+        f'"compatible": ["<resolves at higher level>"], '
+        f'"synthesis_candidates": ["<truth from thesis>", "<truth from antithesis>"]}}'
+    )
+
+DIALECTICAL_AUFHEBUNG_SYSTEM = "You are performing Hegelian Aufhebung: qualitative transcendence, NOT compromise. Preserve the truths of both positions at a higher level. Output ONLY valid JSON."
+
+def dialectical_aufhebung_prompt(state: PipelineState) -> str:
+    d = state.dialectical_state
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {state.problem}\n\n'
+        f'Thesis: {d.get("thesis", "")}\n'
+        f'Antithesis: {d.get("antithesis", "")}\n'
+        f'Compatible contradictions: {json.dumps(d.get("compatible", []), indent=2)}\n'
+        f'Synthesis candidates: {json.dumps(d.get("synthesis_candidates", []), indent=2)}\n\n'
+        f'Perform Aufhebung: a qualitatively higher position that transcends both. '
+        f'This is NOT a compromise — it must contain genuine novelty.\n\n'
+        f'Output JSON: {{"aufhebung": "<higher position>", '
+        f'"preserved_from_thesis": ["<truth kept>"], '
+        f'"preserved_from_antithesis": ["<truth kept>"], '
+        f'"transcended": "<what was left behind>", '
+        f'"new_insights": ["<genuine novelty>"]}}'
+    )

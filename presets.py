@@ -646,6 +646,110 @@ PRESETS: dict[str, PipelinePreset] = {
             "synthesis":       "deepseek-v3",
         },
     ),
+
+    # ─────────────────────────────────────────────────────────────────
+    # B1: PRE-MORTEM ANALYSIS
+    # ─────────────────────────────────────────────────────────────────
+    "pre-mortem-budget": PipelinePreset(
+        name="Pre-Mortem (Budget)",
+        description=(
+            "Prospective failure analysis — budget tier. "
+            "Failure narrative → root cause → early signals → hardened redesign. "
+            "Gary Klein (1989) methodology."
+        ),
+        primary_id="deepseek-v3",
+        routing={
+            "destructive":    "deepseek-v3",
+            "scoring":        "deepseek-v3",
+            "synthesis":      "deepseek-v3",
+        },
+        required_env_vars=["DEEPSEEK_API_KEY"],
+    ),
+    "pre-mortem-premium": PipelinePreset(
+        name="Pre-Mortem (Premium)",
+        description=(
+            "Prospective failure analysis — premium tier with Claude Sonnet. "
+            "Four-phase pre-mortem: failure narrative → root cause → early signals → hardened redesign."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "destructive":    "claude-sonnet",
+            "scoring":        "claude-sonnet",
+            "synthesis":      "claude-sonnet",
+        },
+        required_env_vars=["ANTHROPIC_API_KEY"],
+    ),
+
+    # ─────────────────────────────────────────────────────────────────
+    # B2: BAYESIAN REASONING
+    # ─────────────────────────────────────────────────────────────────
+    "bayesian-budget": PipelinePreset(
+        name="Bayesian Reasoning (Budget)",
+        description=(
+            "Four-phase Bayesian epistemology — budget tier. "
+            "Prior elicitation → likelihood assessment → posterior update → sensitivity analysis. "
+            "Jaynes (2003) methodology."
+        ),
+        primary_id="deepseek-v3",
+        routing={
+            "constructive":   "deepseek-v3",
+            "destructive":    "deepseek-v3",
+            "scoring":        "deepseek-v3",
+            "synthesis":      "deepseek-v3",
+        },
+        required_env_vars=["DEEPSEEK_API_KEY"],
+    ),
+    "bayesian-premium": PipelinePreset(
+        name="Bayesian Reasoning (Premium)",
+        description=(
+            "Four-phase Bayesian epistemology — premium tier with Claude Sonnet. "
+            "Prior elicitation → likelihood assessment → posterior update → sensitivity analysis."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "constructive":   "claude-sonnet",
+            "destructive":    "claude-sonnet",
+            "scoring":        "claude-sonnet",
+            "synthesis":      "claude-sonnet",
+        },
+        required_env_vars=["ANTHROPIC_API_KEY"],
+    ),
+
+    # ─────────────────────────────────────────────────────────────────
+    # B3: DIALECTICAL REASONING
+    # ─────────────────────────────────────────────────────────────────
+    "dialectical-budget": PipelinePreset(
+        name="Dialectical Reasoning (Budget)",
+        description=(
+            "Hegelian dialectic — budget tier. "
+            "Thesis → antithesis → contradiction analysis → Aufhebung. "
+            "Qualitative transcendence, not compromise."
+        ),
+        primary_id="deepseek-v3",
+        routing={
+            "constructive":   "deepseek-v3",
+            "destructive":    "deepseek-v3",
+            "scoring":        "deepseek-v3",
+            "synthesis":      "deepseek-v3",
+        },
+        required_env_vars=["DEEPSEEK_API_KEY"],
+    ),
+    "dialectical-premium": PipelinePreset(
+        name="Dialectical Reasoning (Premium)",
+        description=(
+            "Hegelian dialectic — premium tier with Claude Sonnet. "
+            "Thesis → antithesis → contradiction analysis → Aufhebung. "
+            "Genuine philosophical transcendence of the thesis-antithesis."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "constructive":   "claude-sonnet",
+            "destructive":    "claude-sonnet",
+            "scoring":        "claude-sonnet",
+            "synthesis":      "claude-sonnet",
+        },
+        required_env_vars=["ANTHROPIC_API_KEY"],
+    ),
 }
 
 

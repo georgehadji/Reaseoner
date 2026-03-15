@@ -761,6 +761,19 @@ def get_preset(name: str) -> PipelinePreset:
     return PRESETS[name]
 
 
+def is_valid_preset_name(name: str) -> bool:
+    """Return True if name is a known preset key."""
+    return name in PRESETS
+
+
+def resolve_preset_name(name: str) -> str:
+    """Return name unchanged if valid, else raise ValueError."""
+    if name not in PRESETS:
+        available = ", ".join(sorted(PRESETS.keys()))
+        raise ValueError(f"Unknown preset: {name!r}. Available: {available}")
+    return name
+
+
 def build_custom_router(routing_dict: dict[str, str]) -> ProviderRouter:
     """
     Build a ProviderRouter from a custom role→model_id dict.

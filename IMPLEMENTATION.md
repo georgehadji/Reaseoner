@@ -769,3 +769,11 @@ Two SRE passes were run against the `security-fixes-implementation` branch. All 
 | BUG-013 | High | `models.py` | `Decomposition(**dec)` in `_from_dict` fails with `TypeError` on `--resume`: LLM returns extra keys (`causal_chain`, `critical_sources`, etc.) not in the dataclass; `raw_response` had no default | Added `raw_response: str = ""` default; filter unknown keys via `dc_fields()` in `_from_dict` before unpacking |
 | BUG-014 | High | `pipeline.py` | `CritiqueScore(**s)` from raw LLM dict has 6 required fields with no defaults; any omitted field crashes `_phase_3_critique` and `_phase_debate_judge`, leaving `state.scores` empty | Replaced both call sites with `_parse_critique_scores()` helper using `.get()` with defaults for all fields and enum coercion for `perspective` |
 | BUG-015 | Medium | `pipeline.py` | `StressTestResult(**st)` bypasses `ScenarioType.coerce()` (used in `_from_dict`), so live run stores raw string if LLM uses variant spelling (e.g., "constraint-violation") | Replaced with explicit construction calling `ScenarioType.coerce()` for consistency between live run and `--resume` |
+
+### Pass 5 — `pipeline.py`, `models.py`
+
+| ID | Severity | File | Root Cause | Fix |
+|----|----------|------|-----------|-----|
+| BUG-016 | High | `pipeline.py` | `data.get("queries", [])[:3]` silently slices a string when LLM returns `"queries": "search term"` — downstream loop iterates single characters as search queries | Added `isinstance(_raw_q, list)` guard at both call sites (context-vetting + research phases) |
+| BUG-017 | Medium | `models.py` | `a['text']`, `a['label']`, `a['rationale']` direct subscripts in Assumption deserialization crash `--resume` with `KeyError` when any field is absent in a partial state file | Replaced with `.get()` + fallback defaults and per-entry try/except |
+| BUG-018 | Medium | `models.py` | `CriticDimensionScore(**v)` and `CriticScore(**cs)` have required fields with no defaults — truncated Jury state file causes `TypeError` on resume | Explicit field-by-field `.get()` construction with nested try/except to skip malformed entries |

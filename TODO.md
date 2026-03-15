@@ -170,6 +170,15 @@
   14. **Phase-3 critique TypeError** — `CritiqueScore(**s)` from raw LLM dict has 6 required fields with no defaults; any omitted field crashes with `TypeError`, leaving `state.scores` empty and synthesis without input. Replaced both call sites with `_parse_critique_scores()` helper using `.get()` with defaults for all fields and enum coercion for `perspective`.
   15. **Stress test scenario type mismatch** — `StressTestResult(**st)` bypasses `ScenarioType.coerce()` (used in `_from_dict`), so live run stores raw string if LLM uses variant spelling (e.g., "constraint-violation"). Replaced with explicit construction calling `coerce()` for consistency between live run and `--resume`.
 
+### 18. SRE Reliability Pass — Input Validation & Resume Robustness (2026-03-15, Pass 5)
+- **Status**: ✅ Fixed
+- **Branch**: `security-fixes-implementation`
+- **Files changed**: `models.py`, `pipeline.py`
+- **Bugs fixed**:
+  16. **Search queries silent type corruption** — `data.get("queries", [])[:3]` slices a string if the LLM returns `"queries": "search term"` instead of a list, producing single characters ("s", "e", "a") that are silently sent as search queries. Added `isinstance(list)` guard at both call sites (context-vetting phase and research phase).
+  17. **Assumption deserialization KeyError** — `a['text']`, `a['label']`, `a['rationale']` in `_from_dict` used direct subscripts; any assumption missing `rationale` (common in partial state files) crashed `--resume` with `KeyError`. Replaced with `.get()` + fallback defaults and a per-entry try/except.
+  18. **CriticDimensionScore / CriticScore TypeError on Jury resume** — `CriticDimensionScore(**v)` and `CriticScore(**cs)` have required fields with no defaults; a truncated state file caused `TypeError` crashing the entire resume. Replaced with explicit field-by-field `.get()` construction and nested try/except to skip malformed entries.
+
 ---
 
 ## 📊 Implementation Summary

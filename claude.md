@@ -6,8 +6,9 @@ This file is a short project snapshot for agent sessions. The main product docum
 
 Reasoner is a structured AI reasoning app, not a general-purpose chatbot. It runs a problem through a multi-phase pipeline and returns an executive answer plus the reasoning trail.
 
-Current methods:
+Current methods (10 total):
 
+**Legacy (7):**
 - `Multi-Perspective`
 - `Iterative`
 - `Debate`
@@ -15,6 +16,11 @@ Current methods:
 - `Socratic`
 - `Jury`
 - `Research`
+
+**Sprint 1+2 (3 new):**
+- `Pre-Mortem` — prospective hindsight risk analysis (Gary Klein)
+- `Bayesian` — Bayesian epistemology with prior/likelihood/posterior analysis (Jaynes 2003)
+- `Dialectical` — Hegelian dialectic with thesis/antithesis/Aufhebung transcendence
 
 Current UI preset tiers:
 
@@ -25,6 +31,9 @@ Current UI preset tiers:
 - `Socratic`: `socratic-budget` → `socratic-premium`
 - `Jury`: `jury-budget` → `jury-balanced` → `jury-premium`
 - `Research`: `research-budget` → `research-balanced` → `research-premium`
+- `Pre-Mortem`: `pre-mortem-budget` → `pre-mortem-premium`
+- `Bayesian`: `bayesian-budget` → `bayesian-premium`
+- `Dialectical`: `dialectical-budget` → `dialectical-premium`
 
 Backward-compatible aliases still resolve for older names such as `evolutionary*` and `orchestrated*`.
 
@@ -99,6 +108,59 @@ API:
 - `Research / Premium` is the heaviest path and uses `sonar-deep-research`.
 - CLI default preset is still `claude-only`; UI default is `basic-budget`.
 
+## Implementation notes for new methods (Sprint 1+2, 2026-03-16)
+
+### Architectural invariants (preserved across all new methods)
+
+1. **State field pattern**: All new methods use `dict[str, Any]` fields initialized with `field(default_factory=dict)` in `PipelineState`. Accessed via `.get()`, never direct subscript. Enables `--resume` with partial/older state files.
+   - `pre_mortem_state`, `bayesian_state`, `dialectical_state` + Track A `jury_weighted_ranking`
+
+2. **Routing keys**: New methods only use existing routing roles (`primary`, `constructive`, `destructive`, `systemic`, `synthesis`). No new keys added in Sprint 1+2 to avoid bloated preset validation.
+
+3. **Phase dispatch**: New `_run_*_pipeline()` methods in `pipeline.py` detected by preset name in `_get_method_from_preset()`. Pattern:
+   ```python
+   if "pre-mortem" in preset_name:
+       return await self._run_pre_mortem_pipeline(state)
+   ```
+
+4. **Rendering dispatch**: New `MethodType` enum entries + dedicated `_render_*()` functions. Dispatch updated in `render_pipeline_result()`. Pattern mirrors existing methods.
+
+5. **Async gather safety**: All parallel LLM calls use `asyncio.gather(*tasks, return_exceptions=True)` + per-task exception checking. No silent failures.
+
+6. **JSON extraction**: All LLM responses parsed via `parsing.extract_json()`, never direct JSON parsing. Handles provider variations (markdown fences, reasoning preambles).
+
+### Track A improvements (5 surgical patches)
+
+- **A1 Scientific**: Posterior probability = supported_count / total_tests. Applied after test results.
+- **A2 Iterative**: Early exit when mean logical_consistency ≥ 8.5. Saves tokens.
+- **A3 Jury**: Weighted ranking via `weighted_score = sum(score * reliability) / sum(reliabilities)`. After meta-evaluation.
+- **A4 Socratic**: Questioner uses role="destructive" (challenges), answerer uses role="constructive" (defends). Restores dual-role principle.
+- **A5 Debate**: New cross-examination phase between rebuttal and judge. Both sides challenge specific claims.
+
+### Track B new methods (3 methods, ~1,000 lines total)
+
+All three methods follow identical architectural pattern:
+
+1. **Phase structure**: Classification (shared) → 4 unique phases → Synthesis (shared)
+2. **State management**: Method-specific `*_state: dict` with 4-6 keys per method
+3. **No new routing keys**: Pre-Mortem uses `primary/constructive/synthesis`, Bayesian uses `primary`, Dialectical uses `constructive/destructive/synthesis`
+4. **Renderer complexity**: 3-5 panels/tables per method. Use Rich library (Table, Panel, Columns)
+5. **UI integration**: One dropdown option per method + METHOD_PRESETS/PHASES/HINTS entries in config.js
+
+### Future extensions (Sprint 3+4)
+
+**Sprint 3 (B4 Analogical + B5 Delphi):**
+- B5 Delphi requires 4 NEW routing keys: `expert_1`, `expert_2`, `expert_3`, `expert_4`
+- Update `_KNOWN_ROUTING_ROLES` in `presets.py` BEFORE adding Delphi presets
+- Delphi creates 4 expert LLM calls per round, aggregates results, then second round with visibility
+
+**Sprint 4 (B6 Causal):**
+- Most complex method (~480 lines)
+- Uses Pearl's causal hierarchy (association → intervention → counterfactual)
+- No new routing keys needed
+
+---
+
 ## Reliability fixes applied (2026-03-15, branch: security-fixes-implementation)
 
 All fixes are committed and pushed. Do not re-introduce these patterns:
@@ -114,6 +176,18 @@ All fixes are committed and pushed. Do not re-introduce these patterns:
 | 7 | `main.py` | 7 unterminated string/f-string literals — CLI `SyntaxError` on startup | Fixed all with `\n` escape sequences |
 | 8 | `api.py` | Global `_cancel_flag: bool` shared across concurrent SSE requests — one stop cancels all | Per-run `_cancelled_runs: dict[str,bool]` keyed by `uuid4()` |
 | 9 | `renderer.py` | TOCTOU: `.get("key")` check then `["key"]` subscript — not atomic | Stored `.get()` in local variable before iterating |
+| 10 | `api.py` | `_load_cache()` uncaught `JSONDecodeError` on corrupt; `_save_cache()` non-atomic `write_text()` | try/except + deletion on read; `.tmp` write + `Path.replace()` on write |
+| 11 | `core/search.py` | `reset_discovery_client()` nulled reference without `aclose()` — leaked httpx connection pool | Schedule `aclose()` on event loop (or `asyncio.run()` fallback) |
+| 12 | `llm.py` | `build_provider()` accepted empty string from `os.environ.get(key, "")` as valid API key | Raise early `ValueError` if key empty and provider not `is_local` |
+| 13 | `models.py` | `Decomposition(**dec)` on `--resume` fails: LLM returns extra keys (`causal_chain`, `critical_sources`); `raw_response` has no default | Added `raw_response: str = ""`; filter unknown keys via `dc_fields()` in `_from_dict` |
+| 14 | `pipeline.py` | `CritiqueScore(**s)` from raw LLM dict—6 required fields with no defaults; any omission crashes _phase_3_critique and _phase_debate_judge | Replaced both call sites with `_parse_critique_scores()` helper using `.get()` + defaults |
+| 15 | `pipeline.py` | `StressTestResult(**st)` bypasses `ScenarioType.coerce()`; raw strings stored if LLM uses variant spelling | Explicit construction with `ScenarioType.coerce()` + per-entry error isolation |
+| 16 | `pipeline.py` | `data.get("queries", [])[:3]` slices a string if LLM returns string instead of list → iterates single chars as search queries | Added `isinstance(list)` guard at both call sites (context-vetting + research) |
+| 17 | `models.py` | `a['text']`, `a['label']`, `a['rationale']` direct subscripts in Assumption deserialization → `KeyError` on `--resume` with any partial assumption | Replaced with `.get()` + fallback defaults + per-entry try/except |
+| 18 | `models.py` | `CriticDimensionScore(**v)` and `CriticScore(**cs)` — required fields with no defaults crash Jury `--resume` with truncated state | Explicit field-by-field construction with `.get()` defaults and nested try/except |
+| 19 | `widgets.py`, `api.py` | Sync `get_weather_data()` shadow overwrote async version; `/api/weather` hit `RuntimeError` (event loop already running) or infinite recursion | Removed sync wrapper + `get_weather_data_async`; api.py now `await`s the async function directly |
+| 20 | `widgets.py` | `info.get("currentPrice", 0)` returns `None` when Yahoo Finance key exists with null value → `TypeError` in arithmetic | Replaced with `or 0` guard; division guarded with `if _prev else 0.0` |
+| 21 | `models.py` | `_from_dict` stress_results used direct subscripts (`sr['scenario']`, `sr['survival_rate']`) — `--resume` crashed with `KeyError` on partial state files | Replaced with `.get()` + `ScenarioType.coerce()` + per-entry try/except (mirrors BUG-015 live-pipeline fix) |
 
 
 

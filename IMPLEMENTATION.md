@@ -777,3 +777,11 @@ Two SRE passes were run against the `security-fixes-implementation` branch. All 
 | BUG-016 | High | `pipeline.py` | `data.get("queries", [])[:3]` silently slices a string when LLM returns `"queries": "search term"` — downstream loop iterates single characters as search queries | Added `isinstance(_raw_q, list)` guard at both call sites (context-vetting + research phases) |
 | BUG-017 | Medium | `models.py` | `a['text']`, `a['label']`, `a['rationale']` direct subscripts in Assumption deserialization crash `--resume` with `KeyError` when any field is absent in a partial state file | Replaced with `.get()` + fallback defaults and per-entry try/except |
 | BUG-018 | Medium | `models.py` | `CriticDimensionScore(**v)` and `CriticScore(**cs)` have required fields with no defaults — truncated Jury state file causes `TypeError` on resume | Explicit field-by-field `.get()` construction with nested try/except to skip malformed entries |
+
+### Pass 6 — `widgets.py`, `api.py`, `models.py`
+
+| ID | Severity | File | Root Cause | Fix |
+|----|----------|------|-----------|-----|
+| BUG-019 | High | `widgets.py`, `api.py` | Sync `get_weather_data()` at line 194 overwrote the async version (line 117); `/api/weather` called it from FastAPI's event loop → `RuntimeError: This event loop is already running`; `get_weather_data_async()` called `await get_weather_data()` (sync) → infinite recursion | Removed sync wrapper and `get_weather_data_async`; `api.py` now `await`s the async function |
+| BUG-020 | Medium | `widgets.py` | `info.get("currentPrice", 0)` returns `None` when Yahoo Finance key exists with null value; `None - 0` raised `TypeError` in price arithmetic | Replaced with `or 0` guard; division protected with `if _prev else 0.0` |
+| BUG-021 | Medium | `models.py` | `_from_dict` stress_results used direct subscripts (`sr['scenario']`, `sr['survival_rate']`, etc.) — `KeyError` on `--resume` with partial/older state files | Replaced with `.get()` + `ScenarioType.coerce()` + per-entry try/except (mirrors live-pipeline BUG-015 fix) |

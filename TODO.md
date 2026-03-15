@@ -179,6 +179,15 @@
   17. **Assumption deserialization KeyError** — `a['text']`, `a['label']`, `a['rationale']` in `_from_dict` used direct subscripts; any assumption missing `rationale` (common in partial state files) crashed `--resume` with `KeyError`. Replaced with `.get()` + fallback defaults and a per-entry try/except.
   18. **CriticDimensionScore / CriticScore TypeError on Jury resume** — `CriticDimensionScore(**v)` and `CriticScore(**cs)` have required fields with no defaults; a truncated state file caused `TypeError` crashing the entire resume. Replaced with explicit field-by-field `.get()` construction and nested try/except to skip malformed entries.
 
+### 19. SRE Reliability Pass — Widget Bugs & Resume Consistency (2026-03-15, Pass 6)
+- **Status**: ✅ Fixed
+- **Branch**: `security-fixes-implementation`
+- **Files changed**: `widgets.py`, `api.py`, `models.py`
+- **Bugs fixed**:
+  19. **Weather widget function shadowing** — Sync `get_weather_data()` (line 194) overwrote the async version (line 117). `/api/weather` called the sync version from FastAPI's event loop → `RuntimeError: This event loop is already running`. The sync wrapper called `get_weather_data_async()` which called `await get_weather_data()` (sync version) → infinite recursion / RuntimeError. Removed both the sync wrapper and `get_weather_data_async()`; api.py now `await`s the async function directly.
+  20. **Stock widget None arithmetic** — `info.get("currentPrice", 0)` returns `None` when Yahoo Finance returns the key with a null value. `None - 0` raised `TypeError`. Replaced with `or 0` guard; division guarded with `if _prev else 0.0`.
+  21. **Stress results `_from_dict` direct subscripts** — `sr['scenario']`, `sr['survival_rate']`, etc. in `_from_dict` raised `KeyError` on `--resume` with partial/older state files. Replaced with `.get()` + `ScenarioType.coerce()` + per-entry try/except, matching the BUG-015 fix applied to the live pipeline.
+
 ---
 
 ## 📊 Implementation Summary

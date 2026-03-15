@@ -183,13 +183,32 @@ def _cache_key(req: "RunRequest") -> str:
 def _load_cache(key: str) -> list[dict] | None:
     path = CACHE_DIR / f"{key}.json"
     if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            # Treat a corrupt or unreadable cache file as a cache miss and
+            # remove it so the next run can write a clean file.
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
     return None
 
 
 def _save_cache(key: str, events: list[dict]) -> None:
+    # Write to a sibling temp file then rename so that a crash during the
+    # write never leaves a corrupt (partial) JSON file at the target path.
+    # os.replace() is atomic on POSIX and best-effort on Windows.
     path = CACHE_DIR / f"{key}.json"
-    path.write_text(json.dumps(events), encoding="utf-8")
+    tmp = CACHE_DIR / f"{key}.tmp"
+    try:
+        tmp.write_text(json.dumps(events), encoding="utf-8")
+        tmp.replace(path)
+    except OSError:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _get_method_from_preset(preset: str) -> str:

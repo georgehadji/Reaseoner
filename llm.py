@@ -39,6 +39,48 @@ class LLMError(ARAError):
     retryable = False
 
 
+def _requests_strict_json(system_prompt: str, user_prompt: str) -> bool:
+    """Heuristic: only enable structured outputs for prompts that already demand pure JSON."""
+    combined = f"{system_prompt}\n{user_prompt}"
+    if "[SOLUTION]" in combined:
+        return False
+    return (
+        "Output ONLY valid JSON" in combined
+        or "Output JSON:" in combined
+    )
+
+
+def _perplexity_response_format(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+) -> dict[str, Any] | None:
+    """
+    Return a permissive JSON-schema response format for compatible Perplexity models.
+
+    sonar-reasoning-pro is excluded because it may emit <think> sections even when
+    response_format is requested.
+    sonar-deep-research is excluded because long-form research calls can collapse to
+    an empty `{}` under a permissive generic schema.
+    """
+    if not model.startswith("sonar"):
+        return None
+    if model in {"sonar-reasoning-pro", "sonar-deep-research"}:
+        return None
+    if not _requests_strict_json(system_prompt, user_prompt):
+        return None
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "ara_pipeline_response",
+            "schema": {
+                "type": "object",
+                "additionalProperties": True,
+            },
+        },
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────
 # BASE
 # ─────────────────────────────────────────────────────────────────────
@@ -88,6 +130,9 @@ class BaseLLMProvider(ABC):
 # ─────────────────────────────────────────────────────────────────────
 
 class OpenAICompatibleProvider(BaseLLMProvider):
+    # Shared connection pool (httpx client) across all instances for performance
+    _shared_pool: "httpx.AsyncClient | None" = None
+
     def __init__(
         self,
         model: str,
@@ -95,12 +140,39 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         base_url: str | None = None,
         max_retries: int = 3,
         extra_body: dict[str, Any] | None = None,
+        http_client: "openai.AsyncOpenAI | None" = None,
     ) -> None:
         super().__init__(model, max_retries)
         self.extra_body = extra_body or {}
+
+        # If a pre-configured OpenAI client is provided, use it directly
+        if http_client is not None:
+            self.client = http_client
+            return
+
+        # Initialize the shared pool if it doesn't exist
+        if OpenAICompatibleProvider._shared_pool is None:
+            try:
+                import httpx
+                # Create HTTP client with connection pooling
+                OpenAICompatibleProvider._shared_pool = httpx.AsyncClient(
+                    limits=httpx.Limits(
+                        max_keepalive_connections=20,
+                        max_connections=100,
+                        keepalive_expiry=30.0,
+                    ),
+                    timeout=httpx.Timeout(60.0, connect=10.0),
+                )
+            except ImportError:
+                # Fallback: if httpx is not available, AsyncOpenAI will create its own pool
+                pass
+
+        # Create a dedicated OpenAI wrapper for this specific key/URL, 
+        # but share the underlying connection pool.
         self.client = openai.AsyncOpenAI(
             api_key=api_key or "missing",
             base_url=base_url,
+            http_client=OpenAICompatibleProvider._shared_pool,
         )
 
     async def complete(
@@ -146,10 +218,35 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             }
             # DO NOT send temperature parameter - let model use its default
             # This prevents "unsupported value" errors for models that only accept default temperature
-        
+
         if self.extra_body:
             kwargs["extra_body"] = self.extra_body
-        response = await self.client.chat.completions.create(**kwargs)
+        response_format = _perplexity_response_format(self.model, system_prompt, user_prompt)
+        if response_format is not None:
+            kwargs["response_format"] = response_format
+
+        try:
+            response = await self.client.chat.completions.create(**kwargs)
+        except Exception as exc:
+            # Safe fallback: if Perplexity rejects the structured output envelope, retry once
+            # without response_format instead of failing the whole phase.
+            if response_format is not None:
+                message = str(exc).lower()
+                if (
+                    getattr(exc, "status_code", None) == 400
+                    or "response_format" in message
+                    or "json_schema" in message
+                ):
+                    logger.warning(
+                        "Structured outputs rejected by model '%s' — retrying without response_format",
+                        self.model,
+                    )
+                    kwargs.pop("response_format", None)
+                    response = await self.client.chat.completions.create(**kwargs)
+                else:
+                    raise
+            else:
+                raise
         return response.choices[0].message.content or ""
 
 
@@ -285,8 +382,8 @@ _REGISTRY: dict[str, dict[str, Any]] = {
     "o3-mini":       {"cls": "openai", "model": "o3-mini",      "env": "OPENAI_API_KEY"},
 
     # ── GOOGLE GEMINI ───────────────────────────────────────────────
-    "gemini-pro":    {"cls": "google", "model": "gemini-2.0-pro-exp",   "env": "GOOGLE_API_KEY"},
-    "gemini-flash":  {"cls": "google", "model": "gemini-2.0-flash-exp", "env": "GOOGLE_API_KEY"},
+    "gemini-pro":    {"cls": "google", "model": "gemini-2.5-pro",   "env": "GOOGLE_API_KEY"},
+    "gemini-flash":  {"cls": "google", "model": "gemini-2.5-flash", "env": "GOOGLE_API_KEY"},
 
     # ── XAI / GROK (real-time X data) ───────────────────────────────
     "grok-4-heavy": {"cls": "compat", "model": "grok-4-heavy", "base": "https://api.x.ai/v1", "env": "XAI_API_KEY"},
@@ -295,10 +392,37 @@ _REGISTRY: dict[str, dict[str, Any]] = {
     "grok-3-mini":  {"cls": "compat", "model": "grok-3-mini",   "base": "https://api.x.ai/v1", "env": "XAI_API_KEY"},
 
     # ── PERPLEXITY SONAR (web-grounded — unique for Phase 3 critique) ─
-    "sonar-pro":           {"cls": "compat", "model": "sonar-pro",           "base": "https://api.perplexity.ai", "env": "PERPLEXITY_API_KEY"},
-    "sonar":               {"cls": "compat", "model": "sonar",               "base": "https://api.perplexity.ai", "env": "PERPLEXITY_API_KEY"},
-    "sonar-reasoning-pro": {"cls": "compat", "model": "sonar-reasoning-pro", "base": "https://api.perplexity.ai", "env": "PERPLEXITY_API_KEY"},
-    "sonar-deep-research": {"cls": "compat", "model": "sonar-deep-research", "base": "https://api.perplexity.ai", "env": "PERPLEXITY_API_KEY"},
+    "sonar-pro": {
+        "cls": "compat",
+        "model": "sonar-pro",
+        "base": "https://api.perplexity.ai",
+        "env": "PERPLEXITY_API_KEY",
+        # Balanced default for grounded scoring / verification.
+        "extra_body": {"web_search_options": {"search_context_size": "medium"}},
+    },
+    "sonar": {
+        "cls": "compat",
+        "model": "sonar",
+        "base": "https://api.perplexity.ai",
+        "env": "PERPLEXITY_API_KEY",
+        # Cheapest Perplexity tier for lightweight classification / retrieval.
+        "extra_body": {"web_search_options": {"search_context_size": "low"}},
+    },
+    "sonar-reasoning-pro": {
+        "cls": "compat",
+        "model": "sonar-reasoning-pro",
+        "base": "https://api.perplexity.ai",
+        "env": "PERPLEXITY_API_KEY",
+        "extra_body": {"web_search_options": {"search_context_size": "medium"}},
+    },
+    "sonar-deep-research": {
+        "cls": "compat",
+        "model": "sonar-deep-research",
+        "base": "https://api.perplexity.ai",
+        "env": "PERPLEXITY_API_KEY",
+        # Keep exhaustive research available, but bias toward lower reasoning cost by default.
+        "extra_body": {"reasoning_effort": "low"},
+    },
 
     # ── MISTRAL (EU sovereign, Apache 2.0) ──────────────────────────
     "mistral-large-3": {"cls": "mistral", "model": "mistral-large-latest",  "env": "MISTRAL_API_KEY"},
@@ -332,6 +456,18 @@ _REGISTRY: dict[str, dict[str, Any]] = {
     # ── MINIMAX (cost-efficient, ~Claude Opus 4.6 quality) ───────────
     "minimax-m2":   {"cls": "compat", "model": "MiniMax-Text-01", "base": "https://api.minimax.chat/v1", "env": "MINIMAX_API_KEY"},
     "minimax-m2-5": {"cls": "compat", "model": "abab6.5s-chat",   "base": "https://api.minimax.chat/v1", "env": "MINIMAX_API_KEY"},
+
+    # ── OLLAMA (local LLMs) ──────────────────────────────────────────
+    # Note: Uses OLLAMA_BASE_URL env var, defaults to http://localhost:11434
+    # Models are dynamically fetched from the Ollama instance
+    "ollama-llama3":   {"cls": "compat", "model": "llama3",        "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-llama3.1": {"cls": "compat", "model": "llama3.1",      "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-llama3.2": {"cls": "compat", "model": "llama3.2",      "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-mistral":  {"cls": "compat", "model": "mistral",       "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-codellama":{"cls": "compat", "model": "codellama",      "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-qwen2":    {"cls": "compat", "model": "qwen2",          "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-gemma2":   {"cls": "compat", "model": "gemma2",         "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-phi3":     {"cls": "compat", "model": "phi3",           "base": "http://localhost:11434/v1", "env": "OLLAMA_API_KEY", "is_local": True},
 }
 
 
@@ -345,6 +481,14 @@ def build_provider(model_id: str, api_key: str | None = None) -> BaseLLMProvider
         )
     cfg = _REGISTRY[model_id]
     key = api_key or os.environ.get(cfg["env"], "")
+    # Fail fast: an empty key passes silently to SDK constructors but errors at
+    # the first API call, making the root cause hard to trace.  Local providers
+    # (Ollama) are exempt — they accept a dummy key.
+    if not key and not cfg.get("is_local"):
+        raise ValueError(
+            f"API key for '{model_id}' is not set. "
+            f"Set the {cfg['env']} environment variable."
+        )
 
     match cfg["cls"]:
         case "anthropic":
@@ -356,8 +500,17 @@ def build_provider(model_id: str, api_key: str | None = None) -> BaseLLMProvider
         case "mistral":
             return MistralProvider(model=cfg["model"], api_key=key)
         case "compat":
+            # Handle Ollama base URL from environment
+            base_url = cfg.get("base")
+            if cfg.get("is_local") and os.environ.get("OLLAMA_BASE_URL"):
+                base_url = os.environ.get("OLLAMA_BASE_URL")
+            # For Ollama, api_key is optional (can be any dummy value)
+            ollama_key = key if key else "ollama"
             return OpenAICompatibleProvider(
-                model=cfg["model"], api_key=key, base_url=cfg.get("base")
+                model=cfg["model"],
+                api_key=ollama_key,
+                base_url=base_url,
+                extra_body=cfg.get("extra_body"),
             )
         case _:
             raise ValueError(f"Unknown cls: {cfg['cls']!r}")
@@ -372,6 +525,7 @@ def list_models() -> dict[str, list[str]]:
         "mistral": "mistral", "ministral": "mistral", "codestral": "mistral",
         "deepseek": "deepseek", "qwen": "qwen",
         "kimi": "kimi", "glm": "glm", "minimax": "minimax",
+        "ollama": "ollama",
     }
     groups: dict[str, list[str]] = {k: [] for k in set(prefix_map.values())}
     for mid in sorted(_REGISTRY):
@@ -397,14 +551,25 @@ class ProviderRouter:
         primary: BaseLLMProvider,
         routing_table: dict[str, BaseLLMProvider] | None = None,
         fallback_table: dict[str, BaseLLMProvider] | None = None,
+        verbose: bool = False,
     ) -> None:
         self.primary = primary
         self.routing_table: dict[str, BaseLLMProvider] = routing_table or {}
         # Explicit per-role fallbacks. Roles absent here fall back to primary automatically.
         self.fallback_table: dict[str, BaseLLMProvider] = fallback_table or {}
+        self.verbose = verbose
 
     def get(self, role: str) -> BaseLLMProvider:
-        return self.routing_table.get(role, self.primary)
+        provider = self.routing_table.get(role)
+        if provider is None:
+            if role != "primary" and self.verbose:
+                logger.warning(
+                    "Role '%s' not found in routing table — falling back to primary '%s'. "
+                    "Check preset routing configuration.",
+                    role, self.primary.model
+                )
+            return self.primary
+        return provider
 
     async def call(
         self,
@@ -469,9 +634,10 @@ class ProviderRouter:
         primary_id: str,
         routing: dict[str, str] | None = None,
         fallback_routing: dict[str, str] | None = None,
+        verbose: bool = False,
     ) -> "ProviderRouter":
         """Build router from model ID strings."""
         primary = build_provider(primary_id)
         table = {role: build_provider(mid) for role, mid in (routing or {}).items()}
         fallback_table = {role: build_provider(mid) for role, mid in (fallback_routing or {}).items()}
-        return cls(primary=primary, routing_table=table, fallback_table=fallback_table)
+        return cls(primary=primary, routing_table=table, fallback_table=fallback_table, verbose=verbose)

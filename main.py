@@ -59,7 +59,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 from pipeline import ARAPipeline
 from renderer import export_to_json, render_pipeline_result
 from llm import ProviderRouter, list_models
-from presets import PRESETS, build_custom_router, get_preset, print_presets_summary
+from presets import (
+    PRESETS,
+    build_custom_router,
+    get_preset,
+    is_valid_preset_name,
+    print_presets_summary,
+    resolve_preset_name,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -153,15 +160,36 @@ async def main(args: argparse.Namespace) -> None:
         cmd_list_models()
         return
 
-    # Load problem
-    if args.problem_file:
-        problem_path = Path(args.problem_file)
-        if not problem_path.exists():
-            print(f"[ERROR] File not found: {args.problem_file}")
+    # Handle resume from saved state
+    if args.resume:
+        from models import PipelineState
+        state_path = Path(args.resume)
+        if not state_path.exists():
+            print(f"[ERROR] State file not found: {args.resume}")
             sys.exit(1)
-        problem = problem_path.read_text(encoding="utf-8").strip()
-    else:
-        problem = args.problem.strip()
+        try:
+            state = PipelineState.load(args.resume)
+            print(f"\n{'═'*60}")
+            print(f"  ARA v2.0 — Resumed from saved state")
+            print(f"{'═'*60}")
+            print(f"  Problem: {state.problem[:120]}...")
+            print(f"  Resumed at: {state.task_type.value if state.task_type else 'start'}")
+            print(f"{'═'*60}\n")
+            render_pipeline_result(state)
+            problem = state.problem # Initialize problem for continued pipeline run
+        except Exception as exc:
+            print(f"[ERROR] Failed to load state: {exc}")
+            sys.exit(1)
+    else: # If not resuming, load problem normally
+        # Load problem
+        if args.problem_file:
+            problem_path = Path(args.problem_file)
+            if not problem_path.exists():
+                print(f"[ERROR] File not found: {args.problem_file}")
+                sys.exit(1)
+            problem = problem_path.read_text(encoding="utf-8").strip()
+        else:
+            problem = args.problem.strip()
 
     if not problem:
         print("[ERROR] No problem provided. Use --problem or --problem-file.")
@@ -170,12 +198,24 @@ async def main(args: argparse.Namespace) -> None:
 
     router = build_router(args)
 
+    # Determine initial_state for the pipeline
+    initial_state = None
+    if args.resume:
+        try:
+            initial_state = PipelineState.load(args.resume)
+        except Exception as exc:
+            print(f"[ERROR] Failed to load initial state for pipeline: {exc}")
+            sys.exit(1)
+
     pipeline = ARAPipeline(
         router=router,
+        initial_state=initial_state, # Pass the loaded state
         top_k=args.top_k,
         parallel_perspectives=not args.sequential,
         verbose=not args.quiet,
         preset_name=args.preset or "claude-only",
+        source_type=args.source_type,
+        domain=args.domain or None,
     )
 
     print(f"\n{'═'*60}")
@@ -187,6 +227,7 @@ async def main(args: argparse.Namespace) -> None:
     print(f"  Parallel perspectives: {not args.sequential}")
     print(f"{'═'*60}\n")
 
+
     state = await pipeline.run(problem)
 
     render_pipeline_result(state)
@@ -194,6 +235,10 @@ async def main(args: argparse.Namespace) -> None:
     if args.output:
         export_to_json(state, args.output)
         print(f"\n✓ Full state exported → {args.output}")
+
+    if args.save_state:
+        state.save(args.save_state)
+        print(f"\n✓ State saved → {args.save_state}")
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -203,6 +248,15 @@ async def main(args: argparse.Namespace) -> None:
 def parse_args() -> argparse.Namespace:
     # Build preset choices dynamically
     preset_choices = sorted(PRESETS.keys())
+
+    def _preset_arg(value: str) -> str:
+        if not value:  # Allow empty string to pass through (will use default)
+            return value
+        if not is_valid_preset_name(value):
+            raise argparse.ArgumentTypeError(
+                f"Unknown preset {value!r}. Choices: {', '.join(preset_choices)}"
+            )
+        return resolve_preset_name(value)
 
     parser = argparse.ArgumentParser(
         description="ARA v2.0 — Adaptive Reasoning Architecture Pipeline",
@@ -229,8 +283,7 @@ def parse_args() -> argparse.Namespace:
     routing_ex = routing_group.add_mutually_exclusive_group()
     routing_ex.add_argument(
         "--preset",
-        type=str,
-        choices=preset_choices,
+        type=_preset_arg,
         default="",
         metavar="PRESET_ID",
         help=(
@@ -267,6 +320,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Suppress phase-by-phase logging",
     )
+    pipeline_group.add_argument(
+        "--source-type",
+        type=str, default="general",
+        choices=["general", "academic", "social", "news", "code"],
+        help="Source type for iterative RAG: general, academic, social, news, code (default: general)",
+    )
+    pipeline_group.add_argument(
+        "--domain",
+        type=str, default="",
+        metavar="DOMAIN",
+        help="Limit search to specific domain (e.g., github.com, stackoverflow.com)",
+    )
 
     # ── Output
     output_group = parser.add_argument_group("Output")
@@ -275,6 +340,21 @@ def parse_args() -> argparse.Namespace:
         type=str, default="",
         metavar="PATH",
         help="Export full pipeline state to JSON file",
+    )
+    output_group.add_argument(
+        "--save-state",
+        type=str, default="",
+        metavar="PATH",
+        help="Save pipeline state to file for later resume",
+    )
+
+    # ── State Management
+    state_group = parser.add_argument_group("State Management")
+    state_group.add_argument(
+        "--resume",
+        type=str, default="",
+        metavar="PATH",
+        help="Resume pipeline from saved state file",
     )
 
     # ── Discovery

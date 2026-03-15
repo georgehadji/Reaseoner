@@ -157,6 +157,9 @@
   7. **`main.py` CLI broken** — 7 unterminated string/f-string literals (literal newlines inside quotes instead of `\n`); plus smart-quote corruption in argparse help. Fixed all, restoring CLI entry point.
   8. **Global cancel-flag race condition** — `_cancel_flag: bool` shared across all concurrent SSE requests; stopping one run could cancel another. Replaced with per-run `_cancelled_runs: dict[str, bool]` keyed by `uuid4()`; stop endpoint targets `_active_run_id`.
   9. **Renderer TOCTOU `KeyError`** — `state.scientific_state["hypotheses"]` subscript used after `state.scientific_state.get("hypotheses")` truthiness check; not atomic. Stored `.get()` result in local variable for all 4 locations in Scientific/Socratic renderers.
+  10. **Cache file corruption** — `_load_cache()` uncaught `JSONDecodeError` on corrupt files; `_save_cache()` non-atomic `write_text()` could leave truncated files on crash. Added try/except + deletion for reads; `.tmp` write + `Path.replace()` atomic rename for writes.
+  11. **DiscoveryClient resource leak** — `reset_discovery_client()` nulled global reference without calling `aclose()`, leaking httpx connection pool. Save old client, schedule `aclose()` on event loop (or `asyncio.run()` fallback).
+  12. **Empty API key accepted** — `build_provider()` accepted empty string from `os.environ.get(key, "")` as valid API key; error only surfaced at first SDK call with opaque auth. Added early `ValueError` if key is empty and provider is not `is_local`.
 
 ---
 

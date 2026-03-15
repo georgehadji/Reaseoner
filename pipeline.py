@@ -12,9 +12,9 @@ import logging
 import time
 from dataclasses import asdict
 from typing import Any
-from models import (PipelineState, SolutionCandidate, CritiqueScore, StressTestResult, 
-                GenerationCandidate, CriticScore, VerificationResult, MetaEvaluation,
-                ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit)
+from models import (PipelineState, SolutionCandidate, CritiqueScore, StressTestResult,
+                ScenarioType, GenerationCandidate, CriticScore, VerificationResult,
+                MetaEvaluation, ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit)
 from parsing import ParseError, extract_json, safe_list, safe_float
 from llm import ProviderRouter
 from core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
@@ -23,6 +23,33 @@ from neuro.server import create_neuro_router # Assuming neuro is an available mo
 import phases # Refactored phases
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_critique_scores(raw_scores: list[dict]) -> list[CritiqueScore]:
+    """Safely build CritiqueScore objects from raw LLM output.
+
+    CritiqueScore has six required fields with no defaults.  LLMs occasionally
+    omit one; passing the dict directly via **s raises TypeError and empties
+    state.scores for the entire run.  Additionally, `perspective` arrives as a
+    plain string and must be coerced to the PerspectiveType enum.
+    """
+    out: list[CritiqueScore] = []
+    for s in raw_scores:
+        try:
+            out.append(CritiqueScore(
+                perspective=PerspectiveType(s["perspective"]),
+                logical_consistency=float(s.get("logical_consistency") or 0),
+                evidence_support=float(s.get("evidence_support") or 0),
+                failure_resilience=float(s.get("failure_resilience") or 0),
+                feasibility=float(s.get("feasibility") or 0),
+                bias_flags=s.get("bias_flags") or [],
+                steel_man=s.get("steel_man") or "",
+                confidence_vs_accuracy_penalty=float(s.get("confidence_vs_accuracy_penalty") or 0),
+            ))
+        except (KeyError, ValueError, TypeError) as exc:
+            logger.warning("Skipping malformed CritiqueScore entry: %s", exc)
+    return out
+
 
 class ARAPipeline:
     """
@@ -442,7 +469,7 @@ class ARAPipeline:
         self._log("PHASE-3", "Critiquing candidates...", state)
         raw, _ = await self.router.call(role="scoring", system_prompt=phases.CRITIQUE_SYSTEM, user_prompt=phases.critique_prompt(state))
         data = extract_json(raw)
-        state.scores = [CritiqueScore(**s) for s in data.get("scores", [])]
+        state.scores = _parse_critique_scores(data.get("scores", []))
         # Pruning logic and potential recovery path
         for score in state.scores:
             if score.confidence_vs_accuracy_penalty > 5.0: # Threshold for triggering recovery
@@ -459,7 +486,21 @@ class ARAPipeline:
         self._log("PHASE-4", "Running stress tests...", state)
         raw, _ = await self.router.call(role="stress_testing", system_prompt=phases.STRESS_SYSTEM, user_prompt=phases.stress_test_prompt(state))
         data = extract_json(raw)
-        state.stress_results = [StressTestResult(**st) for st in data.get("stress_tests", [])]
+        # Use ScenarioType.coerce() so that LLM variants ("constraint violation",
+        # "constraint-violation") all map to the correct enum member.  Without it,
+        # the raw string is stored and any enum-identity check downstream fails.
+        _stress: list[StressTestResult] = []
+        for st in data.get("stress_tests", []):
+            try:
+                _stress.append(StressTestResult(
+                    scenario=ScenarioType.coerce(st.get("scenario", "optimal")),
+                    survival_rate=float(st.get("survival_rate") or 0),
+                    failure_mode=st.get("failure_mode") or "",
+                    recovery_path=st.get("recovery_path") or "",
+                ))
+            except (ValueError, TypeError) as exc:
+                logger.warning("Skipping malformed StressTestResult: %s", exc)
+        state.stress_results = _stress
 
     # --- DEBATE PHASES ---
     async def _phase_debate_opening(self, state: PipelineState):
@@ -510,7 +551,7 @@ class ARAPipeline:
         self._log("DEBATE", "Round 3: Judging", state)
         raw, _ = await self.router.call(role="systemic", system_prompt=phases.DEBATE_JUDGE_SYSTEM, user_prompt=phases.debate_judge_prompt(state))
         data = extract_json(raw)
-        state.scores = [CritiqueScore(**s) for s in data.get("scores", [])] # Store judge's scores
+        state.scores = _parse_critique_scores(data.get("scores", []))  # Store judge's scores
         # This data can then be used by the final synthesis step
 
     # --- Other method-specific phase implementations would go here (Jury, Research, etc.) ---

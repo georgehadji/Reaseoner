@@ -6,7 +6,7 @@ Adaptive Reasoning Architecture v2.0
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields as dc_fields
 from enum import Enum
 from typing import Any, TYPE_CHECKING
 from datetime import datetime
@@ -93,7 +93,9 @@ class Decomposition:
     sub_problems: list[SubProblem]
     assumptions: list[Assumption]
     failure_modes: list[str]
-    raw_response: str
+    # raw_response is only populated when explicitly saved by the pipeline.
+    # Default "" so _from_dict can filter unknown LLM keys without crashing.
+    raw_response: str = ""
 
 
 @dataclass
@@ -401,7 +403,10 @@ class PipelineState:
         if data.get('started_at'):
             data['started_at'] = datetime.fromisoformat(data['started_at'])
         
-        # Reconstruct decomposition
+        # Reconstruct decomposition.
+        # The LLM returns extra keys (causal_chain, critical_sources, …) that are
+        # not in the Decomposition dataclass.  Strip unknown keys before unpacking
+        # so that a saved state with any LLM-generated decomposition can be resumed.
         if data.get('decomposition'):
             dec = data['decomposition']
             dec['sub_problems'] = [SubProblem(**sp) for sp in dec.get('sub_problems', [])]
@@ -412,7 +417,8 @@ class PipelineState:
                     rationale=a['rationale']
                 ) for a in dec.get('assumptions', [])
             ]
-            data['decomposition'] = Decomposition(**dec)
+            _known = {f.name for f in dc_fields(Decomposition)}
+            data['decomposition'] = Decomposition(**{k: v for k, v in dec.items() if k in _known})
         
         # Reconstruct candidates with PerspectiveType
         if data.get('candidates'):

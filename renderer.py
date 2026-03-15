@@ -3,10 +3,11 @@ ARA Pipeline - Output Renderer
 Rich terminal display and JSON export, with method-specific layouts.
 
 Methods:
-  STANDARD    — structured analysis (default for all non-specialized presets)
-  DEBATE      — adversarial competition: Proposition vs Opposition → Verdict
-  EVOLUTIONARY — population generation → fitness selection → optimized solution
-  RESEARCH    — evidence report: quality matrix, claim verification, evidence gaps
+  MULTI_PERSPECTIVE — 4 perspectives: constructive, destructive, systemic, minimalist
+  DEBATE            — adversarial competition: Proposition vs Opposition → Verdict
+  ITERATIVE         — generate → evaluate → select → refine (loop up to 5x)
+  RESEARCH          — evidence report: quality matrix, claim verification, evidence gaps
+  JURY              — 3 generators → 3 critics → verification → meta-evaluation → verdict
 """
 
 from __future__ import annotations
@@ -29,26 +30,61 @@ console = Console()
 
 
 # ─────────────────────────────────────────────────────────────────────
+# HELPER FUNCTIONS
+# ─────────────────────────────────────────────────────────────────────
+
+def _get_attr(obj, key, default=None):
+    """Safely get attribute from dict or object."""
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # METHOD DETECTION
 # ─────────────────────────────────────────────────────────────────────
 
 class MethodType(Enum):
-    STANDARD     = "standard"
-    DEBATE       = "debate"
-    EVOLUTIONARY = "evolutionary"
-    RESEARCH     = "research"
+    MULTI_PERSPECTIVE = "multi-perspective"
+    DEBATE            = "debate"
+    ITERATIVE         = "iterative"
+    RESEARCH          = "research"
+    JURY              = "jury"
+    SCIENTIFIC        = "scientific"
+    SOCRATIC          = "socratic"
 
 
-_DEBATE_PRESETS       = {"debate", "debate-budget"}
-_EVOLUTIONARY_PRESETS = {"evolutionary", "evolutionary-budget"}
-_RESEARCH_PRESETS     = {"research"}
+_DEBATE_PRESETS       = {"debate", "debate-budget", "debate-balanced", "debate-premium"}
+_ITERATIVE_PRESETS    = {
+    "iterative", "iterative-budget", "iterative-balanced", "iterative-premium",
+    "evolutionary", "evolutionary-budget", "evolutionary-balanced",
+}
+_RESEARCH_PRESETS     = {"research", "research-budget", "research-balanced", "research-premium", "research-local-budget"}
+_JURY_PRESETS         = {
+    "jury", "jury-budget", "jury-balanced", "jury-premium",
+    "orchestrated", "orchestrated-budget", "orchestrated-balanced",
+}
+_SCIENTIFIC_PRESETS   = {"scientific", "scientific-budget", "scientific-premium"}
+_SOCRATIC_PRESETS     = {"socratic", "socratic-budget", "socratic-premium"}
+# STANDARD presets (now called MULTI_PERSPECTIVE)
+_MULTI_PERSPECTIVE_PRESETS = {
+    "max-quality", "cost-efficient", "eu-sovereign", "epistemic-diversity",
+    "western-only", "claude-only", "deepseek-only", "basic-budget",
+    "multi-perspective-budget", "multi-perspective-premium"
+}
 
 
 def _method_type(preset_name: str | None) -> MethodType:
     if preset_name in _DEBATE_PRESETS:       return MethodType.DEBATE
-    if preset_name in _EVOLUTIONARY_PRESETS: return MethodType.EVOLUTIONARY
+    if preset_name in _ITERATIVE_PRESETS:    return MethodType.ITERATIVE
     if preset_name in _RESEARCH_PRESETS:     return MethodType.RESEARCH
-    return MethodType.STANDARD
+    if preset_name in _JURY_PRESETS:         return MethodType.JURY
+    if preset_name in _SCIENTIFIC_PRESETS:   return MethodType.SCIENTIFIC
+    if preset_name in _SOCRATIC_PRESETS:     return MethodType.SOCRATIC
+    if preset_name in _MULTI_PERSPECTIVE_PRESETS: return MethodType.MULTI_PERSPECTIVE
+    return MethodType.MULTI_PERSPECTIVE  # default
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -83,15 +119,20 @@ def _render_stress(state: PipelineState, section_title: str = "Phase 4 — Stres
 
 def _render_action_blueprint(state: PipelineState, title: str = "Action Blueprint") -> None:
     fs = state.final_solution
-    if not fs or not fs.action_blueprint:
+    if not fs:
         return
+    
+    action_blueprint = _get_attr(fs, 'action_blueprint', [])
+    if not action_blueprint:
+        return
+        
     table = Table(title=title, box=box.SIMPLE_HEAVY)
     table.add_column("#", width=3)
     table.add_column("Action")
     table.add_column("Horizon", width=12)
     table.add_column("Go Criteria")
     table.add_column("Fallback")
-    for step in fs.action_blueprint:
+    for step in action_blueprint:
         table.add_row(
             str(step.get("step", "?")),
             str(step.get("action", "")),
@@ -149,10 +190,10 @@ def render_routing_table(state: PipelineState) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# STANDARD RENDERER (original behaviour)
+# MULTI-PERSPECTIVE RENDERER
 # ─────────────────────────────────────────────────────────────────────
 
-def _render_standard(state: PipelineState) -> None:
+def _render_multi_perspective(state: PipelineState) -> None:
     duration = _duration(state)
     console.rule(f"[bold blue]ARA v2.0 Pipeline Complete ({duration:.1f}s)[/bold blue]")
 
@@ -208,30 +249,30 @@ def _render_standard(state: PipelineState) -> None:
         fs = state.final_solution
 
         console.print(Panel(
-            fs.core_solution,
+            _get_attr(fs, 'core_solution', ''),
             title="[bold green]CORE SOLUTION[/bold green]",
             box=box.DOUBLE,
             border_style="green",
         ))
 
         insights_text = Text()
-        for i, insight in enumerate(fs.critical_insights, 1):
+        for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
             insights_text.append(f"{i}. {insight}\n\n")
         console.print(Panel(insights_text, title="[yellow]Critical Insights[/yellow]", box=box.ROUNDED))
 
         _render_action_blueprint(state)
 
-        if fs.open_questions:
-            oq_text = "\n".join(f"• {q}" for q in fs.open_questions)
+        if _get_attr(fs, 'open_questions', []):
+            oq_text = "\n".join(f"• {q}" for q in _get_attr(fs, 'open_questions', []))
             console.print(Panel(oq_text, title="[red]Open Questions (Unresolved)[/red]", box=box.ROUNDED))
 
-        meta = fs.meta_audit
+        meta = _get_attr(fs, 'meta_audit', {})
         meta_text = (
-            f"[bold]Most dangerous assumption:[/bold] {meta.most_dangerous_assumption}\n"
-            f"[bold]Dominant bias:[/bold] {meta.dominant_bias}\n"
-            f"[bold]Remaining uncertainty:[/bold] {meta.remaining_uncertainty}\n"
-            f"[bold]If main assumption fails:[/bold] {meta.assumption_failure_impact}\n"
-            f"[bold]Non-obvious insight:[/bold] [italic]{meta.non_obvious_insight}[/italic]"
+            f"[bold]Most dangerous assumption:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
+            f"[bold]Dominant bias:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
+            f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
+            f"[bold]If main assumption fails:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
+            f"[bold]Non-obvious insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
         )
         console.print(Panel(meta_text, title="[cyan]Meta-Cognitive Audit[/cyan]", box=box.ROUNDED))
 
@@ -336,31 +377,31 @@ def _render_debate(state: PipelineState) -> None:
         fs = state.final_solution
 
         console.print(Panel(
-            fs.core_solution,
+            _get_attr(fs, 'core_solution', ''),
             title="[bold green]VERDICT[/bold green]",
             box=box.DOUBLE,
             border_style="green",
         ))
 
-        if fs.critical_insights:
+        if _get_attr(fs, 'critical_insights', []):
             ins_text = Text()
-            for i, insight in enumerate(fs.critical_insights, 1):
+            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
                 ins_text.append(f"{i}. {insight}\n\n")
             console.print(Panel(ins_text, title="[yellow]Key Findings[/yellow]", box=box.ROUNDED))
 
         _render_action_blueprint(state, title="Implementation Ruling")
 
-        if fs.open_questions:
-            oq_text = "\n".join(f"• {q}" for q in fs.open_questions)
+        if _get_attr(fs, 'open_questions', []):
+            oq_text = "\n".join(f"• {q}" for q in _get_attr(fs, 'open_questions', []))
             console.print(Panel(oq_text, title="[red]Unresolved Points[/red]", box=box.ROUNDED))
 
-        meta = fs.meta_audit
+        meta = _get_attr(fs, 'meta_audit', {})
         meta_text = (
-            f"[bold]Most dangerous assumption:[/bold] {meta.most_dangerous_assumption}\n"
-            f"[bold]Dominant bias in judgment:[/bold] {meta.dominant_bias}\n"
-            f"[bold]Remaining uncertainty:[/bold] {meta.remaining_uncertainty}\n"
-            f"[bold]If main assumption fails:[/bold] {meta.assumption_failure_impact}\n"
-            f"[bold]Non-obvious insight:[/bold] [italic]{meta.non_obvious_insight}[/italic]"
+            f"[bold]Most dangerous assumption:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
+            f"[bold]Dominant bias in judgment:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
+            f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
+            f"[bold]If main assumption fails:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
+            f"[bold]Non-obvious insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
         )
         console.print(Panel(meta_text, title="[cyan]Judge's Reservations[/cyan]", box=box.ROUNDED))
 
@@ -368,12 +409,12 @@ def _render_debate(state: PipelineState) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
-# EVOLUTIONARY RENDERER
+# ITERATIVE RENDERER
 # ─────────────────────────────────────────────────────────────────────
 
-def _render_evolutionary(state: PipelineState) -> None:
+def _render_iterative(state: PipelineState) -> None:
     duration = _duration(state)
-    console.rule(f"[bold yellow]EVOLUTIONARY OPTIMIZATION  ({duration:.1f}s)[/bold yellow]")
+    console.rule(f"[bold yellow]ITERATIVE OPTIMIZATION  ({duration:.1f}s)[/bold yellow]")
 
     score_map = {s.perspective: s for s in state.scores}
 
@@ -437,33 +478,33 @@ def _render_evolutionary(state: PipelineState) -> None:
         fs = state.final_solution
 
         console.print(Panel(
-            fs.core_solution,
+            _get_attr(fs, 'core_solution', ''),
             title="[bold green]OPTIMIZED SOLUTION[/bold green]",
             box=box.DOUBLE,
             border_style="green",
         ))
 
-        if fs.critical_insights:
+        if _get_attr(fs, 'critical_insights', []):
             em_text = Text()
-            for i, insight in enumerate(fs.critical_insights, 1):
+            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
                 em_text.append(f"{i}. {insight}\n\n")
             console.print(Panel(em_text, title="[yellow]Emergent Properties[/yellow]", box=box.ROUNDED))
 
         _render_action_blueprint(state, title="Survival Strategy")
 
-        if fs.open_questions:
-            oq_text = "\n".join(f"• {q}" for q in fs.open_questions)
+        if _get_attr(fs, 'open_questions', []):
+            oq_text = "\n".join(f"• {q}" for q in _get_attr(fs, 'open_questions', []))
             console.print(Panel(oq_text, title="[red]Open Hypotheses[/red]", box=box.ROUNDED))
 
-        meta = fs.meta_audit
+        meta = _get_attr(fs, 'meta_audit', {})
         meta_text = (
-            f"[bold]Critical vulnerability:[/bold] {meta.most_dangerous_assumption}\n"
-            f"[bold]Evolutionary pressure detected:[/bold] {meta.dominant_bias}\n"
-            f"[bold]Remaining uncertainty:[/bold] {meta.remaining_uncertainty}\n"
-            f"[bold]If vulnerability exploited:[/bold] {meta.assumption_failure_impact}\n"
-            f"[bold]Emergent insight:[/bold] [italic]{meta.non_obvious_insight}[/italic]"
+            f"[bold]Critical vulnerability:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
+            f"[bold]Iterative pressure detected:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
+            f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
+            f"[bold]If vulnerability exploited:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
+            f"[bold]Emergent insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
         )
-        console.print(Panel(meta_text, title="[cyan]Evolutionary Forces[/cyan]", box=box.ROUNDED))
+        console.print(Panel(meta_text, title="[cyan]Iterative Forces[/cyan]", box=box.ROUNDED))
 
     _render_errors(state)
 
@@ -553,43 +594,261 @@ def _render_research(state: PipelineState) -> None:
         fs = state.final_solution
 
         console.print(Panel(
-            fs.core_solution,
+            _get_attr(fs, 'core_solution', ''),
             title="[bold green]EVIDENCE-GROUNDED SYNTHESIS[/bold green]",
             box=box.DOUBLE,
             border_style="green",
         ))
 
-        if fs.claim_labels:
+        if _get_attr(fs, 'claim_labels', {}):
             claim_table = Table(title="Claim Verification Status", box=box.SIMPLE_HEAVY)
             claim_table.add_column("Status", width=14)
             claim_table.add_column("Claim")
-            for claim, label in fs.claim_labels.items():
+            for claim, label in _get_attr(fs, 'claim_labels', {}).items():
                 color = _label_color(label)
                 claim_table.add_row(f"[{color}]{label.value}[/{color}]", claim)
             console.print(claim_table)
 
-        if fs.open_questions:
-            oq_text = "\n".join(f"• {q}" for q in fs.open_questions)
+        if _get_attr(fs, 'open_questions', []):
+            oq_text = "\n".join(f"• {q}" for q in _get_attr(fs, 'open_questions', []))
             console.print(Panel(oq_text, title="[red]Evidence Gaps (Unverified / Missing Data)[/red]", box=box.ROUNDED))
 
-        if fs.critical_insights:
+        if _get_attr(fs, 'critical_insights', []):
             ins_text = Text()
-            for i, insight in enumerate(fs.critical_insights, 1):
+            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
                 ins_text.append(f"{i}. {insight}\n\n")
             console.print(Panel(ins_text, title="[yellow]Key Findings[/yellow]", box=box.ROUNDED))
 
         _render_action_blueprint(state, title="Recommended Actions")
 
-        meta = fs.meta_audit
+        meta = _get_attr(fs, 'meta_audit', {})
         meta_text = (
-            f"[bold]Critical evidence gap:[/bold] {meta.most_dangerous_assumption}\n"
-            f"[bold]Potential researcher bias:[/bold] {meta.dominant_bias}\n"
-            f"[bold]Remaining uncertainty:[/bold] {meta.remaining_uncertainty}\n"
-            f"[bold]Impact if gap unresolved:[/bold] {meta.assumption_failure_impact}\n"
-            f"[bold]Non-obvious finding:[/bold] [italic]{meta.non_obvious_insight}[/italic]"
+            f"[bold]Critical evidence gap:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
+            f"[bold]Potential researcher bias:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
+            f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
+            f"[bold]Impact if gap unresolved:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
+            f"[bold]Non-obvious finding:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
         )
         console.print(Panel(meta_text, title="[cyan]Epistemic Caveats[/cyan]", box=box.ROUNDED))
 
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# PUBLIC ENTRY POINT
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_jury(state: PipelineState) -> None:
+    """Render the JURY multi-agent evaluation result."""
+    duration = _duration(state)
+    console.rule(f"[bold magenta]JURY EVALUATION  ({duration:.1f}s)[/bold magenta]")
+
+    # Generator Pool
+    if state.generation_candidates:
+        gen_table = Table(title="Generator Pool", box=box.SIMPLE_HEAVY)
+        gen_table.add_column("Generator", style="cyan", width=15)
+        gen_table.add_column("Model", style="white", width=18)
+        gen_table.add_column("Confidence", justify="center", width=12)
+        gen_table.add_column("Approach", style="white")
+
+        for gc in state.generation_candidates:
+            conf_bar = "█" * int(gc.confidence * 10) + "░" * (10 - int(gc.confidence * 10))
+            gen_table.add_row(
+                gc.generator_id,
+                gc.model_used or "?",
+                f"{gc.confidence:.0%} {conf_bar}",
+                gc.approach_summary[:60] + ("…" if len(gc.approach_summary) > 60 else ""),
+            )
+        console.print(gen_table)
+
+    # Critic Scores Matrix
+    if state.critic_scores:
+        console.print("\n[bold cyan]Critic Scores Matrix[/bold cyan]")
+        for cs in state.critic_scores:
+            score_text = Text()
+            score_text.append(f"[bold]{cs.critic_id}[/bold] ({cs.critic_model})\n", style="cyan")
+            for gen_id, ds in cs.candidate_scores.items():
+                score_text.append(f"  {gen_id}: ", style="white")
+                score_text.append(f"F={ds.factuality:.1f} ", style="green")
+                score_text.append(f"R={ds.reasoning:.1f} ", style="blue")
+                score_text.append(f"C={ds.completeness:.1f} ", style="yellow")
+                score_text.append(f"H={ds.helpfulness:.1f} ", style="magenta")
+                score_text.append(f"[bold]Avg={ds.total:.1f}[/bold]\n", style="bold")
+            if cs.dissenting_note:
+                score_text.append(f"  [yellow]Dissenting:[/yellow] {cs.dissenting_note[:100]}\n", style="yellow")
+            console.print(Panel(score_text, box=box.ROUNDED))
+
+    # Verification Results
+    if state.verification_results:
+        verif_table = Table(title="Verification Results", box=box.SIMPLE_HEAVY)
+        verif_table.add_column("Claim", width=40)
+        verif_table.add_column("Source", width=12)
+        verif_table.add_column("Verdict", width=12)
+        verif_table.add_column("Confidence", justify="center", width=12)
+
+        for vr in state.verification_results:
+            color = _label_color(vr.verdict)
+            verif_table.add_row(
+                vr.claim[:40] + ("…" if len(vr.claim) > 40 else ""),
+                vr.source_generator,
+                f"[{color}]{vr.verdict.value}[/{color}]",
+                f"{vr.confidence:.0%}",
+            )
+        console.print(verif_table)
+
+    # Meta-Evaluation
+    if state.meta_evaluation:
+        meta = state.meta_evaluation
+        meta_text = Text()
+        meta_text.append("[bold]Critic Reliability:[/bold]\n", style="cyan")
+        for cid, rel in _get_attr(meta, 'critic_reliability', {}).items():
+            meta_text.append(f"  {cid}: {rel:.1f}/10\n", style="white")
+        meta_text.append(f"\n[bold]Agreement Rate:[/bold] {_get_attr(meta, 'agreement_rate', 0):.0%}\n", style="cyan")
+        meta_text.append(f"[bold]Most Reliable:[/bold] {_get_attr(meta, 'most_reliable_critic', '')}\n", style="green")
+        meta_text.append(f"[bold]Least Reliable:[/bold] {_get_attr(meta, 'least_reliable_critic', '')}\n", style="red")
+        if _get_attr(meta, 'meta_insight', ''):
+            meta_text.append(f"\n[bold]Meta Insight:[/bold] {_get_attr(meta, 'meta_insight', '')}\n", style="yellow")
+        console.print(Panel(meta_text, title="[cyan]Meta-Evaluation (Judge-the-Judges)[/cyan]", box=box.ROUNDED))
+
+    # Final Solution
+    if state.final_solution:
+        fs = state.final_solution
+
+        console.print(Panel(
+            _get_attr(fs, 'core_solution', ''),
+            title="[bold green]FINAL SOLUTION (Jury Verdict)[/bold green]",
+            box=box.DOUBLE,
+            border_style="green",
+        ))
+
+        # Generator Attribution
+        if _get_attr(fs, 'generator_attribution', {}):
+            attr_text = Text()
+            for gid, desc in _get_attr(fs, 'generator_attribution', {}).items():
+                attr_text.append(f"[bold]{gid}:[/bold] {desc}\n", style="cyan")
+            console.print(Panel(attr_text, title="[cyan]Generator Attribution[/cyan]", box=box.ROUNDED))
+
+        # Critic Weighting
+        if _get_attr(fs, 'critic_weighting', {}):
+            weight_text = Text()
+            for cid, weight in _get_attr(fs, 'critic_weighting', {}).items():
+                weight_text.append(f"{cid}: {weight:.1%}\n", style="white")
+            console.print(Panel(weight_text, title="[cyan]Critic Weighting (by Reliability)[/cyan]", box=box.ROUNDED))
+
+        if _get_attr(fs, 'critical_insights', []):
+            ins_text = Text()
+            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
+                ins_text.append(f"{i}. {insight}\n\n")
+            console.print(Panel(ins_text, title="[yellow]Critical Insights[/yellow]", box=box.ROUNDED))
+
+        _render_action_blueprint(state, title="Implementation Plan")
+
+        if _get_attr(fs, 'open_questions', []):
+            oq_text = "\n".join(f"• {q}" for q in _get_attr(fs, 'open_questions', []))
+            console.print(Panel(oq_text, title="[red]Open Questions[/red]", box=box.ROUNDED))
+
+        meta = _get_attr(fs, 'meta_audit', {})
+        meta_text = (
+            f"[bold]Most dangerous assumption:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
+            f"[bold]Dominant bias:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
+            f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
+            f"[bold]If main assumption fails:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
+            f"[bold]Non-obvious insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
+        )
+        console.print(Panel(meta_text, title="[cyan]Meta-Cognitive Audit[/cyan]", box=box.ROUNDED))
+
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SCIENTIFIC RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_scientific(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold green]SCIENTIFIC INQUIRY  ({duration:.1f}s)[/bold green]")
+    render_routing_table(state)
+
+    hypotheses = state.scientific_state.get("hypotheses") or []
+    if hypotheses:
+        hy_text = Text()
+        for h in hypotheses:
+            hy_text.append(f"H{h.get('id')}: {h.get('statement')}\n", style="bold white")
+            hy_text.append(f"  Logic: {h.get('logic')}\n", style="dim")
+            hy_text.append(f"  Falsifiability: {h.get('falsifiability')}\n\n", style="dim yellow")
+        console.print(Panel(hy_text, title="[cyan]Phase 2 — Hypotheses[/cyan]", box=box.ROUNDED))
+
+    test_results = state.scientific_state.get("test_results") or []
+    if test_results:
+        test_text = Text()
+        for res in test_results:
+            color = "green" if res.get("result") == "SUPPORTED" else "red"
+            test_text.append(f"Test H{res.get('hypothesis_id')}: ", style="bold")
+            test_text.append(f"{res.get('result')}\n", style=color)
+            test_text.append(f"  Experiment: {res.get('experiment')}\n", style="white")
+            test_text.append(f"  Reasoning: {res.get('reasoning')}\n\n", style="dim")
+        console.print(Panel(test_text, title="[cyan]Phase 3 — Falsification Tests[/cyan]", box=box.ROUNDED))
+
+    _render_stress(state)
+
+    if state.final_solution:
+        fs = state.final_solution
+        console.print(Panel(_get_attr(fs, 'core_solution', ''), title="[bold green]SCIENTIFIC SYNTHESIS[/bold green]", box=box.DOUBLE, border_style="green"))
+        if _get_attr(fs, 'critical_insights', []):
+            ins_text = Text()
+            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
+                ins_text.append(f"{i}. {insight}\n\n")
+            console.print(Panel(ins_text, title="[yellow]Key Findings[/yellow]", box=box.ROUNDED))
+        _render_action_blueprint(state)
+        meta = _get_attr(fs, 'meta_audit', {})
+        meta_text = (
+            f"[bold]Most dangerous assumption:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
+            f"[bold]Dominant bias:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
+            f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
+            f"[bold]If main assumption fails:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
+            f"[bold]Non-obvious insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
+        )
+        console.print(Panel(meta_text, title="[cyan]Meta-Cognitive Audit[/cyan]", box=box.ROUNDED))
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# SOCRATIC RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_socratic(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold yellow]SOCRATIC DIALOGUE  ({duration:.1f}s)[/bold yellow]")
+    render_routing_table(state)
+
+    questions = state.socratic_state.get("questions") or []
+    if questions:
+        q_text = Text()
+        for q in questions:
+            q_text.append(f"{q.get('id')}. {q.get('target_concept')}: ", style="bold cyan")
+            q_text.append(f"{q.get('question')}\n\n", style="white")
+        console.print(Panel(q_text, title="[cyan]Phase 2 — Maieutic Questions[/cyan]", box=box.ROUNDED))
+
+    answers = state.socratic_state.get("answers") or []
+    if answers:
+        a_text = Text()
+        for a in answers:
+            a_text.append(f"Refining {a.get('question_id')}:\n", style="bold")
+            a_text.append(f"  Answer: {a.get('answer')}\n", style="white")
+            if a.get("contradiction_found"):
+                a_text.append(f"  [red]Aporia:[/red] {a.get('contradiction_found')}\n", style="red")
+            a_text.append(f"  [green]Insight:[/green] {a.get('insight')}\n\n", style="green")
+        console.print(Panel(a_text, title="[cyan]Phase 3 — Dialectic Answers[/cyan]", box=box.ROUNDED))
+
+    if state.final_solution:
+        fs = state.final_solution
+        console.print(Panel(_get_attr(fs, 'core_solution', ''), title="[bold green]PHILOSOPHICAL SYNTHESIS[/bold green]", box=box.DOUBLE, border_style="green"))
+        if _get_attr(fs, 'critical_insights', []):
+            ins_text = Text()
+            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
+                ins_text.append(f"{i}. {insight}\n\n")
+            console.print(Panel(ins_text, title="[yellow]Aporic Insights[/yellow]", box=box.ROUNDED))
+        _render_action_blueprint(state)
     _render_errors(state)
 
 
@@ -602,12 +861,18 @@ def render_pipeline_result(state: PipelineState) -> None:
     method = _method_type(state.preset_name)
     if method == MethodType.DEBATE:
         _render_debate(state)
-    elif method == MethodType.EVOLUTIONARY:
-        _render_evolutionary(state)
+    elif method == MethodType.ITERATIVE:
+        _render_iterative(state)
     elif method == MethodType.RESEARCH:
         _render_research(state)
+    elif method == MethodType.JURY:
+        _render_jury(state)
+    elif method == MethodType.SCIENTIFIC:
+        _render_scientific(state)
+    elif method == MethodType.SOCRATIC:
+        _render_socratic(state)
     else:
-        _render_standard(state)
+        _render_multi_perspective(state)
 
 
 # ─────────────────────────────────────────────────────────────────────

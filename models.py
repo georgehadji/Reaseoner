@@ -268,6 +268,8 @@ class PipelineState:
     dialectical_state: dict[str, Any] = field(default_factory=dict)
     # Analogical Reasoning Method: Structure-mapping & cross-domain transfer (B4)
     analogical_state: dict[str, Any] = field(default_factory=dict)
+    # Delphi Method: Expert consensus with convergence tracking (B5)
+    delphi_state: dict[str, Any] = field(default_factory=dict)
     # Web Discovery: Results from SearXNG search
     web_discovery_results: list[dict[str, Any]] = field(default_factory=list)
     # Vetted Context: Flags from context vetting phase
@@ -293,6 +295,7 @@ class PipelineState:
             "bayesian_state": self.bayesian_state,
             "dialectical_state": self.dialectical_state,
             "analogical_state": self.analogical_state,
+            "delphi_state": self.delphi_state,
             "web_discovery_results": self.web_discovery_results,
             "sub_problems": [
                 {
@@ -598,5 +601,6 @@ class PipelineState:
         data.setdefault('bayesian_state', {})
         data.setdefault('dialectical_state', {})
         data.setdefault('analogical_state', {})
+        data.setdefault('delphi_state', {})
 
         return cls(**data)

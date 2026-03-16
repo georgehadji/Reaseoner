@@ -787,6 +787,43 @@ PRESETS: dict[str, PipelinePreset] = {
         },
         required_env_vars=["ANTHROPIC_API_KEY"],
     ),
+    # ─────────────────────────────────────────────────────────────────────
+    # B5: DELPHI METHOD (Dalkey & Helmer, 1963)
+    # ─────────────────────────────────────────────────────────────────────
+    "delphi-budget": PipelinePreset(
+        name="Delphi Method (Budget)",
+        description=(
+            "RAND Delphi expert consensus — budget tier. "
+            "4 independent experts + anonymous aggregation + revision + dissent. "
+            "All experts use the same model for cost efficiency."
+        ),
+        primary_id="deepseek-v3",
+        routing={
+            "expert_1":  "deepseek-v3",
+            "expert_2":  "deepseek-v3",
+            "expert_3":  "deepseek-v3",
+            "expert_4":  "deepseek-v3",
+            "synthesis": "deepseek-v3",
+        },
+        required_env_vars=["DEEPSEEK_API_KEY"],
+    ),
+    "delphi-premium": PipelinePreset(
+        name="Delphi Method (Premium)",
+        description=(
+            "RAND Delphi expert consensus — premium tier with maximum epistemic diversity. "
+            "4 experts from different model families (Claude + GPT + Gemini + DeepSeek) "
+            "for independent perspectives across architectures."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "expert_1":  "claude-sonnet",
+            "expert_2":  "gpt-4o-mini",
+            "expert_3":  "gemini-flash",
+            "expert_4":  "deepseek-v3",
+            "synthesis": "claude-sonnet",
+        },
+        required_env_vars=["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GOOGLE_API_KEY", "DEEPSEEK_API_KEY"],
+    ),
 }
 
 

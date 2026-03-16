@@ -96,6 +96,7 @@ class ARAPipeline:
         if "bayesian" in preset: return "bayesian"
         if "dialectical" in preset: return "dialectical"
         if "analogical" in preset: return "analogical"
+        if "delphi" in preset: return "delphi"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
@@ -137,6 +138,7 @@ class ARAPipeline:
         elif method == "bayesian": await self._run_bayesian_pipeline(state)
         elif method == "dialectical": await self._run_dialectical_pipeline(state)
         elif method == "analogical": await self._run_analogical_pipeline(state)
+        elif method == "delphi": await self._run_delphi_pipeline(state)
         else: await self._run_multi_perspective_pipeline(state)
 
         # --- UNIVERSAL END PHASE ---
@@ -1083,6 +1085,153 @@ class ARAPipeline:
         state.analogical_state["broken_analogies"] = data.get("broken_analogies", [])
         state.analogical_state["transfer_confidence"] = data.get("confidence", "") or ""
         state.analogical_state["caveats"] = data.get("caveats", [])
+
+    # ─────── B5: Delphi Method ───────
+
+    async def _run_delphi_pipeline(self, state: PipelineState):
+        await self._phase_delphi_round1(state)
+        await self._phase_delphi_aggregation(state)
+        await self._phase_delphi_round2(state)
+        await self._phase_delphi_convergence(state)
+        await self._phase_delphi_dissent(state)
+
+    async def _phase_delphi_round1(self, state: PipelineState):
+        self._log("DELPHI", "Round 1: Independent expert estimates...", state)
+        tasks = [
+            self.router.call(
+                role=f"expert_{i+1}",
+                system_prompt=phases.DELPHI_EXPERT_SYSTEM,
+                user_prompt=phases.delphi_round1_prompt(state, expert_num=i+1),
+            )
+            for i in range(4)
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        estimates = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                state.errors.append(f"Delphi: Expert {i+1} Round 1 failed: {result}")
+                continue
+            raw, _ = result
+            data = extract_json(raw)
+            data["expert_id"] = f"expert_{i+1}"
+            estimates.append(data)
+        state.delphi_state["round_1_estimates"] = estimates
+
+    async def _phase_delphi_aggregation(self, state: PipelineState):
+        """Aggregate round 1 estimates: compute median, IQR, identify outlier."""
+        self._log("DELPHI", "Aggregating expert estimates...", state)
+        estimates = state.delphi_state.get("round_1_estimates", [])
+        if not estimates:
+            state.errors.append("Delphi: No estimates to aggregate.")
+            return
+        # Extract numeric values
+        values = []
+        for e in estimates:
+            val = e.get("estimate_value")
+            if isinstance(val, (int, float)):
+                values.append(val)
+        if len(values) >= 2:
+            values_sorted = sorted(values)
+            n = len(values_sorted)
+            mid = n // 2
+            median = (values_sorted[mid-1] + values_sorted[mid]) / 2 if n % 2 == 0 else float(values_sorted[mid])
+            q1 = values_sorted[n//4] if n > 2 else values_sorted[0]
+            q3 = values_sorted[3*n//4] if n > 2 else values_sorted[-1]
+            iqr = q3 - q1
+            # Identify outlier (furthest from median)
+            outlier_id = None
+            max_dist = -1.0
+            for e in estimates:
+                val = e.get("estimate_value")
+                if isinstance(val, (int, float)):
+                    dist = abs(val - median)
+                    if dist > max_dist:
+                        max_dist = dist
+                        outlier_id = e.get("expert_id")
+            state.delphi_state["aggregated_stats"] = {
+                "median": median,
+                "q1": q1,
+                "q3": q3,
+                "iqr": iqr,
+                "outlier_expert": outlier_id,
+                "n_estimates": len(values),
+            }
+        else:
+            # Fallback: use LLM to aggregate qualitative estimates
+            raw, _ = await self.router.call(
+                role="synthesis",
+                system_prompt=phases.DELPHI_AGGREGATION_SYSTEM,
+                user_prompt=phases.delphi_aggregation_prompt(state),
+            )
+            data = extract_json(raw)
+            state.delphi_state["aggregated_stats"] = data
+
+    async def _phase_delphi_round2(self, state: PipelineState):
+        self._log("DELPHI", "Round 2: Experts revise with anonymous aggregate...", state)
+        estimates = state.delphi_state.get("round_1_estimates", [])
+        tasks = [
+            self.router.call(
+                role=f"expert_{i+1}",
+                system_prompt=phases.DELPHI_REVISION_SYSTEM,
+                user_prompt=phases.delphi_round2_prompt(state, expert_num=i+1),
+            )
+            for i in range(min(4, len(estimates)))
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        revised = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                state.errors.append(f"Delphi: Expert {i+1} Round 2 failed: {result}")
+                continue
+            raw, _ = result
+            data = extract_json(raw)
+            data["expert_id"] = f"expert_{i+1}"
+            revised.append(data)
+        state.delphi_state["round_2_estimates"] = revised
+
+    async def _phase_delphi_convergence(self, state: PipelineState):
+        self._log("DELPHI", "Checking convergence...", state)
+        estimates = state.delphi_state.get("round_2_estimates", [])
+        values = [e.get("revised_estimate") for e in estimates if isinstance(e.get("revised_estimate"), (int, float))]
+        if len(values) >= 2:
+            values_sorted = sorted(values)
+            n = len(values_sorted)
+            q1 = values_sorted[n//4] if n > 2 else values_sorted[0]
+            q3 = values_sorted[3*n//4] if n > 2 else values_sorted[-1]
+            iqr = q3 - q1
+            median = values_sorted[n//2]
+            # Converged if IQR < 20% of median (or median is 0)
+            converged = (iqr / median < 0.2) if median != 0 else (iqr == 0)
+            state.delphi_state["converged"] = converged
+            state.delphi_state["consensus"] = {
+                "median": median,
+                "iqr": iqr,
+                "converged": converged,
+            }
+        else:
+            # Qualitative convergence via LLM
+            raw, _ = await self.router.call(
+                role="synthesis",
+                system_prompt=phases.DELPHI_CONVERGENCE_SYSTEM,
+                user_prompt=phases.delphi_convergence_prompt(state),
+            )
+            data = extract_json(raw)
+            state.delphi_state["converged"] = data.get("converged", False)
+            state.delphi_state["consensus"] = data
+
+    async def _phase_delphi_dissent(self, state: PipelineState):
+        self._log("DELPHI", "Capturing minority dissent...", state)
+        stats = state.delphi_state.get("aggregated_stats", {})
+        outlier = stats.get("outlier_expert", "expert_1")
+        # Map outlier string like "expert_2" to role
+        role = outlier if outlier in ("expert_1", "expert_2", "expert_3", "expert_4") else "expert_1"
+        raw, _ = await self.router.call(
+            role=role,
+            system_prompt=phases.DELPHI_DISSENT_SYSTEM,
+            user_prompt=phases.delphi_dissent_prompt(state),
+        )
+        data = extract_json(raw)
+        state.delphi_state["dissent"] = data
 
     async def _run_recovery_path(self, state: PipelineState, candidate_to_verify: SolutionCandidate | GenerationCandidate) -> None:
         """Executes a cross-verification path for a potentially problematic candidate."""

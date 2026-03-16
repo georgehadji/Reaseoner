@@ -54,6 +54,10 @@ export const METHOD_PRESETS = {
   analogical: [
     { id: 'analogical-budget', label: 'Budget' },
     { id: 'analogical-premium', label: 'Premium' }
+  ],
+  delphi: [
+    { id: 'delphi-budget', label: 'Budget' },
+    { id: 'delphi-premium', label: 'Premium' }
   ]
 };
 
@@ -104,7 +108,11 @@ export const METHOD_HINTS = {
 
   analogical: `<div class="preset-hint-title">Analogical Reasoning</div>
 <div class="preset-hint-desc">Structure-mapping theory — find isomorphic problems solved in other domains, then transfer the solution.</div>
-<div class="preset-hint-detail"><b>How it works:</b> Abstracts the deep structure of your problem -> searches for isomorphic solutions in other fields (biomimicry, history, engineering, biology, economics) -> maps elements structurally -> transfers the solution and identifies where the analogy breaks.<br><b>Best input:</b> Novel problems that seem unsolvable in their domain but may have known solutions elsewhere.<br><b>Based on:</b> Gentner (1983) Structure-Mapping Theory, TRIZ, biomimicry.</div>`
+<div class="preset-hint-detail"><b>How it works:</b> Abstracts the deep structure of your problem -> searches for isomorphic solutions in other fields (biomimicry, history, engineering, biology, economics) -> maps elements structurally -> transfers the solution and identifies where the analogy breaks.<br><b>Best input:</b> Novel problems that seem unsolvable in their domain but may have known solutions elsewhere.<br><b>Based on:</b> Gentner (1983) Structure-Mapping Theory, TRIZ, biomimicry.</div>`,
+
+  delphi: `<div class="preset-hint-title">Delphi Method</div>
+<div class="preset-hint-desc">RAND Delphi expert consensus — 4 independent experts, anonymous aggregation, convergence tracking, and mandatory minority dissent.</div>
+<div class="preset-hint-detail"><b>How it works:</b> 4 experts independently estimate → anonymous median + IQR computed → experts revise or defend with full anonymity → convergence checked → outlier expert documents dissenting rationale.<br><b>Best input:</b> Forecasting questions, policy decisions, or any problem where expert consensus and minority viewpoints both matter.<br><b>Based on:</b> Dalkey & Helmer (1963) — used in IPCC climate reports, WHO policy, military forecasting.</div>`
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -204,6 +212,16 @@ export const METHOD_PHASES = {
     { id: 4, name: 'Analogy Mapping', short: 'Map' },
     { id: 5, name: 'Transfer & Adapt', short: 'Transfer' },
     { id: 6, name: 'Synthesis', short: 'Synthesis' }
+  ],
+  delphi: [
+    { id: 0, name: 'Classification', short: 'Classify' },
+    { id: 1, name: 'Decomposition', short: 'Decompose' },
+    { id: 2, name: 'Round 1 (Independent)', short: 'R1' },
+    { id: 3, name: 'Aggregation', short: 'Aggregate' },
+    { id: 4, name: 'Round 2 (Revision)', short: 'R2' },
+    { id: 5, name: 'Convergence Check', short: 'Converge' },
+    { id: 6, name: 'Minority Dissent', short: 'Dissent' },
+    { id: 7, name: 'Synthesis', short: 'Synthesis' }
   ]
 };
 
@@ -222,7 +240,8 @@ export const METHOD_CONTROLS = {
   'pre-mortem': ['budget'],
   bayesian: ['budget'],
   dialectical: ['budget'],
-  analogical: ['budget']
+  analogical: ['budget'],
+  delphi: ['budget']
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -306,6 +325,13 @@ export const METHODS = [
     icon: '↔',
     cost: 2,
     description: 'Cross-domain solution transfer via structural mapping'
+  },
+  {
+    id: 'delphi',
+    name: 'Delphi',
+    icon: '◎',
+    cost: 3,
+    description: 'Expert consensus with convergence tracking & minority dissent'
   }
 ];
 

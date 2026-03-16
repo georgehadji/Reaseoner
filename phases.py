@@ -710,19 +710,19 @@ DELPHI_REVISION_SYSTEM = (
 )
 
 
-def delphi_round2_prompt(state: "PipelineState", expert_num: int) -> str:
+def delphi_round2_prompt(state: "PipelineState", expert_id: str) -> str:
     stats = state.delphi_state.get("aggregated_stats", {})
     original = next(
-        (e for e in state.delphi_state.get("round_1_estimates", []) if e.get("expert_id") == f"expert_{expert_num}"),
+        (e for e in state.delphi_state.get("round_1_estimates", []) if e.get("expert_id") == expert_id),
         {}
     )
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'You are Expert {expert_num}. You previously estimated: {original.get("estimate_label", "unknown")}\n\n'
+        f'You are {expert_id}. You previously estimated: {original.get("estimate_label", "unknown")}\n\n'
         f'Anonymous group statistics:\n'
         f'- Median: {stats.get("median", stats.get("central_theme", "unknown"))}\n'
         f'- Spread (IQR): {stats.get("iqr", stats.get("spread", "unknown"))}\n\n'
-        f'You can see that the group median differs from your estimate. '
+        f'You can see the group median. '
         f'Do you revise your estimate, or do you defend your original position?\n\n'
         f'Output JSON: {{"revised_estimate": <number or null>, '
         f'"revised_label": "<your revised estimate in words>", '
@@ -765,7 +765,7 @@ def delphi_dissent_prompt(state: "PipelineState") -> str:
         f'{get_language_instruction(state)}\n\n'
         f'Problem: {state.problem}\n\n'
         f'Group consensus: {consensus.get("median", consensus.get("consensus_label", "unknown"))}\n'
-        f'Your estimate differs from the group median by: {stats.get("iqr", "unknown")} IQR units.\n\n'
+        f'Your estimate differs from the group median by: {stats.get("outlier_distance", stats.get("iqr", "unknown"))} units.\n\n'
         f'As the outlier expert, document your dissenting rationale. '
         f'What does the consensus miss? What evidence supports your position?\n\n'
         f'Output JSON: {{"dissenting_estimate": "<your position>", '

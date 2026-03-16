@@ -1112,7 +1112,14 @@ class ARAPipeline:
                 state.errors.append(f"Delphi: Expert {i+1} Round 1 failed: {result}")
                 continue
             raw, _ = result
-            data = extract_json(raw)
+            try:
+                data = extract_json(raw)
+            except ParseError as e:
+                state.errors.append(f"Delphi: Expert {i+1} Round 1 parse error: {e}")
+                continue
+            if not isinstance(data, dict):
+                state.errors.append(f"Delphi: Expert {i+1} Round 1 returned non-dict, skipping.")
+                continue
             data["expert_id"] = f"expert_{i+1}"
             estimates.append(data)
         state.delphi_state["round_1_estimates"] = estimates
@@ -1154,6 +1161,7 @@ class ARAPipeline:
                 "q3": q3,
                 "iqr": iqr,
                 "outlier_expert": outlier_id,
+                "outlier_distance": max_dist if max_dist >= 0 else None,
                 "n_estimates": len(values),
             }
         else:
@@ -1169,23 +1177,32 @@ class ARAPipeline:
     async def _phase_delphi_round2(self, state: PipelineState):
         self._log("DELPHI", "Round 2: Experts revise with anonymous aggregate...", state)
         estimates = state.delphi_state.get("round_1_estimates", [])
+        # Iterate actual expert IDs to handle any R1 failures correctly
+        expert_ids = [e.get("expert_id", f"expert_{i+1}") for i, e in enumerate(estimates)]
         tasks = [
             self.router.call(
-                role=f"expert_{i+1}",
+                role=eid,
                 system_prompt=phases.DELPHI_REVISION_SYSTEM,
-                user_prompt=phases.delphi_round2_prompt(state, expert_num=i+1),
+                user_prompt=phases.delphi_round2_prompt(state, expert_id=eid),
             )
-            for i in range(min(4, len(estimates)))
+            for eid in expert_ids
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         revised = []
-        for i, result in enumerate(results):
+        for eid, result in zip(expert_ids, results):
             if isinstance(result, Exception):
-                state.errors.append(f"Delphi: Expert {i+1} Round 2 failed: {result}")
+                state.errors.append(f"Delphi: {eid} Round 2 failed: {result}")
                 continue
             raw, _ = result
-            data = extract_json(raw)
-            data["expert_id"] = f"expert_{i+1}"
+            try:
+                data = extract_json(raw)
+            except ParseError as e:
+                state.errors.append(f"Delphi: {eid} Round 2 parse error: {e}")
+                continue
+            if not isinstance(data, dict):
+                state.errors.append(f"Delphi: {eid} Round 2 returned non-dict, skipping.")
+                continue
+            data["expert_id"] = eid
             revised.append(data)
         state.delphi_state["round_2_estimates"] = revised
 
@@ -1196,12 +1213,13 @@ class ARAPipeline:
         if len(values) >= 2:
             values_sorted = sorted(values)
             n = len(values_sorted)
+            mid = n // 2
+            median = (values_sorted[mid-1] + values_sorted[mid]) / 2 if n % 2 == 0 else float(values_sorted[mid])
             q1 = values_sorted[n//4] if n > 2 else values_sorted[0]
             q3 = values_sorted[3*n//4] if n > 2 else values_sorted[-1]
             iqr = q3 - q1
-            median = values_sorted[n//2]
-            # Converged if IQR < 20% of median (or median is 0)
-            converged = (iqr / median < 0.2) if median != 0 else (iqr == 0)
+            # Converged if IQR < 20% of |median| (or median is 0 and IQR is 0)
+            converged = (iqr / abs(median) < 0.2) if median != 0 else (iqr == 0)
             state.delphi_state["converged"] = converged
             state.delphi_state["consensus"] = {
                 "median": median,

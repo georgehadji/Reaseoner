@@ -6,7 +6,7 @@ This file is a short project snapshot for agent sessions. The main product docum
 
 Reasoner is a structured AI reasoning app, not a general-purpose chatbot. It runs a problem through a multi-phase pipeline and returns an executive answer plus the reasoning trail.
 
-Current methods (10 total):
+Current methods (12 total):
 
 **Legacy (7):**
 - `Multi-Perspective`
@@ -17,10 +17,14 @@ Current methods (10 total):
 - `Jury`
 - `Research`
 
-**Sprint 1+2 (3 new):**
+**Sprint 1+2 (3):**
 - `Pre-Mortem` — prospective hindsight risk analysis (Gary Klein)
 - `Bayesian` — Bayesian epistemology with prior/likelihood/posterior analysis (Jaynes 2003)
 - `Dialectical` — Hegelian dialectic with thesis/antithesis/Aufhebung transcendence
+
+**Sprint 3 (2 new):**
+- `Analogical` — structure-mapping theory (Gentner 1983) with source-domain search and analogical transfer
+- `Delphi` — RAND Delphi consensus method with expert convergence analysis (Dalkey & Helmer 1963)
 
 Current UI preset tiers:
 
@@ -34,6 +38,8 @@ Current UI preset tiers:
 - `Pre-Mortem`: `pre-mortem-budget` → `pre-mortem-premium`
 - `Bayesian`: `bayesian-budget` → `bayesian-premium`
 - `Dialectical`: `dialectical-budget` → `dialectical-premium`
+- `Analogical`: `analogical-budget` → `analogical-premium`
+- `Delphi`: `delphi-budget` → `delphi-premium`
 
 Backward-compatible aliases still resolve for older names such as `evolutionary*` and `orchestrated*`.
 
@@ -147,14 +153,29 @@ All three methods follow identical architectural pattern:
 4. **Renderer complexity**: 3-5 panels/tables per method. Use Rich library (Table, Panel, Columns)
 5. **UI integration**: One dropdown option per method + METHOD_PRESETS/PHASES/HINTS entries in config.js
 
-### Future extensions (Sprint 3+4)
+### Sprint 3 implementation (B4 Analogical + B5 Delphi, 2026-03-16)
 
-**Sprint 3 (B4 Analogical + B5 Delphi):**
-- B5 Delphi requires 4 NEW routing keys: `expert_1`, `expert_2`, `expert_3`, `expert_4`
-- Update `_KNOWN_ROUTING_ROLES` in `presets.py` BEFORE adding Delphi presets
-- Delphi creates 4 expert LLM calls per round, aggregates results, then second round with visibility
+**B4 Analogical Reasoning (structure-mapping theory):**
+- 4 phases: abstraction → domain search → mapping → transfer
+- State keys: `source_domains`, `analogy_mappings`, `transferred_solution`, `broken_analogies`
+- Routing: uses `primary` (abstraction, transfer) and `systemic` (domain search, mapping)
+- Preset tiers: `analogical-budget` (deepseek-v3), `analogical-premium` (claude-sonnet)
+- BUG-016 fix: Added isinstance(list) guards for `source_domains` and `analogy_mappings`
+- Early-exit guard when source_domains empty to prevent downstream crashes
 
-**Sprint 4 (B6 Causal):**
+**B5 Delphi Method (consensus estimation with convergence analysis):**
+- 5 phases: round1 parallel → aggregation → round2 parallel → convergence → dissent
+- State keys: `r1_estimates`, `r2_estimates`, `median_estimate`, `iqr`, `has_converged`, `outlier_distance`
+- Routing: 4 NEW keys added: `expert_1`, `expert_2`, `expert_3`, `expert_4` (in `_KNOWN_ROUTING_ROLES`)
+- Preset tiers: `delphi-budget` (all deepseek-v3), `delphi-premium` (4 models: claude-sonnet, gpt-4o-mini, gemini-flash, deepseek-v3)
+- Expert tracking: stores `expert_id` in each estimate; Round 2 iterates actual expert IDs instead of sequential range
+- Convergence formula: `(iqr / abs(median) < 0.2) if median != 0 else (iqr == 0)` — uses median absolute value to handle negative estimates
+- JSON parsing safety: All LLM responses wrapped in try/except + isinstance(dict) guards
+- Renderer: 5 panels (round1 table, aggregated stats, round2 table, convergence verdict, dissent analysis) plus action blueprint
+
+### Future extensions (Sprint 4)
+
+**Sprint 4 (B6 Causal Reasoning):**
 - Most complex method (~480 lines)
 - Uses Pearl's causal hierarchy (association → intervention → counterfactual)
 - No new routing keys needed

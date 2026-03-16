@@ -1286,6 +1286,7 @@ def _render_delphi(state: PipelineState) -> None:
                 content.append(f"  x {m}\n", style="red")
         console.print(Panel(content, title="[red]Minority Dissent Report[/red]", box=box.ROUNDED))
 
+    _render_action_blueprint(state)
     _render_errors(state)
 
 

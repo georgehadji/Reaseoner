@@ -46,3 +46,6 @@ jspm_packages/
 # Local config
 config/
 settings.json
+
+# Git worktrees
+.worktrees/

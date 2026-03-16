@@ -1017,9 +1017,16 @@ class ARAPipeline:
         state.dialectical_state["transcended"] = data.get("transcended", "")
         state.dialectical_state["new_insights"] = data.get("new_insights", [])
 
+    # ─────────────────────────────────────────────────────────────────
+    # B4: Analogical Reasoning (Structure-Mapping Theory, Gentner 1983)
+    # ─────────────────────────────────────────────────────────────────
+
     async def _run_analogical_pipeline(self, state: PipelineState):
         await self._phase_analogical_abstraction(state)
         await self._phase_analogical_domain_search(state)
+        if not state.analogical_state.get("source_domains"):
+            state.errors.append("Analogical: domain search returned no source domains; skipping mapping and transfer.")
+            return
         await self._phase_analogical_mapping(state)
         await self._phase_analogical_transfer(state)
 
@@ -1046,7 +1053,8 @@ class ARAPipeline:
             user_prompt=phases.analogical_domain_search_prompt(state),
         )
         data = extract_json(raw)
-        state.analogical_state["source_domains"] = data.get("source_domains", [])
+        _raw_domains = data.get("source_domains", [])
+        state.analogical_state["source_domains"] = _raw_domains if isinstance(_raw_domains, list) else []
 
     async def _phase_analogical_mapping(self, state: PipelineState):
         self._log("ANALOGICAL", "Mapping source domain elements to target problem...", state)
@@ -1056,7 +1064,8 @@ class ARAPipeline:
             user_prompt=phases.analogical_mapping_prompt(state),
         )
         data = extract_json(raw)
-        state.analogical_state["analogy_mappings"] = data.get("analogy_mappings", [])
+        _raw_mappings = data.get("analogy_mappings", [])
+        state.analogical_state["analogy_mappings"] = _raw_mappings if isinstance(_raw_mappings, list) else []
         state.analogical_state["unmapped_elements"] = data.get("unmapped_elements", [])
         state.analogical_state["mapping_quality"] = data.get("mapping_quality", "") or ""
 

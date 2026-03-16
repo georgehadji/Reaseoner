@@ -57,6 +57,7 @@ class MethodType(Enum):
     PRE_MORTEM        = "pre-mortem"
     BAYESIAN          = "bayesian"
     DIALECTICAL       = "dialectical"
+    ANALOGICAL        = "analogical"
 
 
 _DEBATE_PRESETS       = {"debate", "debate-budget", "debate-balanced", "debate-premium"}
@@ -74,6 +75,7 @@ _SOCRATIC_PRESETS     = {"socratic", "socratic-budget", "socratic-premium"}
 _PRE_MORTEM_PRESETS   = {"pre-mortem", "pre-mortem-budget", "pre-mortem-premium"}
 _BAYESIAN_PRESETS     = {"bayesian", "bayesian-budget", "bayesian-premium"}
 _DIALECTICAL_PRESETS  = {"dialectical", "dialectical-budget", "dialectical-premium"}
+_ANALOGICAL_PRESETS   = {"analogical", "analogical-budget", "analogical-premium"}
 # STANDARD presets (now called MULTI_PERSPECTIVE)
 _MULTI_PERSPECTIVE_PRESETS = {
     "max-quality", "cost-efficient", "eu-sovereign", "epistemic-diversity",
@@ -92,6 +94,7 @@ def _method_type(preset_name: str | None) -> MethodType:
     if preset_name in _PRE_MORTEM_PRESETS:   return MethodType.PRE_MORTEM
     if preset_name in _BAYESIAN_PRESETS:     return MethodType.BAYESIAN
     if preset_name in _DIALECTICAL_PRESETS:  return MethodType.DIALECTICAL
+    if preset_name in _ANALOGICAL_PRESETS:   return MethodType.ANALOGICAL
     if preset_name in _MULTI_PERSPECTIVE_PRESETS: return MethodType.MULTI_PERSPECTIVE
     return MethodType.MULTI_PERSPECTIVE  # default
 
@@ -1073,6 +1076,126 @@ def _render_dialectical(state: PipelineState) -> None:
 
 
 # ─────────────────────────────────────────────────────────────────────
+# B4: ANALOGICAL REASONING RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def _render_analogical(state: PipelineState) -> None:
+    a = state.analogical_state
+
+    # Abstract structure panel
+    structure = a.get("abstract_structure", "")
+    if structure:
+        content = Text()
+        content.append(structure)
+        constraints = a.get("constraints", [])
+        objectives = a.get("objectives", [])
+        actors = a.get("actors", [])
+        core_dynamics = a.get("core_dynamics", [])
+        if constraints:
+            content.append("\n\nConstraints:\n", style="bold")
+            for c in constraints:
+                content.append(f"  • {c}\n")
+        if objectives:
+            content.append("\nObjectives:\n", style="bold cyan")
+            for o in objectives:
+                content.append(f"  • {o}\n")
+        if actors:
+            content.append("\nActors:\n", style="bold yellow")
+            for actor in actors:
+                content.append(f"  • {actor}\n")
+        if core_dynamics:
+            content.append("\nCore Dynamics:\n", style="bold magenta")
+            for d in core_dynamics:
+                content.append(f"  • {d}\n")
+        structural_type = a.get("structural_type", "")
+        if structural_type:
+            content.append(f"\nStructural Type: ", style="bold")
+            content.append(structural_type, style="cyan")
+        console.print(Panel(content, title="[cyan]Abstract Problem Structure[/cyan]", box=box.ROUNDED))
+
+    # Source domains table
+    domains = a.get("source_domains", [])
+    if domains:
+        tbl = Table(title="Source Domains with Isomorphic Solutions", box=box.SIMPLE_HEAD)
+        tbl.add_column("Domain", style="yellow")
+        tbl.add_column("Solved Problem", style="white")
+        tbl.add_column("Key Mechanism", style="cyan")
+        tbl.add_column("Relevance", style="green", width=10)
+        for d in domains:
+            tbl.add_row(
+                d.get("domain", ""),
+                (d.get("solved_problem", "") or "")[:80],
+                (d.get("key_mechanism", "") or "")[:80],
+                d.get("relevance_score", ""),
+            )
+        console.print(tbl)
+
+    # Analogy mapping table
+    mappings = a.get("analogy_mappings", [])
+    if mappings:
+        tbl = Table(title="Structural Analogy Mappings", box=box.SIMPLE_HEAD)
+        tbl.add_column("Source Element", style="yellow")
+        tbl.add_column("Target Element", style="cyan")
+        tbl.add_column("Mapping Type", style="dim", width=14)
+        tbl.add_column("Confidence", style="green", width=10)
+        for m in mappings:
+            tbl.add_row(
+                m.get("source_element", ""),
+                m.get("target_element", ""),
+                m.get("mapping_type", ""),
+                m.get("confidence", ""),
+            )
+        console.print(tbl)
+
+    # Transfer steps
+    transfer_steps = a.get("transfer_steps", [])
+    if transfer_steps:
+        content = Text()
+        content.append("Transfer Steps:\n", style="bold green")
+        for i, step in enumerate(transfer_steps, 1):
+            content.append(f"  {i}. {step}\n")
+        adaptations = a.get("adaptations_required", [])
+        if adaptations:
+            content.append("\nAdaptations Required:\n", style="bold yellow")
+            for adap in adaptations:
+                content.append(f"  ⟳ {adap}\n", style="yellow")
+        caveats = a.get("caveats", [])
+        if caveats:
+            content.append("\nCaveats:\n", style="bold dim")
+            for cav in caveats:
+                content.append(f"  ! {cav}\n", style="dim")
+        console.print(Panel(content, title="[green]Transfer Plan[/green]", box=box.ROUNDED))
+
+    # Transferred solution
+    transferred = a.get("transferred_solution", "")
+    if transferred:
+        confidence = a.get("transfer_confidence", "")
+        title_suffix = f" [dim](confidence: {confidence})[/dim]" if confidence else ""
+        console.print(Panel(
+            Text(transferred, style="bold"),
+            title=f"[green]Transferred Solution[/green]{title_suffix}",
+            box=box.ROUNDED,
+        ))
+
+    # Broken analogies
+    broken = a.get("broken_analogies", [])
+    if broken:
+        content = Text()
+        content.append("Where the analogy breaks down:\n", style="bold red")
+        for b in broken:
+            content.append(f"  ✗ {b}\n", style="red")
+        unmapped = a.get("unmapped_elements", [])
+        if unmapped:
+            content.append("\nUnmapped Source Elements:\n", style="bold dim")
+            for u in unmapped:
+                content.append(f"  ? {u}\n", style="dim")
+        console.print(Panel(content, title="[red]Analogy Limitations[/red]", box=box.ROUNDED))
+
+    _render_action_blueprint(state)
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
 # PUBLIC ENTRY POINT
 # ─────────────────────────────────────────────────────────────────────
 
@@ -1097,6 +1220,8 @@ def render_pipeline_result(state: PipelineState) -> None:
         _render_bayesian(state)
     elif method == MethodType.DIALECTICAL:
         _render_dialectical(state)
+    elif method == MethodType.ANALOGICAL:
+        _render_analogical(state)
     else:
         _render_multi_perspective(state)
 

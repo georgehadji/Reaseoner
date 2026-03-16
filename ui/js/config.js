@@ -50,6 +50,10 @@ export const METHOD_PRESETS = {
   dialectical: [
     { id: 'dialectical-budget', label: 'Budget' },
     { id: 'dialectical-premium', label: 'Premium' }
+  ],
+  analogical: [
+    { id: 'analogical-budget', label: 'Budget' },
+    { id: 'analogical-premium', label: 'Premium' }
   ]
 };
 
@@ -96,7 +100,11 @@ export const METHOD_HINTS = {
 
   dialectical: `<div class="preset-hint-title">Dialectical Reasoning</div>
 <div class="preset-hint-desc">Hegelian Aufhebung — move beyond thesis vs. antithesis to a qualitatively higher position that transcends both.</div>
-<div class="preset-hint-detail"><b>How it works:</b> Argues the strongest affirmative thesis -> exposes internal contradictions (antithesis) -> classifies irreconcilable vs. compatible contradictions -> synthesizes a genuinely novel Aufhebung (not a compromise).<br><b>Best input:</b> Philosophical questions, strategic dilemmas with genuine tension, or any problem where "balance" is insufficient.<br><b>Based on:</b> Hegel's dialectic — thesis/antithesis/Aufhebung.</div>`
+<div class="preset-hint-detail"><b>How it works:</b> Argues the strongest affirmative thesis -> exposes internal contradictions (antithesis) -> classifies irreconcilable vs. compatible contradictions -> synthesizes a genuinely novel Aufhebung (not a compromise).<br><b>Best input:</b> Philosophical questions, strategic dilemmas with genuine tension, or any problem where "balance" is insufficient.<br><b>Based on:</b> Hegel's dialectic — thesis/antithesis/Aufhebung.</div>`,
+
+  analogical: `<div class="preset-hint-title">Analogical Reasoning</div>
+<div class="preset-hint-desc">Structure-mapping theory — find isomorphic problems solved in other domains, then transfer the solution.</div>
+<div class="preset-hint-detail"><b>How it works:</b> Abstracts the deep structure of your problem -> searches for isomorphic solutions in other fields (biomimicry, history, engineering, biology, economics) -> maps elements structurally -> transfers the solution and identifies where the analogy breaks.<br><b>Best input:</b> Novel problems that seem unsolvable in their domain but may have known solutions elsewhere.<br><b>Based on:</b> Gentner (1983) Structure-Mapping Theory, TRIZ, biomimicry.</div>`
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -187,6 +195,15 @@ export const METHOD_PHASES = {
     { id: 4, name: 'Contradiction Analysis', short: 'Contradict' },
     { id: 5, name: 'Aufhebung', short: 'Aufhebung' },
     { id: 6, name: 'Synthesis', short: 'Synthesis' }
+  ],
+  analogical: [
+    { id: 0, name: 'Classification', short: 'Classify' },
+    { id: 1, name: 'Decomposition', short: 'Decompose' },
+    { id: 2, name: 'Abstraction', short: 'Abstract' },
+    { id: 3, name: 'Domain Search', short: 'Search' },
+    { id: 4, name: 'Analogy Mapping', short: 'Map' },
+    { id: 5, name: 'Transfer & Adapt', short: 'Transfer' },
+    { id: 6, name: 'Synthesis', short: 'Synthesis' }
   ]
 };
 
@@ -204,7 +221,8 @@ export const METHOD_CONTROLS = {
   socratic: ['budget', 'questions'],
   'pre-mortem': ['budget'],
   bayesian: ['budget'],
-  dialectical: ['budget']
+  dialectical: ['budget'],
+  analogical: ['budget']
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -281,6 +299,13 @@ export const METHODS = [
     icon: '⟳',
     cost: 2,
     description: 'Hegelian Aufhebung — thesis → antithesis → transcendence'
+  },
+  {
+    id: 'analogical',
+    name: 'Analogical',
+    icon: '↔',
+    cost: 2,
+    description: 'Cross-domain solution transfer via structural mapping'
   }
 ];
 

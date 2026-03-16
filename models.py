@@ -266,6 +266,8 @@ class PipelineState:
     bayesian_state: dict[str, Any] = field(default_factory=dict)
     # Dialectical Reasoning Method: Hegelian Aufhebung (B3)
     dialectical_state: dict[str, Any] = field(default_factory=dict)
+    # Analogical Reasoning Method: Structure-mapping & cross-domain transfer (B4)
+    analogical_state: dict[str, Any] = field(default_factory=dict)
     # Web Discovery: Results from SearXNG search
     web_discovery_results: list[dict[str, Any]] = field(default_factory=list)
     # Vetted Context: Flags from context vetting phase
@@ -290,6 +292,7 @@ class PipelineState:
             "pre_mortem_state": self.pre_mortem_state,
             "bayesian_state": self.bayesian_state,
             "dialectical_state": self.dialectical_state,
+            "analogical_state": self.analogical_state,
             "web_discovery_results": self.web_discovery_results,
             "sub_problems": [
                 {
@@ -594,5 +597,6 @@ class PipelineState:
         data.setdefault('pre_mortem_state', {})
         data.setdefault('bayesian_state', {})
         data.setdefault('dialectical_state', {})
+        data.setdefault('analogical_state', {})
 
         return cls(**data)

@@ -755,6 +755,38 @@ PRESETS: dict[str, PipelinePreset] = {
         },
         required_env_vars=["ANTHROPIC_API_KEY"],
     ),
+
+    # ─────────────────────────────────────────────────────────────────────
+    # B4: ANALOGICAL REASONING
+    # ─────────────────────────────────────────────────────────────────────
+    "analogical-budget": PipelinePreset(
+        name="Analogical Reasoning (Budget)",
+        description=(
+            "Structure-mapping theory — find isomorphic problems solved in other domains, "
+            "then transfer the solution. Budget tier with DeepSeek V3. "
+            "Abstraction → domain search → mapping → transfer & adaptation."
+        ),
+        primary_id="deepseek-v3",
+        routing={
+            "systemic":   "deepseek-v3",
+            "synthesis":  "deepseek-v3",
+        },
+        required_env_vars=["DEEPSEEK_API_KEY"],
+    ),
+    "analogical-premium": PipelinePreset(
+        name="Analogical Reasoning (Premium)",
+        description=(
+            "Structure-mapping theory — find isomorphic problems solved in other domains, "
+            "then transfer the solution. Premium tier with Claude Sonnet. "
+            "Abstraction → domain search → mapping → transfer & adaptation."
+        ),
+        primary_id="claude-sonnet",
+        routing={
+            "systemic":   "claude-sonnet",
+            "synthesis":  "claude-sonnet",
+        },
+        required_env_vars=["ANTHROPIC_API_KEY"],
+    ),
 }
 
 

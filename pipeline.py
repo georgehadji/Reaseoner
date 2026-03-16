@@ -95,6 +95,7 @@ class ARAPipeline:
         if "pre-mortem" in preset or "premortem" in preset: return "pre_mortem"
         if "bayesian" in preset: return "bayesian"
         if "dialectical" in preset: return "dialectical"
+        if "analogical" in preset: return "analogical"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
@@ -135,6 +136,7 @@ class ARAPipeline:
         elif method == "pre_mortem": await self._run_pre_mortem_pipeline(state)
         elif method == "bayesian": await self._run_bayesian_pipeline(state)
         elif method == "dialectical": await self._run_dialectical_pipeline(state)
+        elif method == "analogical": await self._run_analogical_pipeline(state)
         else: await self._run_multi_perspective_pipeline(state)
 
         # --- UNIVERSAL END PHASE ---
@@ -1014,6 +1016,64 @@ class ARAPipeline:
         state.dialectical_state["preserved_from_antithesis"] = data.get("preserved_from_antithesis", [])
         state.dialectical_state["transcended"] = data.get("transcended", "")
         state.dialectical_state["new_insights"] = data.get("new_insights", [])
+
+    async def _run_analogical_pipeline(self, state: PipelineState):
+        await self._phase_analogical_abstraction(state)
+        await self._phase_analogical_domain_search(state)
+        await self._phase_analogical_mapping(state)
+        await self._phase_analogical_transfer(state)
+
+    async def _phase_analogical_abstraction(self, state: PipelineState):
+        self._log("ANALOGICAL", "Extracting abstract problem structure...", state)
+        raw, _ = await self.router.call(
+            role="systemic",
+            system_prompt=phases.ANALOGICAL_ABSTRACTION_SYSTEM,
+            user_prompt=phases.analogical_abstraction_prompt(state),
+        )
+        data = extract_json(raw)
+        state.analogical_state["abstract_structure"] = data.get("abstract_structure", "") or ""
+        state.analogical_state["constraints"] = data.get("constraints", [])
+        state.analogical_state["objectives"] = data.get("objectives", [])
+        state.analogical_state["actors"] = data.get("actors", [])
+        state.analogical_state["core_dynamics"] = data.get("core_dynamics", [])
+        state.analogical_state["structural_type"] = data.get("structural_type", "") or ""
+
+    async def _phase_analogical_domain_search(self, state: PipelineState):
+        self._log("ANALOGICAL", "Searching for isomorphic source domains...", state)
+        raw, _ = await self.router.call(
+            role="systemic",
+            system_prompt=phases.ANALOGICAL_DOMAIN_SEARCH_SYSTEM,
+            user_prompt=phases.analogical_domain_search_prompt(state),
+        )
+        data = extract_json(raw)
+        state.analogical_state["source_domains"] = data.get("source_domains", [])
+
+    async def _phase_analogical_mapping(self, state: PipelineState):
+        self._log("ANALOGICAL", "Mapping source domain elements to target problem...", state)
+        raw, _ = await self.router.call(
+            role="systemic",
+            system_prompt=phases.ANALOGICAL_MAPPING_SYSTEM,
+            user_prompt=phases.analogical_mapping_prompt(state),
+        )
+        data = extract_json(raw)
+        state.analogical_state["analogy_mappings"] = data.get("analogy_mappings", [])
+        state.analogical_state["unmapped_elements"] = data.get("unmapped_elements", [])
+        state.analogical_state["mapping_quality"] = data.get("mapping_quality", "") or ""
+
+    async def _phase_analogical_transfer(self, state: PipelineState):
+        self._log("ANALOGICAL", "Transferring and adapting solution from source domain...", state)
+        raw, _ = await self.router.call(
+            role="synthesis",
+            system_prompt=phases.ANALOGICAL_TRANSFER_SYSTEM,
+            user_prompt=phases.analogical_transfer_prompt(state),
+        )
+        data = extract_json(raw)
+        state.analogical_state["transferred_solution"] = data.get("transferred_solution", "") or ""
+        state.analogical_state["transfer_steps"] = data.get("transfer_steps", [])
+        state.analogical_state["adaptations_required"] = data.get("adaptations_required", [])
+        state.analogical_state["broken_analogies"] = data.get("broken_analogies", [])
+        state.analogical_state["transfer_confidence"] = data.get("confidence", "") or ""
+        state.analogical_state["caveats"] = data.get("caveats", [])
 
     async def _run_recovery_path(self, state: PipelineState, candidate_to_verify: SolutionCandidate | GenerationCandidate) -> None:
         """Executes a cross-verification path for a potentially problematic candidate."""

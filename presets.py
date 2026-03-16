@@ -33,6 +33,11 @@ _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     "destructive",
     "systemic",
     "minimalist",
+    # Delphi expert roles (Sprint 3 — B5)
+    "expert_1",
+    "expert_2",
+    "expert_3",
+    "expert_4",
 })
 
 

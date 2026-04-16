@@ -1,0 +1,57 @@
+# Minimal SearXNG settings for Reasoner
+# Mounted automatically by docker-compose.searxng.yml
+general:
+  debug: false
+  instance_name: "Reasoner Search"
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: ""
+  formats:
+    - html
+    - json
+
+server:
+  # The secret key is injected via environment variable
+  # SEARXNG_SECRET_KEY in docker-compose.searxng.yml
+  limiter: false
+  public_instance: false
+
+ui:
+  static_use_hash: true
+
+# Enable a reasonable default set of engines
+engines:
+  - name: bing
+    engine: bing
+    shortcut: bi
+    enabled: true
+  - name: duckduckgo
+    engine: duckduckgo
+    shortcut: ddg
+    enabled: true
+  - name: google
+    engine: google
+    shortcut: go
+    enabled: true
+  - name: brave
+    engine: brave
+    shortcut: br
+    enabled: true
+  - name: wikipedia
+    engine: wikipedia
+    shortcut: wp
+    enabled: true
+  - name: arxiv
+    engine: arxiv
+    shortcut: arx
+    enabled: true
+  - name: github
+    engine: github
+    shortcut: gh
+    enabled: true
+  - name: stackoverflow
+    engine: stackoverflow
+    shortcut: se
+    enabled: true

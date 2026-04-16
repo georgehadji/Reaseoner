@@ -43,7 +43,12 @@
       "Bash(git add ui/index.html .claude/settings.local.json)",
       "Bash(git commit -m \"Fix remaining syntax errors in UI features \\(phase names, template literals\\)\")",
       "Bash(grep -n \"api.py\\\\|@app\\\\|/api/presets\" /e/Documents/Vibe-Coding/Reasoner/*.py)",
-      "Bash(curl -s http://localhost:8000)"
+      "Bash(curl -s http://localhost:8000)",
+      "Bash(git push:*)"
     ]
-  }
+  },
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ],
+  "enableAllProjectMcpServers": true
 }

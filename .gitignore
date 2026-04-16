@@ -1,5 +1,8 @@
-# Environment variables
+# Environment variables - CRITICAL: Never commit secrets!
 .env
+.env.local
+.env.production
+.env.*.local
 
 # Python
 __pycache__/
@@ -10,6 +13,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+docs/
 downloads/
 eggs/
 .eggs/
@@ -17,12 +21,13 @@ lib/
 lib64/
 parts/
 sdist/
+tests/
 var/
 wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-
+test*.py
 # IDE
 .vscode/
 .idea/

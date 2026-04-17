@@ -16,6 +16,15 @@ import logging
 import re
 from typing import Any, Literal
 
+# HyperGateAgent is the recommended replacement for GateAgent.
+# Import here so callers can do: from reasoner.gate_agent import HyperGateAgent
+# Lazy import to avoid a circular dependency at module load time.
+def __getattr__(name: str):  # noqa: N807
+    if name == "HyperGateAgent":
+        from reasoner.hypergate.hyperagent import HyperGateAgent  # noqa: PLC0415
+        return HyperGateAgent
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 from pydantic import BaseModel, Field
 
 from reasoner.core.constants import (
@@ -50,6 +59,11 @@ _TAXONOMY = {
     "J": ("pipeline", "dialectical"),
     "K": ("pipeline", "analogical"),
     "L": ("pipeline", "delphi"),
+    "M": ("pipeline", "cove"),
+    "N": ("pipeline", "sot"),
+    "O": ("pipeline", "tot"),
+    "P": ("pipeline", "pot"),
+    "Q": ("pipeline", "self_discover"),
     "W": ("web_search", None),
 }
 
@@ -68,6 +82,11 @@ _GATE_SYSTEM_PROMPT = (
     "- J: requires dialectical synthesis\n"
     "- K: requires analogical reasoning\n"
     "- L: requires expert panel consensus (Delphi)\n"
+    "- M: requires structured fact-checking and verification\n"
+    "- N: requires parallel decomposition and assembly\n"
+    "- O: requires sequential decision tree search\n"
+    "- P: requires computational reasoning with code\n"
+    "- Q: requires dynamic reasoning module composition\n"
     "- W: requires simple factual web search (current events, weather, sports scores, recent news)\n\n"
     "Output ONLY valid JSON with keys: 'category' (A-W), 'confidence' (0.0-1.0), 'reasoning' (one sentence).\n"
     "Do not include markdown formatting, explanations, or code fences."

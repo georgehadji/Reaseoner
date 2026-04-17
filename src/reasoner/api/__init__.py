@@ -90,6 +90,7 @@ from reasoner.pipeline import ARAPipeline
 from reasoner.llm import _REGISTRY, ProviderRouter, list_models
 from reasoner.presets import PRESETS, build_custom_router, get_preset, get_method_from_preset, is_valid_preset_name, resolve_preset_name
 from reasoner.gate_agent import GateAgent
+from reasoner.hypergate import HyperGateAgent
 
 # Neuro Integration
 from reasoner.neuro.server import create_neuro_router
@@ -357,7 +358,6 @@ class FollowupRequest(BaseModel):
 from .serializers import (
     _event,
     _is_debate,
-    _is_iterative,
     _is_orchestrated,
     _is_scientific,
     _is_socratic,
@@ -517,7 +517,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             filtered = _filter_routing(req.routing, "claude-sonnet")
             router = build_custom_router(filtered)
         else:
-            preset = get_preset(req.preset or "claude-only")
+            preset = get_preset(req.preset or "multi-perspective-budget")
             filtered_routing = _filter_routing(preset.routing, preset.primary_id)
             # Tier-based agent persona override for follow-ups
             if initial_state and initial_state.agent_model:
@@ -535,7 +535,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
 
         # ── Gate Agent: decide direct answer vs full pipeline ──
         if not req.force_pipeline:
-            gate = GateAgent(router)
+            gate = HyperGateAgent(router)
             decision = await gate.decide(req.problem)
             if decision.action == "direct":
                 async for chunk in _stream_direct_answer(router, req.problem, run_id):
@@ -576,34 +576,6 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             await pipeline._phase_1_decompose(state)
             await pipeline._phase_context_vetting(state, source_type=req.source_type)
 
-        # Iterative method wrapper functions with reflexion memory
-        async def iterative_round_1_generate(state: PipelineState):
-            await pipeline._phase_2_perspectives(state, use_reflexion=True)
-
-        async def iterative_round_1_critique(state: PipelineState):
-            await pipeline._phase_3_critique(state)
-            # Store insights for next round
-            new_memories = [s.steel_man for s in state.scores if s.steel_man]
-            state.reflexion_memory.extend(new_memories)
-
-        async def iterative_round_2_generate(state: PipelineState):
-            state.candidates, state.scores, state.top_candidates = [], [], []
-            await pipeline._phase_2_perspectives(state, use_reflexion=True)
-
-        async def iterative_round_2_critique(state: PipelineState):
-            await pipeline._phase_3_critique(state)
-            # Store insights for next round
-            new_memories = [s.steel_man for s in state.scores if s.steel_man]
-            state.reflexion_memory.extend(new_memories)
-
-        async def iterative_round_3_generate(state: PipelineState):
-            state.candidates, state.scores, state.top_candidates = [], [], []
-            await pipeline._phase_2_perspectives(state, use_reflexion=True)
-
-        async def iterative_round_3_critique(state: PipelineState):
-            await pipeline._phase_3_critique(state)
-            # Final round - keep the results for synthesis
-
         # Define phase sequence based on method
         phases = [
             (0, "Classification",     pipeline._phase_0_classify,    _ser_0),
@@ -639,16 +611,6 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                 (2, "Deep Research",      pipeline._phase_research_web_search,   _ser_2),
                 (3, "Perspectives",       pipeline._phase_2_perspectives,        _ser_2), # Using _ser_2 for both to output their respective states. Wait, _ser_2 doesn't output web discovery results. Let's use _ser_1 for Deep Research as it outputs web discovery results. Wait, _ser_1 outputs decomposition. We'll need a custom serializer or just use _ser_2.
                 (4, "Critique & Pruning", pipeline._phase_3_critique,            _ser_3),
-            ]
-        elif req.preset and "iterative" in req.preset:
-            # Iterative method: 3 rounds of generate -> critique with reflexion memory
-            phases += [
-                (2, "Round 1: Generate",  iterative_round_1_generate,     _ser_2),
-                (3, "Round 1: Critique",  iterative_round_1_critique,     _ser_3),
-                (4, "Round 2: Refine",    iterative_round_2_generate,     _ser_2),
-                (5, "Round 2: Critique",  iterative_round_2_critique,     _ser_3),
-                (6, "Round 3: Final",     iterative_round_3_generate,     _ser_2),
-                (7, "Round 3: Critique",  iterative_round_3_critique,     _ser_3),
             ]
         else:
             # Standard flow (Multi-Perspective)
@@ -691,7 +653,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                 state.errors.append(err_msg)
                 yield _event({"type": "phase_error", "phase": num, "error": err_msg})
                 # Halt pipeline on critical phase failures to prevent synthesis on corrupted state
-                if name in CRITICAL_PHASES or name.startswith("Round "):
+                if name in CRITICAL_PHASES:
                     break
                 continue
             duration = time.monotonic() - phase_start

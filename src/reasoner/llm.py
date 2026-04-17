@@ -407,12 +407,12 @@ class OpenRouterProvider(OpenAICompatibleProvider):
 # Whitelist of supported models.  Everything except Ollama routes through OpenRouter.
 _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     # Anthropic
-    "claude-opus":      {"model": "anthropic/claude-opus-4.6"},
+    "claude-opus":      {"model": "anthropic/claude-opus-4.7"},
     MODEL_CLAUDE_SONNET: {"model": "anthropic/claude-sonnet-4.6"},
     "claude-haiku":     {"model": "anthropic/claude-haiku-4.5"},
     # OpenAI
-    "gpt-5":            {"model": "openai/gpt-5"},
-    "gpt-5-mini":       {"model": "openai/gpt-5-mini"},
+    "gpt-5":            {"model": "openai/gpt-5.4"},
+    "gpt-5-mini":       {"model": "openai/gpt-5.4-mini"},
     "gpt-4o":           {"model": "openai/gpt-4o"},
     MODEL_GPT4O_MINI:   {"model": "openai/gpt-4o-mini"},
     "o3":               {"model": "openai/o3"},
@@ -420,7 +420,10 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     # Google
     MODEL_GEMINI_PRO:   {"model": "google/gemini-2.5-pro"},
     MODEL_GEMINI_FLASH: {"model": "google/gemini-2.5-flash"},
+    "gemma-4-26b":      {"model": "google/gemma-4-26b-a4b-it"},
+    "gemma-4-31b":      {"model": "google/gemma-4-31b-it"},
     # xAI
+    "grok-4.20":        {"model": "x-ai/grok-4.20"},
     "grok-4":           {"model": "x-ai/grok-4"},
     "grok-3":           {"model": "x-ai/grok-3"},
     "grok-3-mini":      {"model": "x-ai/grok-3-mini"},
@@ -430,17 +433,17 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "sonar-reasoning-pro": {"model": "perplexity/sonar-reasoning-pro", "extra_body": {"web_search_options": {"search_context_size": "medium"}}},
     "sonar-deep-research": {"model": "perplexity/sonar-deep-research", "extra_body": {"reasoning_effort": "low"}},
     # Mistral
-    "mistral-large-3":  {"model": "mistralai/mistral-large-2411"},
+    "mistral-large-3":  {"model": "mistralai/mistral-large-2512"},
     "mistral-medium":   {"model": "mistralai/mistral-medium-3.1"},
     "codestral":        {"model": "mistralai/codestral-2501"},
     "ministral-8b":     {"model": "mistralai/ministral-8b"},
     "ministral-3b":     {"model": "mistralai/ministral-3b"},
     # DeepSeek
-    "deepseek-v3":      {"model": "deepseek/deepseek-chat-v3-0324"},
+    "deepseek-v3":      {"model": "deepseek/deepseek-v3.2"},
     "deepseek-r1":      {"model": "deepseek/deepseek-r1-0528"},
     # Qwen
-    "qwen3-max":        {"model": "qwen/qwen3-max"},
-    "qwen3-plus":       {"model": "qwen/qwen-plus"},
+    "qwen3-max":        {"model": "qwen/qwen3.6-plus"},
+    "qwen3-plus":       {"model": "qwen/qwen3.5-plus-02-15"},
     "qwen3-turbo":      {"model": "qwen/qwen-turbo"},
     "qwen3-coder":      {"model": "qwen/qwen-coder-plus"},
     # Kimi
@@ -453,9 +456,22 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "glm-4-air":        {"model": "z-ai/glm-4.5-air"},
     "glm-4-airx":       {"model": "z-ai/glm-4.6"},
     "glm-4-long":       {"model": "z-ai/glm-4-32b"},
+    "glm-5.1":          {"model": "z-ai/glm-5.1"},
+    # Elephant
+    "elephant-alpha":   {"model": "openrouter/elephant-alpha"},
+    # Arcee AI
+    "arcee-trinity-large-thinking": {"model": "arcee-ai/trinity-large-thinking"},
+    "arcee-virtuoso-large":         {"model": "arcee-ai/virtuoso-large"},
+    "arcee-maestro-reasoning":      {"model": "arcee-ai/maestro-reasoning"},
+    "arcee-coder-large":            {"model": "arcee-ai/coder-large"},
+    # Xiaomi
+    "mimo-v2-pro":    {"model": "xiaomi/mimo-v2-pro"},
+    "mimo-v2-omni":   {"model": "xiaomi/mimo-v2-omni"},
+    "mimo-v2-flash":  {"model": "xiaomi/mimo-v2-flash"},
     # MiniMax
     "minimax-m2":       {"model": "minimax/minimax-01"},
-    "minimax-m2-5":     {"model": "minimax/abab6.5s-chat"},
+    "minimax-m2-5":     {"model": "minimax/minimax-m2.5"},
+    "minimax-m2-7":     {"model": "minimax/minimax-m2.7"},
     # Ollama (local)
     "ollama-llama3":    {"cls": "compat", "model": "llama3",    "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
     "ollama-llama3.1":  {"cls": "compat", "model": "llama3.1",  "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},

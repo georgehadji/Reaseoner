@@ -244,6 +244,8 @@ class PipelineState:
     phase_models: dict[str, str] = field(default_factory=dict)
     # Tracks tokens used per phase: {phase_name: {"input": int, "output": int}}
     phase_tokens: dict[str, dict[str, int]] = field(default_factory=dict)
+    # Tracks duration (seconds) per phase: {phase_name: float}
+    phase_durations: dict[str, float] = field(default_factory=dict)
     # Immutable per-phase results (foundation for future resume/replay support)
     phase_results: list["PhaseResult"] = field(default_factory=list)
     # Which preset was used — drives method-specific rendering
@@ -294,6 +296,15 @@ class PipelineState:
     # Per-phase token usage: {phase_name: {"input": int, "output": int, "total": int}}
     # (supersedes phase_tokens which only tracked input/output)
     detailed_token_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+
+    # ─────────────────────────────────────────────────────────────────────
+    # Conversation Context (Multi-turn Follow-up Support)
+    # ─────────────────────────────────────────────────────────────────────
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
+    conversation_id: str = ""
+    turn_number: int = 1
+    previous_synthesis: str = ""
+    agent_model: str | None = None  # Tier-based agent override for follow-ups
 
     def log(self, phase: str, message: str) -> None:
         entry = f"[{phase}] {message}"

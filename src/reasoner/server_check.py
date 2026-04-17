@@ -142,9 +142,9 @@ def main():
         print("  To start the server:")
         print("    python start_all.py")
         print("  Or:")
-        print("    python -m uvicorn asgi:app --host 0.0.0.0 --port 8000")
+        print("    python -m uvicorn asgi:app --host 0.0.0.0 --port 8001")
         print()
-        print("  Then open: http://localhost:8000")
+        print("  Then open: http://localhost:8001")
         print("=" * 60)
         return 0
     else:

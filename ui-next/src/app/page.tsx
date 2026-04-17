@@ -14,7 +14,7 @@ import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
-import { PhaseEvent, Conversation } from '@/lib/types';
+import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '@/lib/types';
 import { METHOD_PHASES, DEFAULTS } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
@@ -34,12 +34,13 @@ export default function Home() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
 
   const { history, refresh: refreshHistory, remove: removeHistory } = useConversationHistory();
-  const { startRun, stopRun } = usePipelineStream();
+  const { startRun, startFollowup, stopRun } = usePipelineStream();
   const serverOnline = useServerStatus();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatFeedMessage[]>([]);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const progressIdRef = useRef<string | null>(null);
+  const conversationIdRef = useRef<string | null>(null);
 
   const [completedPhases, setCompletedPhases] = useState<number[]>([]);
   const [errorPhases, setErrorPhases] = useState<number[]>([]);
@@ -138,6 +139,8 @@ export default function Home() {
         });
         await saveConversation({
           id: assistantId,
+          conversation_id: assistantId,
+          turn_number: 1,
           timestamp: new Date().toISOString(),
           problem,
           phases: [],
@@ -165,131 +168,175 @@ export default function Home() {
     }
 
     const isMultiPerspective = method === 'multi-perspective';
-    const req = {
-      problem,
-      preset: getCurrentPreset(),
-      top_k: isMultiPerspective ? 4 : (isExpert ? 4 : 2),
-      sequential: isMultiPerspective ? false : !isSequential,
-    };
-    // eslint-disable-next-line no-console
-    console.log('RunRequest payload:', req);
+
+    // ── Detect follow-up mode ──
+    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
+    const isFollowup = !!lastAssistantMsg && messages.length > 0;
 
     const phases: RenderedPhase[] = [];
     let finalErrors: string[] = [];
     let finalTokens = { input: 0, output: 0, total: 0 };
 
+    // Shared event handler
+    const onEvent = (ev: PhaseEvent) => {
+      if (ev.type === 'prompt_enhanced' && ev.enhanced) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: 'info-enhance-' + Date.now(),
+            role: 'info',
+            content: `Prompt enhanced: "${ev.enhanced}"`,
+            meta: { original: ev.original, enhanced: ev.enhanced },
+          },
+        ]);
+      } else if (ev.type === 'phase_start' && typeof ev.phase === 'number') {
+        const methodPhases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
+        const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
+        phaseStartTimesRef.current[ev.phase] = performance.now();
+        setCurrentPhase(ev.phase);
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            next[idx] = { ...next[idx], currentPhaseName: displayName };
+          }
+          return next;
+        });
+      } else if (ev.type === 'phase_complete' && typeof ev.phase === 'number') {
+        const methodPhases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
+        const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
+        const phaseNum = ev.phase;
+        const phaseData = ev.data ?? {};
+        const renderedPhase: RenderedPhase = {
+          index: phases.length,
+          phase: phaseNum,
+          name: displayName,
+          data: phaseData,
+        };
+        phases.push(renderedPhase);
+        const serverDuration = typeof (phaseData as Record<string, unknown>).duration === 'number'
+          ? (phaseData as Record<string, unknown>).duration as number
+          : undefined;
+        const durationMs = serverDuration !== undefined
+          ? serverDuration * 1000
+          : performance.now() - (phaseStartTimesRef.current[phaseNum] ?? performance.now());
+        setPhaseDurations((prev) => ({ ...prev, [phaseNum]: durationMs / 1000 }));
+        setCompletedPhases((prev) => (prev.includes(phaseNum) ? prev : [...prev, phaseNum]));
+        setCurrentPhase(undefined);
+
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            next[idx] = {
+              ...next[idx],
+              content: buildMarkdownFromPhases(phases),
+              phases: [...phases],
+              currentPhaseName: undefined,
+            };
+          }
+          return next;
+        });
+      } else if (ev.type === 'phase_error' && typeof ev.phase === 'number') {
+        setErrorPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
+        setCurrentPhase(undefined);
+      } else if (ev.type === 'error') {
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            next[idx] = { ...next[idx], isStreaming: false, currentPhaseName: undefined };
+          }
+          next.push({ id: 'err-' + Date.now(), role: 'error', content: ev.message || 'Pipeline error' });
+          return next;
+        });
+        setCurrentPhase(undefined);
+      } else if (ev.type === 'cancelled') {
+        setMessages((prev) => [
+          ...prev,
+          { id: 'info-' + Date.now(), role: 'error', content: ev.message || 'Stopped by user' },
+        ]);
+        setCurrentPhase(undefined);
+      } else if (ev.type === 'done') {
+        finalErrors = ev.errors || [];
+        finalTokens = ev.total_tokens || { input: 0, output: 0, total: 0 };
+        const totalDuration = ev.duration;
+        setCurrentPhase(undefined);
+
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            next[idx] = {
+              ...next[idx],
+              content: buildMarkdownFromPhases(phases),
+              phases: [...phases],
+              isStreaming: false,
+              currentPhaseName: undefined,
+              tokens: finalTokens,
+            };
+          }
+          if (finalErrors.length > 0) {
+            next.push({ id: 'err-' + Date.now(), role: 'error', content: finalErrors.join('\n') });
+          }
+          return next;
+        });
+
+        const convId = conversationIdRef.current || assistantId;
+        const historyTurns: ConversationTurn[] = messages
+          .filter((m): m is ChatFeedMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+          .map((m) => ({ role: m.role, content: m.content || '' }));
+        const turnNumber = Math.max(1, (historyTurns.length / 2) + 1);
+
+        const conv: Conversation = {
+          id: assistantId,
+          conversation_id: convId,
+          turn_number: Math.floor(turnNumber),
+          timestamp: new Date().toISOString(),
+          problem,
+          phases: phases.map((p) => ({ phase: p.phase, name: p.name, data: p.data })),
+          errors: finalErrors,
+          preset: getCurrentPreset(),
+          method,
+          total_tokens: finalTokens,
+          duration: totalDuration,
+        };
+        saveConversation(conv).then(refreshHistory).catch(console.error);
+      }
+    };
+
     try {
-      await startRun(req, (ev: PhaseEvent) => {
-        if (ev.type === 'prompt_enhanced' && ev.enhanced) {
-          setMessages((prev) => [
-            ...prev,
-            {
-              id: 'info-enhance-' + Date.now(),
-              role: 'info',
-              content: `Prompt enhanced: "${ev.enhanced}"`,
-              meta: { original: ev.original, enhanced: ev.enhanced },
-            },
-          ]);
-        } else if (ev.type === 'phase_start' && typeof ev.phase === 'number') {
-          const methodPhases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
-          const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
-          phaseStartTimesRef.current[ev.phase] = performance.now();
-          setCurrentPhase(ev.phase);
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantId);
-            if (idx !== -1) {
-              next[idx] = { ...next[idx], currentPhaseName: displayName };
-            }
-            return next;
-          });
-        } else if (ev.type === 'phase_complete' && typeof ev.phase === 'number') {
-          const methodPhases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
-          const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
-          const phaseNum = ev.phase;
-          const phaseData = ev.data ?? {};
-          const renderedPhase: RenderedPhase = {
-            index: phases.length,
-            phase: phaseNum,
-            name: displayName,
-            data: phaseData,
-          };
-          phases.push(renderedPhase);
-          const durationMs = performance.now() - (phaseStartTimesRef.current[phaseNum] ?? performance.now());
-          setPhaseDurations((prev) => ({ ...prev, [phaseNum]: durationMs / 1000 }));
-          setCompletedPhases((prev) => (prev.includes(phaseNum) ? prev : [...prev, phaseNum]));
-          setCurrentPhase(undefined);
-
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantId);
-            if (idx !== -1) {
-              next[idx] = {
-                ...next[idx],
-                content: buildMarkdownFromPhases(phases),
-                phases: [...phases],
-                currentPhaseName: undefined,
-              };
-            }
-            return next;
-          });
-        } else if (ev.type === 'phase_error' && typeof ev.phase === 'number') {
-          setErrorPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
-          setCurrentPhase(undefined);
-        } else if (ev.type === 'error') {
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantId);
-            if (idx !== -1) {
-              next[idx] = { ...next[idx], isStreaming: false, currentPhaseName: undefined };
-            }
-            next.push({ id: 'err-' + Date.now(), role: 'error', content: ev.message || 'Pipeline error' });
-            return next;
-          });
-          setCurrentPhase(undefined);
-        } else if (ev.type === 'cancelled') {
-          setMessages((prev) => [
-            ...prev,
-            { id: 'info-' + Date.now(), role: 'error', content: ev.message || 'Stopped by user' },
-          ]);
-          setCurrentPhase(undefined);
-        } else if (ev.type === 'done') {
-          finalErrors = ev.errors || [];
-          finalTokens = ev.total_tokens || { input: 0, output: 0, total: 0 };
-          setCurrentPhase(undefined);
-
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantId);
-            if (idx !== -1) {
-              next[idx] = {
-                ...next[idx],
-                content: buildMarkdownFromPhases(phases),
-                phases: [...phases],
-                isStreaming: false,
-                currentPhaseName: undefined,
-                tokens: finalTokens,
-              };
-            }
-            if (finalErrors.length > 0) {
-              next.push({ id: 'err-' + Date.now(), role: 'error', content: finalErrors.join('\n') });
-            }
-            return next;
-          });
-
-          const conv: Conversation = {
-            id: Date.now().toString(),
-            timestamp: new Date().toISOString(),
-            problem,
-            phases: phases.map((p) => ({ phase: p.phase, name: p.name, data: p.data })),
-            errors: finalErrors,
-            preset: getCurrentPreset(),
-            method,
-            total_tokens: finalTokens,
-          };
-          saveConversation(conv).then(refreshHistory).catch(console.error);
-        }
-      });
+      if (isFollowup) {
+        const followupReq: RunFollowupRequest = {
+          question: problem,
+          preset: getCurrentPreset(),
+          top_k: isMultiPerspective ? 4 : (isExpert ? 4 : 2),
+          sequential: isMultiPerspective ? false : !isSequential,
+          enhance_prompt: useAppStore.getState().isEnhancePrompt,
+          conversation_id: conversationIdRef.current || lastAssistantMsg.id,
+          history: messages
+            .filter((m): m is ChatFeedMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+            .map((m) => ({ role: m.role, content: m.content || '' })),
+          previous_synthesis: lastAssistantMsg.content || '',
+          agent_model: null,
+        };
+        // eslint-disable-next-line no-console
+        console.log('RunFollowupRequest payload:', followupReq);
+        await startFollowup(followupReq, onEvent);
+      } else {
+        const newConvId = assistantId;
+        conversationIdRef.current = newConvId;
+        const req = {
+          problem,
+          preset: getCurrentPreset(),
+          top_k: isMultiPerspective ? 4 : (isExpert ? 4 : 2),
+          sequential: isMultiPerspective ? false : !isSequential,
+          enhance_prompt: useAppStore.getState().isEnhancePrompt,
+        };
+        // eslint-disable-next-line no-console
+        console.log('RunRequest payload:', req);
+        await startRun(req, onEvent);
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Connection error';
       setMessages((prev) => {
@@ -322,9 +369,11 @@ export default function Home() {
     setCurrentPhase(undefined);
     setPhaseDurations({});
     phaseStartTimesRef.current = {};
+    conversationIdRef.current = null;
   }
 
   function handleLoad(conv: Conversation) {
+    conversationIdRef.current = conv.conversation_id || conv.id;
     const renderedPhases: RenderedPhase[] = conv.phases.map((p, idx) => ({
       index: idx,
       phase: p.phase,
@@ -339,6 +388,7 @@ export default function Home() {
         content: buildMarkdownFromPhases(conv.phases),
         phases: renderedPhases,
         tokens: conv.total_tokens ?? undefined,
+        duration: conv.duration,
       },
     ];
     if (conv.errors.length > 0) {
@@ -358,6 +408,9 @@ export default function Home() {
 
   const hasMessages = messages.length > 0;
   const activeAssistantMsg = messages.find((m) => m.role === 'assistant' && m.isStreaming);
+  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
+  const currentPreset = getCurrentPreset();
+  const followupAgentBadge = lastAssistantMsg ? 'Follow-up mode active' : null;
 
   return (
     <div className="flex h-screen w-full bg-[var(--bg)] text-[var(--text)]">
@@ -411,7 +464,21 @@ export default function Home() {
           )}
         </div>
 
-        {hasMessages && <Composer running={running} onSubmit={() => handleSubmit()} onStop={handleStop} />}
+        {hasMessages && (
+          <div className="w-full">
+            {followupAgentBadge && (
+              <div className="mx-auto max-w-3xl px-4 pb-2 text-xs text-muted-foreground">
+                {followupAgentBadge}
+              </div>
+            )}
+            <Composer
+              running={running}
+              onSubmit={() => handleSubmit()}
+              onStop={handleStop}
+              isFollowup={!!lastAssistantMsg}
+            />
+          </div>
+        )}
       </div>
 
       <ShortcutModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

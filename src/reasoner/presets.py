@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from reasoner.llm import ProviderRouter, build_provider, list_models, _REGISTRY
 
@@ -58,6 +58,23 @@ def get_method_from_preset(preset: str) -> str:
     if "socratic" in preset:
         return "socratic"
     return "multi-perspective"
+
+
+def get_preset_tier(preset_id: str) -> Literal["budget", "premium", "unknown"]:
+    """Infer pricing tier from preset ID suffix."""
+    if preset_id.endswith("-budget"):
+        return "budget"
+    if preset_id.endswith("-premium"):
+        return "premium"
+    return "unknown"
+
+
+# Agent model used for follow-up synthesis / classification / decomposition.
+# This ensures a consistent conversational persona across all methods.
+FOLLOWUP_AGENT_MODELS: dict[str, str] = {
+    "budget": "kimi-k2-5",
+    "premium": "grok-4.20",
+}
 
 
 @dataclass
@@ -139,28 +156,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Standard 6-phase pipeline using cheapest cross-lab models. DeepSeek (reasoning) + Qwen (cross-lab scoring). Pennies per run.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
-            "classification": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
+            "classification": "gemma-4-26b",
             "decomposition": "deepseek-v3",
             "constructive": "deepseek-v3",
-            "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
-            "scoring": "qwen3-max",
+            "destructive": "mistral-large-3",
+            "systemic": "deepseek-v3",
+            "minimalist": "gemma-4-26b",
+            "scoring": "deepseek-v3",
             "stress_testing": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "qwen3-max"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "qwen3-plus",
             "destructive": "deepseek-v3",
-            "systemic": "deepseek-v3",
+            "systemic": "qwen3-plus",
             "minimalist": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "qwen3-max",
-            "synthesis": "glm-4-air",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "glm-4-air"
         },
         "notes": [
             "DeepSeek + Qwen + GLM: 3 different labs in Phase 2 = genuine diversity",
@@ -178,24 +195,24 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "gemini-flash",
             "decomposition": "claude-sonnet",
             "constructive": "kimi-k2-5",
-            "destructive": "deepseek-v3",
+            "destructive": "deepseek-r1",
             "systemic": "claude-opus",
-            "minimalist": "ministral-8b",
+            "minimalist": "gemini-flash",
             "scoring": "sonar-pro",
             "stress_testing": "claude-opus",
-            "synthesis": "glm-5",
+            "synthesis": "claude-opus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
-            "classification": "deepseek-v3",
+            "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
             "constructive": "claude-opus",
             "destructive": "claude-opus",
-            "systemic": "deepseek-v3",
-            "minimalist": "gemini-flash",
+            "systemic": "deepseek-r1",
+            "minimalist": "deepseek-r1",
             "scoring": "claude-opus",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "claude-opus",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "gpt-5"
         },
         "notes": [
             "Phase 2: Moonshot + DeepSeek + Anthropic + Mistral — 4 different training lineages",
@@ -213,28 +230,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Iterative refinement loop using cheap cross-lab models. DeepSeek generates, Qwen critiques, GLM systemic (cross-lab avoids echo chamber).",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
-            "classification": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
+            "classification": "gemma-4-26b",
             "decomposition": "deepseek-v3",
             "constructive": "deepseek-v3",
-            "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
-            "scoring": "qwen3-max",
+            "destructive": "mistral-large-3",
+            "systemic": "deepseek-v3",
+            "minimalist": "gemma-4-26b",
+            "scoring": "deepseek-v3",
             "stress_testing": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "qwen3-max"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "qwen3-plus",
             "destructive": "deepseek-v3",
-            "systemic": "deepseek-v3",
+            "systemic": "qwen3-plus",
             "minimalist": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "qwen3-max",
-            "synthesis": "glm-4-air",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "glm-4-air"
         },
         "notes": [
             "Critical: constructive=DeepSeek, destructive=Qwen, systemic=GLM — 3 different labs",
@@ -247,26 +264,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Generates multiple solutions, critiques each, selects best, and refines. Repeats for up to 5 iterations or until score > 8/10. Genetic optimization for complex problems.",
         "primary_id": "claude-opus",
         "routing": {
+            "prompt_enhancement": "gemini-flash",
             "classification": "gemini-flash",
             "decomposition": "claude-sonnet",
             "constructive": "claude-opus",
-            "destructive": "deepseek-v3",
+            "destructive": "deepseek-r1",
             "systemic": "gemini-flash",
             "minimalist": "claude-sonnet",
             "scoring": "sonar-pro",
             "stress_testing": "claude-opus",
-            "synthesis": "claude-opus",
+            "synthesis": "claude-opus"
         },
         "fallback_routing": {
-            "classification": "deepseek-v3",
+            "prompt_enhancement": "claude-sonnet",
+            "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
             "constructive": "claude-sonnet",
             "destructive": "claude-opus",
             "systemic": "claude-opus",
-            "minimalist": "deepseek-v3",
+            "minimalist": "deepseek-r1",
             "scoring": "claude-opus",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "glm-5",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "glm-5.1"
         },
         "notes": [
             "Phase 2: 4 different labs (Anthropic, DeepSeek, Google, Claude Sonnet) = no echo chamber",
@@ -282,26 +301,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Adversarial debate with 3 cheap cross-lab models. DeepSeek (Model A) vs Qwen (Model B), judged by GLM. 3 different training lineages.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "classification": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
+            "classification": "gemma-4-26b",
             "decomposition": "deepseek-v3",
             "constructive": "deepseek-v3",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
+            "minimalist": "gemma-4-26b",
             "scoring": "glm-4-air",
             "stress_testing": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
+            "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "qwen3-plus",
             "destructive": "deepseek-v3",
             "systemic": "deepseek-v3",
             "minimalist": "deepseek-v3",
-            "scoring": "qwen3-max",
-            "stress_testing": "qwen3-max",
-            "synthesis": "glm-4-air",
+            "scoring": "qwen3-plus",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "glm-4-air"
         },
         "notes": [
             "3 labs: DeepSeek / Qwen (Alibaba) / GLM (ZhipuAI) — genuine adversarial dynamic",
@@ -319,23 +340,23 @@ _PRESET_CONFIGS: list[dict] = [
             "decomposition": "claude-sonnet",
             "constructive": "gpt-5",
             "destructive": "claude-opus",
-            "systemic": "deepseek-v3",
+            "systemic": "deepseek-r1",
             "minimalist": "claude-sonnet",
             "scoring": "sonar-pro",
             "stress_testing": "claude-opus",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
-            "classification": "deepseek-v3",
+            "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
             "constructive": "claude-opus",
-            "destructive": "deepseek-v3",
+            "destructive": "deepseek-r1",
             "systemic": "claude-opus",
-            "minimalist": "deepseek-v3",
+            "minimalist": "deepseek-r1",
             "scoring": "claude-opus",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "claude-opus",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "claude-opus"
         },
         "notes": [
             "Model A (GPT-5), Model B (Claude Opus), systemic (DeepSeek) = 3 labs",
@@ -349,26 +370,26 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Evidence-grounded analysis with minimal cost. Sonar for search phases only, DeepSeek for reasoning. Single web-search provider with cross-lab diversity.",
         "primary_id": "sonar",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "classification": "sonar",
             "decomposition": "deepseek-v3",
-            "constructive": "deepseek-v3",
-            "destructive": "qwen3-max",
+            "constructive": "sonar",
+            "destructive": "deepseek-v3",
             "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
-            "scoring": "qwen3-max",
+            "minimalist": "sonar",
+            "scoring": "deepseek-v3",
             "stress_testing": "deepseek-v3",
-            "synthesis": "sonar",
+            "synthesis": "sonar"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "deepseek-v3",
             "systemic": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "qwen3-max",
-            "synthesis": "deepseek-v3",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "deepseek-v3"
         },
         "notes": [
             "Sonar only in classification + synthesis for minimum search cost",
@@ -381,26 +402,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Perplexity Sonar grounded models dominate. Every phase benefits from web-verified evidence. Ideal for empirical questions, current events, market analysis.",
         "primary_id": "sonar-pro",
         "routing": {
+            "prompt_enhancement": "gemini-flash",
             "classification": "sonar",
             "decomposition": "claude-sonnet",
             "constructive": "sonar-deep-research",
-            "destructive": "deepseek-v3",
+            "destructive": "deepseek-r1",
             "systemic": "claude-sonnet",
             "minimalist": "sonar",
             "scoring": "sonar-pro",
             "stress_testing": "grok-4",
-            "synthesis": "sonar-deep-research",
+            "synthesis": "sonar-deep-research"
         },
         "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet",
             "classification": "claude-sonnet",
             "decomposition": "gemini-flash",
             "constructive": "claude-sonnet",
             "destructive": "claude-opus",
-            "systemic": "deepseek-v3",
+            "systemic": "claude-sonnet",
             "minimalist": "claude-sonnet",
             "scoring": "claude-sonnet",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "claude-sonnet",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "claude-sonnet"
         },
         "notes": [
             "WARNING: Sonar models add search latency (~2-5x slower)",
@@ -415,28 +438,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Standard 6-phase pipeline using cheapest cross-lab models. DeepSeek (reasoning) + Qwen (cross-lab scoring). Pennies per run.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
-            "classification": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
+            "classification": "gemma-4-26b",
             "decomposition": "deepseek-v3",
             "constructive": "deepseek-v3",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
-            "scoring": "qwen3-max",
+            "minimalist": "gemma-4-26b",
+            "scoring": "deepseek-v3",
             "stress_testing": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "qwen3-plus",
             "destructive": "deepseek-v3",
             "systemic": "deepseek-v3",
             "minimalist": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "qwen3-max",
-            "synthesis": "glm-4-air",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "glm-4-air"
         },
         "notes": [
             "DeepSeek + Qwen + GLM: 3 different labs in Phase 2 = genuine diversity",
@@ -450,26 +473,26 @@ _PRESET_CONFIGS: list[dict] = [
         "primary_id": "deepseek-v3",
         "routing": {
             "prompt_enhancement": "gemini-flash",
-            "classification": "qwen3-turbo",
-            "decomposition": "deepseek-v3",
-            "constructive": "kimi-k2",
-            "destructive": "deepseek-v3",
+            "classification": "gemini-flash",
+            "decomposition": "claude-sonnet",
+            "constructive": "kimi-k2-5",
+            "destructive": "deepseek-r1",
             "systemic": "qwen3-max",
-            "minimalist": "glm-4-plus",
+            "minimalist": "glm-5.1",
             "scoring": "claude-sonnet",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "glm-5",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "glm-5.1"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
             "classification": "claude-sonnet",
             "decomposition": "glm-4-air",
-            "constructive": "deepseek-v3",
-            "systemic": "deepseek-v3",
-            "minimalist": "deepseek-v3",
+            "constructive": "deepseek-r1",
+            "systemic": "deepseek-r1",
+            "minimalist": "deepseek-r1",
             "scoring": "qwen3-max",
             "stress_testing": "qwen3-max",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "notes": [
             "All models open-weight — can be self-hosted for zero API cost",
@@ -484,26 +507,26 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Evidence-grounded analysis with minimal cost. Sonar for search phases only, DeepSeek for reasoning. Single web-search provider with cross-lab diversity.",
         "primary_id": "sonar",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "classification": "sonar",
             "decomposition": "deepseek-v3",
-            "constructive": "deepseek-v3",
-            "destructive": "qwen3-max",
+            "constructive": "sonar",
+            "destructive": "deepseek-v3",
             "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
-            "scoring": "qwen3-max",
+            "minimalist": "sonar",
+            "scoring": "deepseek-v3",
             "stress_testing": "deepseek-v3",
-            "synthesis": "sonar",
+            "synthesis": "sonar"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "deepseek-v3",
             "systemic": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "qwen3-max",
-            "synthesis": "deepseek-v3",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "deepseek-v3"
         },
         "notes": [
             "Sonar only in classification + synthesis for minimum search cost",
@@ -520,12 +543,12 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "sonar",
             "decomposition": "claude-sonnet",
             "constructive": "sonar-deep-research",
-            "destructive": "deepseek-v3",
+            "destructive": "deepseek-r1",
             "systemic": "claude-opus",
             "minimalist": "sonar",
             "scoring": "sonar-pro",
             "stress_testing": "grok-4",
-            "synthesis": "sonar-deep-research",
+            "synthesis": "sonar-deep-research"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
@@ -536,8 +559,8 @@ _PRESET_CONFIGS: list[dict] = [
             "systemic": "claude-sonnet",
             "minimalist": "claude-sonnet",
             "scoring": "claude-sonnet",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "claude-sonnet",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "claude-sonnet"
         },
         "notes": [
             "WARNING: Sonar models add search latency (~2-5x slower)",
@@ -552,28 +575,28 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Panel-of-experts evaluation using cheap cross-lab models. DeepSeek reasoning + Qwen cross-scoring for impartial verdicts.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
-            "classification": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
+            "classification": "gemma-4-26b",
             "decomposition": "deepseek-v3",
             "constructive": "deepseek-v3",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "qwen3-turbo",
+            "minimalist": "gemma-4-26b",
             "scoring": "qwen3-max",
             "stress_testing": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
             "classification": "glm-4-air",
             "decomposition": "glm-4-air",
-            "constructive": "qwen3-max",
+            "constructive": "qwen3-plus",
             "destructive": "deepseek-v3",
             "systemic": "deepseek-v3",
             "minimalist": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "qwen3-max",
-            "synthesis": "glm-4-air",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "glm-4-air"
         },
         "notes": [
             "DeepSeek + Qwen + GLM: 3 different labs in Phase 2 = genuine diversity",
@@ -590,24 +613,24 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "gemini-flash",
             "decomposition": "claude-sonnet",
             "constructive": "kimi-k2-5",
-            "destructive": "deepseek-v3",
+            "destructive": "deepseek-r1",
             "systemic": "claude-opus",
             "minimalist": "mistral-large-3",
             "scoring": "sonar-pro",
             "stress_testing": "grok-4",
-            "synthesis": "gpt-5",
+            "synthesis": "gpt-5"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
-            "classification": "deepseek-v3",
+            "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
             "constructive": "claude-opus",
             "destructive": "claude-opus",
-            "systemic": "deepseek-v3",
+            "systemic": "deepseek-r1",
             "minimalist": "claude-opus",
             "scoring": "claude-opus",
             "stress_testing": "claude-opus",
-            "synthesis": "claude-opus",
+            "synthesis": "claude-opus"
         },
         "notes": [
             "Phase 2: Moonshot + DeepSeek + Anthropic + Mistral — 4 different training lineages",
@@ -622,13 +645,13 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Prospective failure analysis — budget tier. Failure narrative → root cause → early signals → hardened redesign. Gary Klein (1989) methodology.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "destructive": "deepseek-v3",
             "scoring": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
-            "prompt_enhancement": "glm-4-air",
+            "prompt_enhancement": "glm-4-air"
         },
     },
     {
@@ -640,10 +663,10 @@ _PRESET_CONFIGS: list[dict] = [
             "prompt_enhancement": "gemini-flash",
             "destructive": "claude-sonnet",
             "scoring": "claude-sonnet",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
-            "prompt_enhancement": "claude-sonnet",
+            "prompt_enhancement": "claude-sonnet"
         },
     },
     # ── Bayesian ─────────────────────────────────────────────────────
@@ -653,14 +676,14 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Four-phase Bayesian epistemology — budget tier. Prior elicitation → likelihood assessment → posterior update → sensitivity analysis. Jaynes (2003) methodology.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "constructive": "deepseek-v3",
             "destructive": "deepseek-v3",
             "scoring": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
-            "prompt_enhancement": "glm-4-air",
+            "prompt_enhancement": "glm-4-air"
         },
     },
     {
@@ -673,10 +696,10 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "claude-sonnet",
             "destructive": "claude-sonnet",
             "scoring": "claude-sonnet",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
-            "prompt_enhancement": "claude-sonnet",
+            "prompt_enhancement": "claude-sonnet"
         },
     },
     # ── Dialectical ──────────────────────────────────────────────────
@@ -686,14 +709,14 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Hegelian dialectic — budget tier. Thesis → antithesis → contradiction analysis → Aufhebung. Qualitative transcendence, not compromise.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "constructive": "deepseek-v3",
             "destructive": "deepseek-v3",
             "scoring": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
-            "prompt_enhancement": "glm-4-air",
+            "prompt_enhancement": "glm-4-air"
         },
     },
     {
@@ -706,10 +729,10 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "claude-sonnet",
             "destructive": "claude-sonnet",
             "scoring": "claude-sonnet",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
-            "prompt_enhancement": "claude-sonnet",
+            "prompt_enhancement": "claude-sonnet"
         },
     },
     # ── Analogical ───────────────────────────────────────────────────
@@ -719,12 +742,12 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Structure-mapping theory — find isomorphic problems solved in other domains, then transfer the solution. Budget tier with DeepSeek V3. Abstraction → domain search → mapping → transfer & adaptation.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "systemic": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
-            "prompt_enhancement": "glm-4-air",
+            "prompt_enhancement": "glm-4-air"
         },
     },
     {
@@ -735,10 +758,10 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash",
             "systemic": "claude-sonnet",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
-            "prompt_enhancement": "claude-sonnet",
+            "prompt_enhancement": "claude-sonnet"
         },
     },
     # ── Delphi ───────────────────────────────────────────────────────
@@ -748,15 +771,15 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "RAND Delphi expert consensus — budget tier. 4 independent experts + anonymous aggregation + revision + dissent. All experts use the same model for cost efficiency.",
         "primary_id": "deepseek-v3",
         "routing": {
-            "prompt_enhancement": "qwen3-turbo",
+            "prompt_enhancement": "gemma-4-26b",
             "expert_1": "deepseek-v3",
             "expert_2": "deepseek-v3",
             "expert_3": "deepseek-v3",
             "expert_4": "deepseek-v3",
-            "synthesis": "deepseek-v3",
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
-            "prompt_enhancement": "glm-4-air",
+            "prompt_enhancement": "glm-4-air"
         },
     },
     {
@@ -767,13 +790,13 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash",
             "expert_1": "claude-sonnet",
-            "expert_2": "gpt-4o-mini",
+            "expert_2": "gpt-5-mini",
             "expert_3": "gemini-flash",
             "expert_4": "deepseek-v3",
-            "synthesis": "claude-sonnet",
+            "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
-            "prompt_enhancement": "claude-sonnet",
+            "prompt_enhancement": "claude-sonnet"
         },
     },
 ]

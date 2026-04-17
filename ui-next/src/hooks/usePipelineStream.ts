@@ -2,18 +2,18 @@
 
 import { useRef, useCallback } from 'react';
 import { fetchWithCsrf } from '@/lib/security-client';
-import { PhaseEvent, RunRequest } from '@/lib/types';
+import { PhaseEvent, RunRequest, RunFollowupRequest } from '@/lib/types';
 
 export function usePipelineStream() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const startRun = useCallback(
-    async (req: RunRequest, onEvent: (ev: PhaseEvent) => void) => {
+  const streamEvents = useCallback(
+    async (url: string, body: object, onEvent: (ev: PhaseEvent) => void) => {
       abortControllerRef.current = new AbortController();
-      const resp = await fetchWithCsrf('/api/run', {
+      const resp = await fetchWithCsrf(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(req),
+        body: JSON.stringify(body),
         signal: abortControllerRef.current.signal,
       });
 
@@ -54,11 +54,25 @@ export function usePipelineStream() {
     []
   );
 
+  const startRun = useCallback(
+    async (req: RunRequest, onEvent: (ev: PhaseEvent) => void) => {
+      await streamEvents('/api/run', req, onEvent);
+    },
+    [streamEvents]
+  );
+
+  const startFollowup = useCallback(
+    async (req: RunFollowupRequest, onEvent: (ev: PhaseEvent) => void) => {
+      await streamEvents('/api/run-followup', req, onEvent);
+    },
+    [streamEvents]
+  );
+
   const stopRun = useCallback(() => {
     abortControllerRef.current?.abort();
     fetchWithCsrf('/api/stop', { method: 'POST' }).catch(() => {});
     abortControllerRef.current = null;
   }, []);
 
-  return { startRun, stopRun };
+  return { startRun, startFollowup, stopRun };
 }

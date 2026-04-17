@@ -12,6 +12,7 @@ interface SynthesisCardProps {
   defaultOpen?: boolean;
   tokens?: { input?: number; output?: number } | null;
   models?: string[] | null;
+  duration?: number;
 }
 
 function formatModelLabel(model: string) {
@@ -26,6 +27,7 @@ export function SynthesisCard({
   defaultOpen = true,
   tokens,
   models,
+  duration,
 }: SynthesisCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -45,6 +47,9 @@ export function SynthesisCard({
             <span className="text-sm font-semibold text-[var(--text)]">{name}</span>
             <span className="text-xs text-[var(--text-subtle)]">
               {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
+              {duration !== undefined && duration > 0 ? (
+                <span className="ml-2">· {duration.toFixed(1)}s</span>
+              ) : null}
             </span>
             {models && models.length > 0 ? (
               <span className="max-w-[200px] truncate text-xs text-[var(--text-subtle)]" title={models.join(', ')}>

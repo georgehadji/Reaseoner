@@ -3,7 +3,7 @@
 Start all Reasoner servers.
 
 By default starts:
-  - Main API server      : http://localhost:8000
+  - Main API server      : http://localhost:8001
   - Neuro memory server  : http://localhost:50001
 
 Usage:
@@ -160,7 +160,7 @@ def main() -> int:
     parser.add_argument("--no-frontend", action="store_true", help="Skip the Next.js frontend dev server")
     parser.add_argument("--no-searxng", action="store_true", help="Skip auto-starting SearXNG")
     parser.add_argument("--check", action="store_true", help="Run pre-flight checks before starting")
-    parser.add_argument("--main-port", type=int, default=8000, help="Port for the main API server")
+    parser.add_argument("--main-port", type=int, default=8001, help="Port for the main API server")
     parser.add_argument("--neuro-port", type=int, default=50001, help="Port for the standalone neuro server")
     parser.add_argument("--frontend-port", type=int, default=3000, help="Port for the Next.js frontend dev server")
     args = parser.parse_args()

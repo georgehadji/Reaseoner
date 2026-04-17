@@ -36,10 +36,28 @@ function getModels(data: unknown): string[] | null {
   return m.filter((x): x is string => typeof x === 'string');
 }
 
+function getDuration(data: unknown): number | undefined {
+  if (!data || typeof data !== 'object') return undefined;
+  const d = data as Record<string, unknown>;
+  const duration = d.duration;
+  return typeof duration === 'number' ? duration : undefined;
+}
+
 export function PhaseRenderer({ phase }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
+  const duration = getDuration(data);
+
+  // Direct Response / Web Search: render inline without a phase card
+  if (name === 'Direct Response' || name === 'Web Search') {
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    return (
+      <div className="markdown-body text-[17px] leading-relaxed">
+        <MarkdownRenderer>{md}</MarkdownRenderer>
+      </div>
+    );
+  }
 
   // Classification
   if (
@@ -49,7 +67,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     ('task_type' in data || 'rationale' in data)
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
         <ClassificationCard data={data} />
       </PhaseCard>
     );
@@ -65,7 +83,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     scoresArray.length > 0
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
         <CritiqueCard data={data} />
       </PhaseCard>
     );
@@ -79,7 +97,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
         <div className="markdown-body text-[17px] leading-relaxed">
           <MarkdownRenderer>{md}</MarkdownRenderer>
         </div>
@@ -95,7 +113,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
         <div className="markdown-body text-[17px] leading-relaxed">
           <MarkdownRenderer>{md}</MarkdownRenderer>
         </div>
@@ -112,7 +130,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models}>
+      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
         <div className="markdown-body text-[17px] leading-relaxed">
           <MarkdownRenderer>{md}</MarkdownRenderer>
         </div>
@@ -123,7 +141,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   // Fallback to markdown for everything else
   const md = buildMarkdownFromPhase(index, phaseNum, name, data);
   return (
-    <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models}>
+    <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
       <div className="markdown-body text-[17px] leading-relaxed">
         <MarkdownRenderer>{md}</MarkdownRenderer>
       </div>

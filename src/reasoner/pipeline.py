@@ -29,6 +29,7 @@ from reasoner.core.constants import (
 from reasoner.core.search import get_discovery_client, _should_include_result # Import for web search and result gating
 from reasoner.neuro.server import create_neuro_router # Assuming neuro is an available module
 from reasoner.token_cache import get_token_cache # TOKEN OPTIMIZATION: Token-aware caching
+from reasoner.sanitization import sanitize_for_prompt  # SECURITY: prompt-injection defense
 import reasoner.phases as phases # Refactored phases
 
 logger = logging.getLogger(__name__)
@@ -420,7 +421,7 @@ class ARAPipeline:
         raw, _ = await self._call_llm_cached(
             role="classification",
             system_prompt=phases.CLASSIFICATION_SYSTEM,
-            user_prompt=phases.classification_prompt(problem, lang),
+            user_prompt=phases.classification_prompt(problem, lang, state),
             state=state,
             max_tokens=get_token_budget("classification") if TOKEN_OPTIMIZATION["dynamic_budgets"] else DEFAULT_MAX_TOKENS
         )
@@ -569,11 +570,12 @@ class ARAPipeline:
             retrieved_text = result.get("snippet", "")
             if not retrieved_text:
                 continue
+            sanitized_text = sanitize_for_prompt(retrieved_text)[0]
             try:
                 raw_flags, _ = await self._call_llm_cached(
                     role="context_vetting",
                     system_prompt=phases.COT_DETECTION_SYSTEM,
-                    user_prompt=phases.cot_detection_prompt(state, retrieved_text),
+                    user_prompt=phases.cot_detection_prompt(state, sanitized_text),
                     max_tokens=512, state=state)
                 flags_data = extract_json(raw_flags)
                 result["vetting_flags"] = flags_data.get("flags", [])
@@ -653,11 +655,12 @@ class ARAPipeline:
                     
                     if use_llm_extraction:
                         try:
+                            sanitized_content = sanitize_for_prompt(scraped.get("content", ""))[0]
                             raw_extraction, _ = await self._call_llm_cached(
                                 role="primary",
                                 system_prompt=phases.DEEP_READ_SYSTEM,
                                 user_prompt=phases.deep_read_prompt(
-                                    state, url, title, scraped.get("content", "")
+                                    state, url, title, sanitized_content
                                 ),
                                 phase_key="deep_read",
                                 max_tokens=1024, state=state)
@@ -691,7 +694,7 @@ class ARAPipeline:
                     # Shallow-read fallback using title + snippet
                     if use_llm_extraction:
                         try:
-                            snippet = matching_result.get("snippet", "")
+                            snippet = sanitize_for_prompt(matching_result.get("snippet", ""))[0]
                             raw_fallback, _ = await self._call_llm_cached(
                                 role="primary",
                                 phase_key="deep_read",

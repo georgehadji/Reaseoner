@@ -50,7 +50,17 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew }: Sid
   );
 
   const filtered = useMemo(() => {
-    return conversations.filter((c) => {
+    // Deduplicate by conversation_id, keeping the latest turn
+    const latestByThread = new Map<string, Conversation>();
+    conversations.forEach((c) => {
+      const key = c.conversation_id || c.id;
+      const existing = latestByThread.get(key);
+      if (!existing || new Date(c.timestamp).getTime() > new Date(existing.timestamp).getTime()) {
+        latestByThread.set(key, c);
+      }
+    });
+    const list = Array.from(latestByThread.values());
+    return list.filter((c) => {
       const matchesQuery =
         !query.trim() || c.problem.toLowerCase().includes(query.toLowerCase());
       const matchesTag = !activeTag || c.method === activeTag || c.preset === activeTag;

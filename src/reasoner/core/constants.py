@@ -20,7 +20,7 @@ DEFAULT_TEMPERATURE: float = 0.7
 DEFAULT_TOP_K: int = 2
 DEFAULT_PRESET: str = "multi-perspective-budget"
 DEFAULT_CLI_PRESET: str = "multi-perspective-budget"
-DEFAULT_SEQUENTIAL: bool = True
+DEFAULT_SEQUENTIAL: bool = False
 DEFAULT_SOURCE_TYPE: Literal["general", "academic", "social", "news", "code"] = "general"
 DEFAULT_NUM_SUGGESTIONS: int = 5
 DEFAULT_SEARCH_RESULTS: int = 10
@@ -40,6 +40,16 @@ SNAPSHOT_LIST_LIMIT: int = 1000
 DEFAULT_SANITIZER_MAX_LENGTH: int = 10000
 SSE_FLUSH_INTERVAL: float = 0.02
 VALIDATION_TEST_MAX_TOKENS: int = 1
+
+# ═════════════════════════════════════════════════════════════════════
+# GATE AGENT
+# ═════════════════════════════════════════════════════════════════════
+
+GATE_MAX_TOKENS: int = 256
+GATE_TEMPERATURE: float = 0.0
+GATE_TIMEOUT_SECONDS: float = 5.0
+GATE_CONFIDENCE_THRESHOLD: float = 0.70
+GATE_DEFAULT_MODEL: str = "gemini-flash"  # non-OpenAI model that supports temperature=0
 
 # ═════════════════════════════════════════════════════════════════════
 # TOKEN BUDGETS

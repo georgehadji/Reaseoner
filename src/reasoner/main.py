@@ -67,6 +67,7 @@ from reasoner.presets import (
     print_presets_summary,
     resolve_preset_name,
 )
+from reasoner.gate_agent import GateAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -207,6 +208,59 @@ async def main(args: argparse.Namespace) -> None:
             print(f"[ERROR] Failed to load initial state for pipeline: {exc}")
             sys.exit(1)
 
+    print(f"\n{'='*60}")
+    print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
+    print(f"{'='*60}")
+    short_problem = problem[:120] + ("..." if len(problem) > 120 else "")
+    print(f"  Problem: {short_problem}")
+    print(f"  Top-K candidates: {args.top_k}")
+    print(f"  Parallel perspectives: {not args.sequential}")
+    print(f"{'='*60}\n")
+
+    # SECURITY: Prompt-injection defense for CLI input
+    from reasoner.sanitization import sanitize_for_prompt
+    problem, _ = sanitize_for_prompt(problem)
+
+    # ── Gate Agent: decide direct answer vs full pipeline ──
+    if not args.force_pipeline:
+        gate = GateAgent(router)
+        decision = await gate.decide(problem)
+        if decision.action == "direct":
+            print("  [Gate] Direct answer selected.\n")
+            response, _ = await router.call(
+                role="primary",
+                system_prompt="You are an analytical assistant. Provide a clear, concise answer.",
+                user_prompt=problem,
+                max_tokens=2048,
+                temperature=0.7,
+            )
+            print(response)
+            return
+        if decision.action == "web_search":
+            print("  [Gate] Web search selected.\n")
+            from reasoner.core.search import get_discovery_client
+            try:
+                client, _ = await get_discovery_client(source_type="general")
+                results = await client.search(problem, num_results=10, source_type="general")
+            except Exception as exc:
+                logger.warning("Web search failed: %s", exc)
+                results = []
+            if not results:
+                print("No relevant web search results were found for your query.")
+                return
+            print("### Web Search Results\n")
+            for i, r in enumerate(results, 1):
+                title = r.get("title") or "Untitled"
+                url = r.get("url") or ""
+                snippet = r.get("snippet") or r.get("content") or ""
+                print(f"{i}. [{title}]({url})")
+                if snippet:
+                    print(f"   > {snippet}")
+                print()
+            return
+        else:
+            print(f"  [Gate] Pipeline selected ({decision.method or 'multi_perspective'}).\n")
+
     pipeline = ARAPipeline(
         router=router,
         initial_state=initial_state, # Pass the loaded state
@@ -218,16 +272,6 @@ async def main(args: argparse.Namespace) -> None:
         domain=args.domain or None,
         enhance_prompt=args.enhance_prompt,
     )
-
-    print(f"\n{'='*60}")
-    print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
-    print(f"{'='*60}")
-    short_problem = problem[:120] + ("..." if len(problem) > 120 else "")
-    print(f"  Problem: {short_problem}")
-    print(f"  Top-K candidates: {args.top_k}")
-    print(f"  Parallel perspectives: {not args.sequential}")
-    print(f"{'='*60}\n")
-
 
     state = await pipeline.run(problem)
 
@@ -320,6 +364,11 @@ def parse_args() -> argparse.Namespace:
         "--quiet",
         action="store_true",
         help="Suppress phase-by-phase logging",
+    )
+    pipeline_group.add_argument(
+        "--force-pipeline",
+        action="store_true",
+        help="Bypass the GateAgent and always run the full multi-phase pipeline",
     )
     pipeline_group.add_argument(
         "--source-type",

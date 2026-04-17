@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Copy, Check, AlertTriangle, AlertCircle } from 'lucide-react';
+import { copyToClipboard } from '@/lib/utils';
 
 interface ErrorMessageProps {
   content: string;
@@ -17,12 +18,10 @@ export function ErrorMessage({ content }: ErrorMessageProps) {
   const isWarning = isWarningContent(content);
 
   async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(content);
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
     }
   }
 

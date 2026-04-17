@@ -5,16 +5,17 @@ import { useAppStore } from '@/stores/app-store';
 import { METHOD_PRESETS, METHOD_CONTROLS, METHODS, METHOD_EXAMPLES } from '@/lib/config';
 import { METHOD_HINTS_DATA } from '@/lib/method-hints';
 import { cn } from '@/lib/utils';
-import { ArrowUp, ChevronDown, Sparkles, Globe, Zap } from 'lucide-react';
+import { ArrowUp, ChevronDown, Sparkles, Globe, Zap, Wand2 } from 'lucide-react';
 
 interface ComposerProps {
   running: boolean;
   onSubmit: () => void;
   onStop: () => void;
   centered?: boolean;
+  isFollowup?: boolean;
 }
 
-export function Composer({ running, onSubmit, onStop, centered }: ComposerProps) {
+export function Composer({ running, onSubmit, onStop, centered, isFollowup }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const composerText = useAppStore((s) => s.composerText);
@@ -30,6 +31,8 @@ export function Composer({ running, onSubmit, onStop, centered }: ComposerProps)
   const toggleWebSearch = useAppStore((s) => s.toggleWebSearch);
   const isSmartSearch = useAppStore((s) => s.isSmartSearch);
   const toggleSmartSearch = useAppStore((s) => s.toggleSmartSearch);
+  const isEnhancePrompt = useAppStore((s) => s.isEnhancePrompt);
+  const toggleEnhancePrompt = useAppStore((s) => s.toggleEnhancePrompt);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   useEffect(() => {
@@ -199,6 +202,23 @@ export function Composer({ running, onSubmit, onStop, centered }: ComposerProps)
 
                 <button
                   type="button"
+                  disabled={isWebSearch}
+                  onClick={toggleEnhancePrompt}
+                  className={cn(
+                    'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+                    isEnhancePrompt
+                      ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
+                      : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
+                    isWebSearch && 'opacity-40 cursor-not-allowed'
+                  )}
+                  title="Rewrite prompt for clarity and context"
+                >
+                  <Wand2 className="h-3.5 w-3.5" />
+                  {isEnhancePrompt ? 'Enhance' : 'Enhance'}
+                </button>
+
+                <button
+                  type="button"
                   onClick={toggleWebSearch}
                   className={cn(
                     'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
@@ -271,6 +291,16 @@ export function Composer({ running, onSubmit, onStop, centered }: ComposerProps)
     <div className="w-full px-4 pb-6 pt-2">
       <div className="mx-auto max-w-3xl">
         {/* Method hint pill */}
+        {isFollowup && !centered && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
+            <span className="rounded-full border border-[var(--border-strong)] bg-[var(--accent)]/10 px-2 py-0.5 text-xs font-medium text-[var(--accent)]">
+              Follow-up
+            </span>
+            <span className="max-w-full break-words text-xs text-[var(--text-subtle)]">
+              Continuing previous conversation
+            </span>
+          </div>
+        )}
         {isWebSearch ? (
           <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
             <span className="text-xs font-medium text-[var(--text-muted)]">Web Search</span>
@@ -280,7 +310,7 @@ export function Composer({ running, onSubmit, onStop, centered }: ComposerProps)
                 : 'Advanced web search without LLM processing.'}
             </span>
           </div>
-        ) : METHOD_HINTS_DATA[method] ? (
+        ) : METHOD_HINTS_DATA[method] && !isFollowup ? (
           <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
             <span className="text-xs font-medium text-[var(--text-muted)]">
               {METHOD_HINTS_DATA[method].title}
@@ -409,6 +439,23 @@ export function Composer({ running, onSubmit, onStop, centered }: ComposerProps)
                   Expert
                 </button>
               )}
+
+              <button
+                type="button"
+                disabled={isWebSearch}
+                onClick={toggleEnhancePrompt}
+                className={cn(
+                  'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+                  isEnhancePrompt
+                    ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
+                    : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
+                  isWebSearch && 'opacity-40 cursor-not-allowed'
+                )}
+                title="Rewrite prompt for clarity and context"
+              >
+                <Wand2 className="h-3.5 w-3.5" />
+                {isEnhancePrompt ? 'Enhance' : 'Enhance'}
+              </button>
 
               <button
                 type="button"

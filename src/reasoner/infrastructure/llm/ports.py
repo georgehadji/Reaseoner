@@ -298,6 +298,8 @@ class BaseLLMProvider(ABC):
                 
                 return response
                 
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 last_error = exc
                 self._error_count += 1

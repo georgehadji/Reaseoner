@@ -11,6 +11,7 @@ interface AppState {
   isExpert: boolean;
   isWebSearch: boolean;
   isSmartSearch: boolean;
+  isEnhancePrompt: boolean;
   sidebarCollapsed: boolean;
   composerText: string;
   history: Conversation[];
@@ -31,6 +32,7 @@ interface AppState {
   toggleExpert: () => void;
   toggleWebSearch: () => void;
   toggleSmartSearch: () => void;
+  toggleEnhancePrompt: () => void;
   toggleSidebar: () => void;
   setComposerText: (text: string) => void;
   setHistory: (history: Conversation[]) => void;
@@ -52,6 +54,7 @@ export const useAppStore = create<AppState>()(
       isExpert: false,
       isWebSearch: false,
       isSmartSearch: false,
+      isEnhancePrompt: false,
       sidebarCollapsed: false,
       composerText: '',
       history: [],
@@ -77,6 +80,7 @@ export const useAppStore = create<AppState>()(
       toggleExpert: () => set((state) => ({ isExpert: !state.isExpert })),
       toggleWebSearch: () => set((state) => ({ isWebSearch: !state.isWebSearch, isSmartSearch: false })),
       toggleSmartSearch: () => set((state) => ({ isSmartSearch: !state.isSmartSearch })),
+      toggleEnhancePrompt: () => set((state) => ({ isEnhancePrompt: !state.isEnhancePrompt })),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setComposerText: (composerText) => set({ composerText }),
       setHistory: (history) => set({ history }),
@@ -127,6 +131,7 @@ export const useAppStore = create<AppState>()(
         presetIndex: state.presetIndex,
         isSequential: state.isSequential,
         isExpert: state.isExpert,
+        isEnhancePrompt: state.isEnhancePrompt,
         sidebarCollapsed: state.sidebarCollapsed,
       }),
     }

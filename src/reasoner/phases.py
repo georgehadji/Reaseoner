@@ -79,14 +79,40 @@ def get_language_instruction(state: PipelineState) -> str:
     }
     return lang_map.get(state.language, "Respond in English.")
 
+
+def _followup_context(state: PipelineState) -> str:
+    """Build a compact follow-up context block for injection into prompts."""
+    if not state.conversation_history:
+        return ""
+    history_text = ""
+    for turn in state.conversation_history[-6:]:
+        role = turn.get("role", "user").capitalize()
+        content = turn.get("content", "")
+        history_text += f"{role}: {_wrap_user_input(content)}\n"
+    ctx = f"\n---\nCONVERSATION HISTORY (Turn {state.turn_number}):\n{history_text}"
+    if state.previous_synthesis:
+        ctx += f"PREVIOUS SYNTHESIS:\n{state.previous_synthesis[:TRUNCATION.LARGE_CONTENT]}\n"
+    ctx += "---\n"
+    return ctx
+
+
+def _wrap_user_input(text: str) -> str:
+    """Wrap user-controlled text in explicit delimiters."""
+    return f"<<<USER_INPUT>>>\n{text}\n<<<END_USER_INPUT>>>"
+
+
+def _wrap_external_content(text: str) -> str:
+    """Wrap external/untrusted content in explicit delimiters."""
+    return f"<<<EXTERNAL_CONTENT>>>\n{text}\n<<<END_EXTERNAL_CONTENT>>>"
+
 # ─────────────────────────────────────────────────────────────────────
 # PROMPT ENHANCEMENT (Optional Pre-Phase)
 # ─────────────────────────────────────────────────────────────────────
-PROMPT_ENHANCEMENT_SYSTEM = "You are a prompt engineering expert. Rewrite the user's problem to make it clearer, more specific, and easier for an AI reasoning system to solve. Preserve the original intent, tone, and language. Output ONLY valid JSON."
+PROMPT_ENHANCEMENT_SYSTEM = "You are an analytical assistant. Rewrite the user's problem to make it clearer, more specific, and easier for an AI reasoning system to solve. Preserve the original intent, tone, and language. Output ONLY valid JSON."
 
 def prompt_enhancement_prompt(problem: str, language: str) -> str:
     lang_instruction = get_language_instruction(PipelineState(problem="", language=language))
-    return f'{lang_instruction}\n\nOriginal Problem:\n{problem}\n\nRewrite this problem to be clearer, more specific, and easier for a multi-step AI reasoning pipeline to solve. Preserve the original language and intent.\n\nOutput JSON: {{"enhanced_problem": "<rewritten problem>", "improvements": ["<what was improved>"]}}'
+    return f'{lang_instruction}\n\nOriginal Problem:\n{_wrap_user_input(problem)}\n\nRewrite this problem to be clearer, more specific, and easier for a multi-step AI reasoning pipeline to solve. Preserve the original language and intent.\n\nOutput JSON: {{"enhanced_problem": "<rewritten problem>", "improvements": ["<what was improved>"]}}'
 
 # ─────────────────────────────────────────────────────────────────────
 # METHOD: MULTI-PERSPECTIVE & SHARED PHASES
@@ -95,10 +121,11 @@ def prompt_enhancement_prompt(problem: str, language: str) -> str:
 # PHASE 0: CLASSIFICATION (Shared)
 # TOKEN OPTIMIZATION: Compressed from 77 to 47 chars (-39%)
 CLASSIFICATION_SYSTEM = "Classify task type. JSON only."
-def classification_prompt(problem: str, language: str) -> str:
+def classification_prompt(problem: str, language: str, state: PipelineState | None = None) -> str:
     lang_instruction = get_language_instruction(PipelineState(problem="", language=language))
+    followup = _followup_context(state) if state else ""
     return (
-        f'{lang_instruction}\n\nProblem:\n{problem}\n\n'
+        f'{lang_instruction}\n\nProblem:\n{_wrap_user_input(problem)}{followup}\n\n'
         f'Choose exactly ONE task type from: analytical, strategic, creative, technical, predictive, hybrid. '
         f'JSON: {{"task_type": "analytical", "rationale": "<why>", "language": "{language}"}}'
     )
@@ -112,10 +139,11 @@ def decomposition_prompt(state: PipelineState) -> str:
     jury_instr = " Add jury_guidelines." if is_jury else ""
     # TOKEN OPTIMIZATION: Omit verbose context, use compact format
     web_context = f"\nWeb: {state.web_discovery_results[:TRUNCATION.KEY_INSIGHTS]}" if state.web_discovery_results else ""
+    followup = _followup_context(state)
     
     return f'''{get_language_instruction(state)}
 
-Problem: {state.problem}{web_context}
+Problem: {_wrap_user_input(state.problem)}{web_context}{followup}
 Decompose.{jury_instr}
 
 JSON: {{"causal_chain": [{{"step": 1, "action": "<action>", "produces": ["<output>"]}}], "assumptions": [{{"text": "<assumption>", "label": "VERIFIED|HYPOTHESIS|UNKNOWN", "rationale": "<why this label>", "source_hint": "<source name or URL if VERIFIED>"}}], "failure_modes": ["<failure>"], "critical_sources": [{{"url": "<URL>", "reason": "<why it matters>"}}]}}
@@ -132,26 +160,27 @@ PERSPECTIVE_SYSTEMS = {
 }
 def perspective_prompt(state: PipelineState, perspective: str) -> str:
     # TOKEN OPTIMIZATION: Minimal context, compact format
-    context = {"problem": state.problem[:TRUNCATION.PROMPT]}  # Truncate problem
+    context = {"problem": _wrap_user_input(state.problem[:TRUNCATION.PROMPT])}  # Truncate problem
     if state.decomposition:
         context["chain"] = len(state.decomposition.get("causal_chain", []))
     if state.reflexion_memory:
         context["memory"] = state.reflexion_memory[:TRUNCATION.MEMORY]  # Top 2 only
+    followup = _followup_context(state)
     
-    return f'{get_language_instruction(state)}\n\nContext: {json.dumps(context)}\n\nAnalyze from {perspective} perspective.\n\nJSON: {{"perspective": "{perspective}", "core_analysis": "<analysis>", "key_insights": ["<insight>"]}}'
+    return f'{get_language_instruction(state)}\n\nContext: {json.dumps(context)}{followup}\n\nAnalyze from {perspective} perspective.\n\nJSON: {{"perspective": "{perspective}", "core_analysis": "<analysis>", "key_insights": ["<insight>"]}}'
 
 # CRITIQUE (Multi-Perspective, Iterative)
-CRITIQUE_SYSTEM = "You are an objective evaluator. Score solutions honestly. Output ONLY valid JSON."
+CRITIQUE_SYSTEM = "You are an analytical assistant. Score solutions honestly. Output ONLY valid JSON."
 def critique_prompt(state: PipelineState) -> str:
     # TOKEN OPTIMIZATION: Use condensed candidate summary (200 chars instead of 400)
     candidates_summary = [
         {"perspective": c.perspective.value, "one_liner": c.content[:TRUNCATION.API_STORAGE], "key_insights": c.key_insights[:TRUNCATION.MEMORY]}
         for c in state.candidates
     ]
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\n\nEvaluate these candidates:\n{json.dumps(candidates_summary, indent=2)}\n\nScore each 0-10 (logical_consistency, evidence_support, etc.) and provide a "steel_man" argument for the weakest.\n\nCRITICAL SCORING: A new critical scoring dimension is CONFIDENCE vs ACCURACY. It is better to state \'UNKNOWN\' or express low confidence than to guess confidently and be wrong. If a candidate makes a claim with high confidence that is factually incorrect or unsubstantiated, apply a significant **negative penalty** (0.0-10.0) to its score. Reward honest uncertainty.\n\nOutput JSON: {{"scores": [{{"perspective": "<p_val>", "logical_consistency": <0-10>, "confidence_vs_accuracy_penalty": <0.0-10.0>, "steel_man": "<arg>"}}]}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nEvaluate these candidates:\n{json.dumps(candidates_summary, indent=2)}\n\nScore each 0-10 (logical_consistency, evidence_support, etc.) and provide a "steel_man" argument for the weakest.\n\nCRITICAL SCORING: A new critical scoring dimension is CONFIDENCE vs ACCURACY. It is better to state \'UNKNOWN\' or express low confidence than to guess confidently and be wrong. If a candidate makes a claim with high confidence that is factually incorrect or unsubstantiated, apply a significant **negative penalty** (0.0-10.0) to its score. Reward honest uncertainty.\n\nOutput JSON: {{"scores": [{{"perspective": "<p_val>", "logical_consistency": <0-10>, "confidence_vs_accuracy_penalty": <0.0-10.0>, "steel_man": "<arg>"}}]}}'
 
 # STRESS TEST (Multi-Perspective, Scientific)
-STRESS_SYSTEM = "You simulate adversarial conditions. Be specific about real-world failure mechanics. Output ONLY valid JSON."
+STRESS_SYSTEM = "You are an analytical assistant. Simulate adversarial conditions. Be specific about real-world failure mechanics. Output ONLY valid JSON."
 def stress_test_prompt(state: PipelineState) -> str:
     # TOKEN OPTIMIZATION: Use condensed top candidates summary (150 chars instead of 400)
     top_candidates_summary = [
@@ -168,7 +197,7 @@ def stress_test_prompt(state: PipelineState) -> str:
     )
 
 # SYNTHESIS (All Methods)
-SYNTHESIS_SYSTEM = """You are a master synthesizer. Integrate insights honestly. Acknowledge uncertainty.
+SYNTHESIS_SYSTEM = """You are an analytical assistant. Integrate insights honestly. Acknowledge uncertainty.
 
 LANGUAGE RULE (CRITICAL):
 - The user has explicitly requested a specific language at the start of the prompt.
@@ -231,31 +260,25 @@ def synthesis_prompt(state: PipelineState) -> str:
             for r in state.web_discovery_results[:DEFAULT_SEARCH_RESULTS]
         ], indent=2)
 
-    method_hint_map = {
-        "debate": "Frame as a judge's ruling.",
-        "iterative": "Frame as the optimized solution that survived selection pressure.",
-        "research": "Frame as an evidence report, grounding every claim with citations.",
-        "jury": "Frame as a jury verdict, weighting results by critic reliability. Cite sources.",
-        "scientific": "Frame as a final theory, explaining which hypotheses were supported or falsified.",
-        "socratic": "Frame as a philosophical conclusion, summarizing the insights gained from the dialogue."
-    }
-    method_hint = next((hint for name, hint in method_hint_map.items() if name in (state.preset_name or "")), "Synthesize the best possible solution.")
+    # SECURITY: Use a generic synthesis instruction to avoid revealing the reasoning method
+    method_hint = "Synthesize the best possible solution."
+    followup = _followup_context(state)
 
-    return f'{get_language_instruction(state)}\n\nFinal Context:\n{json.dumps(final_context, indent=2)}\n{sources_info}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
+    return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
 
 # ─────────────────────────────────────────────────────────────────────
 # METHOD: DEBATE
 # ─────────────────────────────────────────────────────────────────────
 
-DEBATE_OPENING_SYSTEM = "You are a debater. Present a strong, logical opening statement. Output ONLY valid JSON."
+DEBATE_OPENING_SYSTEM = "You are an analytical assistant. Present a strong, logical opening statement. Output ONLY valid JSON."
 def debate_opening_prompt(state: PipelineState, side: str) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\n\nYou are Side {side}. Present your opening statement.\n\nOutput JSON: {{"side": "{side}", "content": "<your statement>", "key_claims": ["<claim 1>"]}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nYou are Side {side}. Present your opening statement.\n\nOutput JSON: {{"side": "{side}", "content": "<your statement>", "key_claims": ["<claim 1>"]}}'
 
-DEBATE_REBUTTAL_SYSTEM = "You are a debater. Attack your opponent\'s logic and defend your own. Output ONLY valid JSON."
+DEBATE_REBUTTAL_SYSTEM = "You are an analytical assistant. Attack your opponent\'s logic and defend your own. Output ONLY valid JSON."
 def debate_rebuttal_prompt(state: PipelineState, side: str, opponent_statement: str) -> str:
     return f'{get_language_instruction(state)}\n\nYour opponent\'s statement:\n{opponent_statement}\n\nYou are Side {side}. Present your rebuttal.\n\nOutput JSON: {{"side": "{side}", "rebuttal_content": "<your rebuttal>", "target_flaws": ["<flaw 1>"]}}'
 
-DEBATE_JUDGE_SYSTEM = "You are an impartial judge. Evaluate the debate and render a verdict. Output ONLY valid JSON."
+DEBATE_JUDGE_SYSTEM = "You are an analytical assistant. Evaluate the debate and render a verdict. Output ONLY valid JSON."
 def debate_judge_prompt(state: PipelineState) -> str:
     # Only the debate transcript is needed, saving tokens
     return f'{get_language_instruction(state)}\n\nDebate Transcript:\n{json.dumps(state.debate_rounds, indent=2)}\n\nScore both sides and declare a winner.\n\nOutput JSON: {{"scores": ..., "verdict_rationale": "..."}}'
@@ -264,22 +287,22 @@ def debate_judge_prompt(state: PipelineState) -> str:
 # METHOD: JURY (ORCHESTRATED)
 # ─────────────────────────────────────────────────────────────────────
 
-JURY_GENERATOR_SYSTEM = "You are an independent solution generator. Produce your best possible solution. Output ONLY valid JSON."
+JURY_GENERATOR_SYSTEM = "You are an analytical assistant. Produce your best possible solution. Output ONLY valid JSON."
 def jury_generator_prompt(state: PipelineState, generator_id: str) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\nDecomposition:\n{json.dumps(state.decomposition, indent=2)}\n\nYou are {generator_id}. Generate a solution.\n\nOutput JSON: {{"generator_id": "{generator_id}", "solution": "<your solution>", "key_claims": [...]}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\nDecomposition:\n{json.dumps(state.decomposition, indent=2)}\n\nYou are {generator_id}. Generate a solution.\n\nOutput JSON: {{"generator_id": "{generator_id}", "solution": "<your solution>", "key_claims": [...]}}'
 
-JURY_CRITIC_SYSTEM = "You are an independent critic. Score each candidate against the provided guidelines. Output ONLY valid JSON."
+JURY_CRITIC_SYSTEM = "You are an analytical assistant. Score each candidate against the provided guidelines. Output ONLY valid JSON."
 def jury_critic_prompt(state: PipelineState) -> str:
     # Only pass summaries, not full text, to save tokens
     candidates_summary = [{"generator_id": c.generator_id, "approach": c.approach_summary} for c in state.generation_candidates]
     return f'{get_language_instruction(state)}\n\nJury Guidelines:\n{json.dumps(state.jury_guidelines)}\n\nCandidates:\n{json.dumps(candidates_summary, indent=2)}\n\nScore each candidate on factuality, reasoning, completeness, helpfulness.\n\nCRITICAL SCORING: A new critical scoring dimension is CONFIDENCE vs ACCURACY. It is better to state \'UNKNOWN\' or express low confidence than to guess confidently and be wrong. If a candidate makes a claim with high confidence that is factually incorrect or unsubstantiated, apply a significant **negative penalty** (0.0-10.0) to its score. Reward honest uncertainty.\n\nOutput JSON: {{"critic_id": "...", "candidate_scores": {{...}}, "confidence_vs_accuracy_penalty": <0.0-10.0>}}}}'
 
-JURY_VERIFIER_SYSTEM = "You are a claim verification specialist. Verify these claims. Output ONLY valid JSON."
+JURY_VERIFIER_SYSTEM = "You are an analytical assistant. Verify these claims. Output ONLY valid JSON."
 def jury_verifier_prompt(state: PipelineState) -> str:
     all_claims = [{"claim": claim, "source": gc.generator_id} for gc in state.generation_candidates for claim in gc.key_claims]
     return f'{get_language_instruction(state)}\n\nVerify these claims:\n{json.dumps(all_claims, indent=2)}\n\nOutput JSON: {{"verifications": [{{"claim": "...", "verdict": "VERIFIED|...", "evidence": "..."}}]}}'
 
-JURY_META_EVAL_SYSTEM = "You evaluate the quality of critics. Assess reliability and bias. Output ONLY valid JSON."
+JURY_META_EVAL_SYSTEM = "You are an analytical assistant. Assess reliability and bias. Output ONLY valid JSON."
 def jury_meta_eval_prompt(state: PipelineState) -> str:
     return f'{get_language_instruction(state)}\n\nEvaluate the critics based on their scores:\n{json.dumps(state.critic_scores, indent=2)}\n\nAssess critic reliability, bias, and agreement rate.\n\nOutput JSON: {{"critic_reliability": {{...}}, "meta_insight": "..."}}'
 
@@ -287,11 +310,11 @@ def jury_meta_eval_prompt(state: PipelineState) -> str:
 # METHOD: SCIENTIFIC
 # ─────────────────────────────────────────────────────────────────────
 
-SCIENTIFIC_HYPOTHESIS_SYSTEM = "You are a scientist. Generate falsifiable hypotheses from observations. Output ONLY valid JSON."
+SCIENTIFIC_HYPOTHESIS_SYSTEM = "You are an analytical assistant. Generate falsifiable hypotheses from observations. Output ONLY valid JSON."
 def scientific_hypothesis_prompt(state: PipelineState) -> str:
-    return f'{get_language_instruction(state)}\n\nObservations: {state.problem}\n\nGenerate 3 competing hypotheses.\n\nOutput JSON: {{"hypotheses": [{{"id": "H1", "statement": "...", "falsifiability": "..."}}]}}'
+    return f'{get_language_instruction(state)}\n\nObservations: {_wrap_user_input(state.problem)}\n\nGenerate 3 competing hypotheses.\n\nOutput JSON: {{"hypotheses": [{{"id": "H1", "statement": "...", "falsifiability": "..."}}]}}'
 
-SCIENTIFIC_TEST_SYSTEM = "You are an experimentalist. Design mental experiments to falsify hypotheses. Output ONLY valid JSON."
+SCIENTIFIC_TEST_SYSTEM = "You are an analytical assistant. Design mental experiments to falsify hypotheses. Output ONLY valid JSON."
 def scientific_test_prompt(state: PipelineState) -> str:
     return f'{get_language_instruction(state)}\n\nHypotheses:\n{json.dumps(state.scientific_state["hypotheses"], indent=2)}\n\nFor each, describe a test and predict the result (SUPPORTED, WEAKENED, FALSIFIED).\n\nOutput JSON: {{"test_results": [{{"hypothesis_id": "H1", "experiment": "...", "result": "..."}}]}}'
 
@@ -299,11 +322,11 @@ def scientific_test_prompt(state: PipelineState) -> str:
 # METHOD: SOCRATIC
 # ─────────────────────────────────────────────────────────────────────
 
-SOCRATIC_QUESTION_SYSTEM = "You are Socrates. Ask probing questions to expose contradictions. Do not answer. Output ONLY valid JSON."
+SOCRATIC_QUESTION_SYSTEM = "You are an analytical assistant. Ask probing questions to expose contradictions. Do not answer. Output ONLY valid JSON."
 def socratic_question_prompt(state: PipelineState) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\n\nGenerate 3-4 questions to challenge its assumptions.\n\nOutput JSON: {{"questions": [{{"id": "Q1", "text": "...", "target_assumption": "..."}}]}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nGenerate 3-4 questions to challenge its assumptions.\n\nOutput JSON: {{"questions": [{{"id": "Q1", "text": "...", "target_assumption": "..."}}]}}'
 
-SOCRATIC_ANSWER_SYSTEM = "You are a student of dialectic. Answer honestly and identify where your logic breaks. Output ONLY valid JSON."
+SOCRATIC_ANSWER_SYSTEM = "You are an analytical assistant. Answer honestly and identify where your logic breaks. Output ONLY valid JSON."
 def socratic_answer_prompt(state: PipelineState) -> str:
     return f'{get_language_instruction(state)}\n\nSocratic Questions:\n{json.dumps(state.socratic_state["questions"], indent=2)}\n\nAttempt to answer, noting any contradictions (\'aporia\').\n\nOutput JSON: {{"answers": [{{"question_id": "Q1", "answer": "...", "contradiction_found": "..."}}]}}'
 
@@ -311,30 +334,30 @@ def socratic_answer_prompt(state: PipelineState) -> str:
 # METHOD: RESEARCH (Deep Iterative Search)
 # ─────────────────────────────────────────────────────────────────────
 
-DEEP_RESEARCH_SYSTEM = "You are an expert research agent. Your goal is to gather comprehensive information to solve the user's problem. You can issue search queries or declare that you have enough information. Output ONLY valid JSON."
+DEEP_RESEARCH_SYSTEM = "You are an analytical assistant. Gather comprehensive information to solve the user's problem. You can issue search queries or declare that you have enough information. Output ONLY valid JSON."
 def deep_research_prompt(state: PipelineState, current_knowledge: list[dict], iteration: int, max_iterations: int) -> str:
     knowledge_str = json.dumps(current_knowledge, indent=2) if current_knowledge else "No information gathered yet."
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\n\nIteration: {iteration} of {max_iterations}\n\nCurrent Knowledge Gathered:\n{knowledge_str}\n\nAnalyze the current knowledge. If you need more information to fully answer the problem, generate up to 3 highly specific, SEO-friendly search queries. If you have enough information, or if you have reached the maximum iterations, set the action to "done".\n\nOutput JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you chose this action>"}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nIteration: {iteration} of {max_iterations}\n\nCurrent Knowledge Gathered:\n{knowledge_str}\n\nAnalyze the current knowledge. If you need more information to fully answer the problem, generate up to 3 highly specific, SEO-friendly search queries. If you have enough information, or if you have reached the maximum iterations, set the action to "done".\n\nOutput JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you chose this action>"}}'
 
 # ─────────────────────────────────────────────────────────────────────
 # COT DETECTION (for RAG Context Vetting)
 # ─────────────────────────────────────────────────────────────────────
 
-COT_DETECTION_SYSTEM = "You are a fact-checker and critical reviewer. Your goal is to identify potentially unsubstantiated, factually incorrect, or overly speculative statements in the provided text. Output ONLY valid JSON."
+COT_DETECTION_SYSTEM = "You are an analytical assistant. Identify potentially unsubstantiated, factually incorrect, or overly speculative statements in the provided text. Output ONLY valid JSON."
 
 def cot_detection_prompt(state: PipelineState, retrieved_text: str) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\n\nReview the following retrieved text. Identify any statements that seem potentially unsubstantiated, factually incorrect, or overly speculative. For each identified statement, provide a brief explanation of your reasoning. If no issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nReview the following retrieved text. Identify any statements that seem potentially unsubstantiated, factually incorrect, or overly speculative. For each identified statement, provide a brief explanation of your reasoning. If no issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'
 
 
 # ─────────────────────────────────────────────────────────────────────
 # ITERATIVE CONTEXT GATHERING (for _phase_context_vetting)
 # ─────────────────────────────────────────────────────────────────────
 
-ITERATIVE_CONTEXT_SYSTEM = "You are an expert research assistant helping gather context for a reasoning problem. Your goal is to determine if you have enough information or if more searches are needed. Output ONLY valid JSON."
+ITERATIVE_CONTEXT_SYSTEM = "You are an analytical assistant. Gather context for a reasoning problem and determine if you have enough information or if more searches are needed. Output ONLY valid JSON."
 
 def iterative_context_prompt(state: PipelineState, current_results: list[dict], iteration: int, max_iterations: int) -> str:
     results_str = json.dumps(current_results, indent=2) if current_results else "No results yet."
-    return f'{get_language_instruction(state)}\n\nProblem: {state.problem}\n\nIteration: {iteration} of {max_iterations}\n\nCurrent Search Results:\n{results_str}\n\nAnalyze the current results. Do you have enough relevant information to provide a comprehensive answer? If yes, set action to "done". If you need more information, provide up to 3 specific search queries to fill the gaps.\n\nOutput JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you need more info or have enough>"}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nIteration: {iteration} of {max_iterations}\n\nCurrent Search Results:\n{results_str}\n\nAnalyze the current results. Do you have enough relevant information to provide a comprehensive answer? If yes, set action to "done". If you need more information, provide up to 3 specific search queries to fill the gaps.\n\nOutput JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you need more info or have enough>"}}'
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -345,12 +368,12 @@ def iterative_context_prompt(state: PipelineState, current_results: list[dict], 
 # RECOVERY PATH (cross-verification of high-penalty candidates)
 # ─────────────────────────────────────────────────────────────────────
 
-CROSS_VERIFICATION_SYSTEM = "You are a rigorous fact-checker. Identify specific factual errors, unsupported claims, or logical inconsistencies in a proposed solution. Be precise and cite exact problems. Output ONLY valid JSON."
+CROSS_VERIFICATION_SYSTEM = "You are an analytical assistant. Identify specific factual errors, unsupported claims, or logical inconsistencies in a proposed solution. Be precise and cite exact problems. Output ONLY valid JSON."
 
 def cross_verification_prompt(state: PipelineState, candidate_solution: dict) -> str:
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Original Problem: {state.problem}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Candidate Solution to Verify:\n{json.dumps(candidate_solution, indent=2)}\n\n'
         f'Identify any claims made with high confidence that are factually incorrect, '
         f'logically unsound, or unsubstantiated. Be specific.\n\n'
@@ -362,18 +385,18 @@ def cross_verification_prompt(state: PipelineState, candidate_solution: dict) ->
 # DEEP READ (for critical source scraping)
 # ─────────────────────────────────────────────────────────────────────
 
-DEEP_READ_SYSTEM = "You are an expert at extracting and summarizing key information from web pages. Your goal is to provide a structured summary of the page content relevant to the user's problem. Output ONLY valid JSON."
+DEEP_READ_SYSTEM = "You are an analytical assistant. Extract and summarize key information from web pages. Provide a structured summary of the page content relevant to the user's problem. Output ONLY valid JSON."
 
-SHALLOW_READ_SYSTEM = "You are an expert at inferring the content of a web page from its title and snippet. Provide a brief summary. Output ONLY valid JSON."
+SHALLOW_READ_SYSTEM = "You are an analytical assistant. Infer the content of a web page from its title and snippet. Provide a brief summary. Output ONLY valid JSON."
 
 
 def deep_read_prompt(state: PipelineState, url: str, title: str, content: str) -> str:
     trimmed = content[:TRUNCATION.DEEP_READ]
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Original Problem: {state.problem}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Source:\nURL: {url}\nTitle: {title}\n\n'
-        f'Page Content (first 8000 chars):\n{trimmed}\n\n'
+        f'Page Content (first 8000 chars):\n{_wrap_external_content(trimmed)}\n\n'
         f'Extract the key information from this page that is relevant to the problem. '
         f'If the page is irrelevant, too short, or lacks substantive content, set "summary" to "INSUFFICIENT".\n\n'
         f'Output ONLY valid JSON with this exact structure:\n'
@@ -388,13 +411,13 @@ def deep_read_prompt(state: PipelineState, url: str, title: str, content: str) -
 def shallow_read_prompt(state: PipelineState, url: str, title: str, snippet: str) -> str:
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Original Problem: {state.problem}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
         f'We could not fetch the full page. Based on the title and snippet below, '
         f'provide a brief summary of what this source likely contains. '
         f'If it seems irrelevant, return "INSUFFICIENT".\n\n'
         f'URL: {url}\n'
         f'Title: {title}\n'
-        f'Snippet: {snippet}\n\n'
+        f'Snippet: {_wrap_external_content(snippet)}\n\n'
         f'Output ONLY valid JSON:\n'
         f'{{\n'
         f'  "summary": "<brief summary or INSUFFICIENT>",\n'
@@ -408,12 +431,12 @@ def shallow_read_prompt(state: PipelineState, url: str, title: str, snippet: str
 # A5: DEBATE — CROSS-EXAMINATION
 # ─────────────────────────────────────────────────────────────────────
 
-DEBATE_CROSS_SYSTEM = "You are cross-examining opposing counsel. Challenge specific claims with evidence. Be precise and direct. Output ONLY valid JSON."
+DEBATE_CROSS_SYSTEM = "You are an analytical assistant. Challenge specific claims with evidence. Be precise and direct. Output ONLY valid JSON."
 
 def debate_cross_examine_prompt(state: PipelineState, side: str, opponent_claims: list) -> str:
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'You are Side {side}. Your opponent made these claims:\n'
         f'{json.dumps(opponent_claims, indent=2)}\n\n'
         f'Challenge each claim with counter-evidence or logical contradiction.\n\n'
@@ -426,12 +449,12 @@ def debate_cross_examine_prompt(state: PipelineState, side: str, opponent_claims
 # B1: PRE-MORTEM ANALYSIS
 # ─────────────────────────────────────────────────────────────────────
 
-PRE_MORTEM_FAILURE_SYSTEM = "You are a post-mortem analyst. Assume failure has already occurred and reconstruct why. Be specific and unflinching. Output ONLY valid JSON."
+PRE_MORTEM_FAILURE_SYSTEM = "You are an analytical assistant. Assume failure has already occurred and reconstruct why. Be specific and unflinching. Output ONLY valid JSON."
 
 def pre_mortem_failure_prompt(state: PipelineState) -> str:
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'It is exactly 1 year later. The solution to this problem catastrophically failed. '
         f'Write the post-mortem as if it already happened. Be vivid, specific, and brutally honest.\n\n'
         f'Output JSON: {{"scenario": "<failure scenario name>", '
@@ -441,13 +464,13 @@ def pre_mortem_failure_prompt(state: PipelineState) -> str:
         f'"severity": "catastrophic|severe|moderate"}}'
     )
 
-PRE_MORTEM_BACKTRACK_SYSTEM = "You are a root cause analyst. Given a failure, identify the single most critical decision that led to it. Output ONLY valid JSON."
+PRE_MORTEM_BACKTRACK_SYSTEM = "You are an analytical assistant. Given a failure, identify the single most critical decision that led to it. Output ONLY valid JSON."
 
 def pre_mortem_backtrack_prompt(state: PipelineState) -> str:
     failure = state.pre_mortem_state.get("failure_narrative", {})
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Original Problem: {state.problem}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Post-Mortem:\n{json.dumps(failure, indent=2)}\n\n'
         f'Trace back to the single initial decision that was the pivot point. '
         f'What seemingly reasonable choice, made early, set this failure in motion?\n\n'
@@ -457,7 +480,7 @@ def pre_mortem_backtrack_prompt(state: PipelineState) -> str:
         f'"cascade": ["<cascade step>"]}}'
     )
 
-PRE_MORTEM_SIGNALS_SYSTEM = "You are an early warning specialist. Identify observable signals that would have predicted failure before it happened. Output ONLY valid JSON."
+PRE_MORTEM_SIGNALS_SYSTEM = "You are an analytical assistant. Identify observable signals that would have predicted failure before it happened. Output ONLY valid JSON."
 
 def pre_mortem_signals_prompt(state: PipelineState) -> str:
     root_cause = state.pre_mortem_state.get("root_cause", {})
@@ -471,13 +494,13 @@ def pre_mortem_signals_prompt(state: PipelineState) -> str:
         f'"monitoring_cadence": "<frequency>"}}'
     )
 
-PRE_MORTEM_REDESIGN_SYSTEM = "You are a solution architect. Redesign the original solution hardened against the identified failure modes. Output ONLY valid JSON."
+PRE_MORTEM_REDESIGN_SYSTEM = "You are an analytical assistant. Redesign the original solution hardened against the identified failure modes. Output ONLY valid JSON."
 
 def pre_mortem_redesign_prompt(state: PipelineState) -> str:
     pm = state.pre_mortem_state
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Failure: {json.dumps(pm.get("failure_narrative", {}).get("what_happened", ""), indent=0)}\n'
         f'Root Cause: {json.dumps(pm.get("root_cause", {}).get("pivot_decision", ""), indent=0)}\n'
         f'Early Signals: {json.dumps([s.get("signal") for s in pm.get("early_signals", [])], indent=0)}\n\n'
@@ -494,7 +517,7 @@ def pre_mortem_redesign_prompt(state: PipelineState) -> str:
 # B2: BAYESIAN REASONING
 # ─────────────────────────────────────────────────────────────────────
 
-BAYESIAN_PRIOR_SYSTEM = "You are a Bayesian epistemologist. Elicit prior probability distributions over competing hypotheses. Be explicit about uncertainty. Output ONLY valid JSON."
+BAYESIAN_PRIOR_SYSTEM = "You are an analytical assistant. Elicit prior probability distributions over competing hypotheses. Be explicit about uncertainty. Output ONLY valid JSON."
 
 def bayesian_prior_prompt(state: PipelineState) -> str:
     decomp = state.decomposition or {}
@@ -504,7 +527,7 @@ def bayesian_prior_prompt(state: PipelineState) -> str:
         sub_problems = [sp.description for sp in (decomp.sub_problems if decomp else [])]
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Sub-problems:\n{json.dumps(sub_problems, indent=2)}\n\n'
         f'Identify 2-4 competing hypotheses that could explain or solve this problem. '
         f'Assign prior probability P(H) to each (must sum to approximately 1.0). '
@@ -513,13 +536,13 @@ def bayesian_prior_prompt(state: PipelineState) -> str:
         f'"prior_probability": 0.4, "reasoning": "<why this prior>"}}]}}'
     )
 
-BAYESIAN_LIKELIHOOD_SYSTEM = "You are a Bayesian analyst. For each hypothesis, assess the likelihood of key observations. Output ONLY valid JSON."
+BAYESIAN_LIKELIHOOD_SYSTEM = "You are an analytical assistant. For each hypothesis, assess the likelihood of key observations. Output ONLY valid JSON."
 
 def bayesian_likelihood_prompt(state: PipelineState) -> str:
     hypotheses = state.bayesian_state.get("hypotheses_with_priors", [])
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Hypotheses:\n{json.dumps(hypotheses, indent=2)}\n\n'
         f'Identify 3-5 key observations or pieces of evidence relevant to this problem. '
         f'For each observation, assess P(E|H) and P(E|not-H) for each hypothesis.\n\n'
@@ -528,7 +551,7 @@ def bayesian_likelihood_prompt(state: PipelineState) -> str:
         f'"reasoning": "<why>"}}]}}'
     )
 
-BAYESIAN_POSTERIOR_SYSTEM = "You are a Bayesian statistician. Apply Bayes' theorem to compute posterior probabilities. Show your reasoning. Output ONLY valid JSON."
+BAYESIAN_POSTERIOR_SYSTEM = "You are an analytical assistant. Apply Bayes' theorem to compute posterior probabilities. Show your reasoning. Output ONLY valid JSON."
 
 def bayesian_posterior_prompt(state: PipelineState) -> str:
     hypotheses = state.bayesian_state.get("hypotheses_with_priors", [])
@@ -544,7 +567,7 @@ def bayesian_posterior_prompt(state: PipelineState) -> str:
         f'"most_probable": "H1"}}'
     )
 
-BAYESIAN_SENSITIVITY_SYSTEM = "You are a decision analyst. Test which prior assumptions most change the posterior if they are wrong. Output ONLY valid JSON."
+BAYESIAN_SENSITIVITY_SYSTEM = "You are an analytical assistant. Test which prior assumptions most change the posterior if they are wrong. Output ONLY valid JSON."
 
 def bayesian_sensitivity_prompt(state: PipelineState) -> str:
     hypotheses = state.bayesian_state.get("hypotheses_with_priors", [])
@@ -566,12 +589,12 @@ def bayesian_sensitivity_prompt(state: PipelineState) -> str:
 # B3: DIALECTICAL REASONING (Hegelian Aufhebung)
 # ─────────────────────────────────────────────────────────────────────
 
-DIALECTICAL_THESIS_SYSTEM = "You are articulating a Hegelian thesis: the strongest possible affirmative position. Be rigorous and committed. Output ONLY valid JSON."
+DIALECTICAL_THESIS_SYSTEM = "You are an analytical assistant. Articulate the strongest possible affirmative position. Be rigorous and committed. Output ONLY valid JSON."
 
 def dialectical_thesis_prompt(state: PipelineState) -> str:
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Articulate the strongest possible affirmative thesis position. '
         f'Be fully committed — this is the strongest case FOR one approach, not a balanced view.\n\n'
         f'Output JSON: {{"thesis": "<strongest affirmative position>", '
@@ -579,14 +602,14 @@ def dialectical_thesis_prompt(state: PipelineState) -> str:
         f'"assumptions": ["<assumption>"]}}'
     )
 
-DIALECTICAL_ANTITHESIS_SYSTEM = "You are exposing the internal contradictions of a thesis. Negate its commitments rigorously. Output ONLY valid JSON."
+DIALECTICAL_ANTITHESIS_SYSTEM = "You are an analytical assistant. Expose the internal contradictions of a thesis. Negate its commitments rigorously. Output ONLY valid JSON."
 
 def dialectical_antithesis_prompt(state: PipelineState) -> str:
     thesis = state.dialectical_state.get("thesis", "")
     commitments = state.dialectical_state.get("key_commitments", [])
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Thesis: {thesis}\n\n'
         f'Key Commitments: {json.dumps(commitments, indent=2)}\n\n'
         f'Expose the internal contradictions of this thesis. '
@@ -596,7 +619,7 @@ def dialectical_antithesis_prompt(state: PipelineState) -> str:
         f'"negated_commitments": [{{"commitment": "<c>", "negation": "<n>"}}]}}'
     )
 
-DIALECTICAL_CONTRADICTIONS_SYSTEM = "You are a dialectical analyst. Classify which contradictions are truly irreconcilable and which can be transcended at a higher level. Output ONLY valid JSON."
+DIALECTICAL_CONTRADICTIONS_SYSTEM = "You are an analytical assistant. Classify which contradictions are truly irreconcilable and which can be transcended at a higher level. Output ONLY valid JSON."
 
 def dialectical_contradictions_prompt(state: PipelineState) -> str:
     thesis = state.dialectical_state.get("thesis", "")
@@ -614,13 +637,13 @@ def dialectical_contradictions_prompt(state: PipelineState) -> str:
         f'"synthesis_candidates": ["<truth from thesis>", "<truth from antithesis>"]}}'
     )
 
-DIALECTICAL_AUFHEBUNG_SYSTEM = "You are performing Hegelian Aufhebung: qualitative transcendence, NOT compromise. Preserve the truths of both positions at a higher level. Output ONLY valid JSON."
+DIALECTICAL_AUFHEBUNG_SYSTEM = "You are an analytical assistant. Achieve qualitative transcendence, NOT compromise. Preserve the truths of both positions at a higher level. Output ONLY valid JSON."
 
 def dialectical_aufhebung_prompt(state: PipelineState) -> str:
     d = state.dialectical_state
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Thesis: {d.get("thesis", "")}\n'
         f'Antithesis: {d.get("antithesis", "")}\n'
         f'Compatible contradictions: {json.dumps(d.get("compatible", []), indent=2)}\n'
@@ -654,7 +677,7 @@ def analogical_abstraction_prompt(state: PipelineState) -> str:
         sub_problems = [sp.description for sp in (decomp.sub_problems if decomp else [])]
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Sub-problems:\n{json.dumps(sub_problems, indent=2)}\n\n'
         f'Extract the abstract structural signature of this problem, ignoring domain-specific surface features. '
         f'Identify the deep constraints, objectives, actors, and core dynamics.\n\n'
@@ -678,7 +701,7 @@ def analogical_domain_search_prompt(state: PipelineState) -> str:
     a = state.analogical_state
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Abstract structure: {a.get("abstract_structure", "")}\n'
         f'Structural type: {a.get("structural_type", "")}\n'
         f'Core dynamics: {json.dumps(a.get("core_dynamics", []), indent=2)}\n\n'
@@ -709,7 +732,7 @@ def analogical_mapping_prompt(state: PipelineState) -> str:
     best_domain = domains[0] if domains else {}
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Target problem: {state.problem}\n\n'
+        f'Target problem: {_wrap_user_input(state.problem)}\n\n'
         f'Abstract structure: {a.get("abstract_structure", "")}\n'
         f'Constraints: {json.dumps(a.get("constraints", []), indent=2)}\n'
         f'Objectives: {json.dumps(a.get("objectives", []), indent=2)}\n\n'
@@ -743,7 +766,7 @@ def analogical_transfer_prompt(state: PipelineState) -> str:
     best_domain = domains[0] if domains else {}
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Target problem: {state.problem}\n\n'
+        f'Target problem: {_wrap_user_input(state.problem)}\n\n'
         f'Source domain: {best_domain.get("domain", "")} — {best_domain.get("key_mechanism", "")}\n\n'
         f'Analogy mappings:\n{json.dumps(a.get("analogy_mappings", []), indent=2)}\n\n'
         f'Unmapped elements: {json.dumps(a.get("unmapped_elements", []), indent=2)}\n\n'
@@ -779,7 +802,7 @@ def delphi_round1_prompt(state: "PipelineState", expert_num: int) -> str:
     return (
         f'{get_language_instruction(state)}\n\n'
         f'You are Expert {expert_num} of 4 independent forecasters.\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Sub-problems:\n{json.dumps(sub_problems, indent=2)}\n\n'
         f'Provide your independent estimate/forecast. If numeric, provide a specific number. '
         f'Explain your reasoning. Do NOT anchor to any consensus — you are working independently.\n\n'
@@ -801,7 +824,7 @@ def delphi_aggregation_prompt(state: "PipelineState") -> str:
     estimates = state.delphi_state.get("round_1_estimates", [])
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Expert estimates (anonymous — do not reveal which expert said what in outputs):\n'
         f'{json.dumps(estimates, indent=2)}\n\n'
         f'Aggregate these estimates. Identify: the central tendency (median or modal theme), '
@@ -872,7 +895,7 @@ def delphi_dissent_prompt(state: "PipelineState") -> str:
     consensus = state.delphi_state.get("consensus", {})
     return (
         f'{get_language_instruction(state)}\n\n'
-        f'Problem: {state.problem}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Group consensus: {consensus.get("median", consensus.get("consensus_label", "unknown"))}\n'
         f'Your estimate differs from the group median by: {stats.get("outlier_distance", stats.get("iqr", "unknown"))} units.\n\n'
         f'As the outlier expert, document your dissenting rationale. '

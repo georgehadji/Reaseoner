@@ -208,15 +208,20 @@ def get_file_text(file_id: str) -> Optional[str]:
     Returns:
         Extracted text content or None if not found
     """
-    # Find file by ID prefix
-    for f in UPLOAD_DIR.glob(f"{file_id}*"):
-        try:
-            content = f.read_bytes()
-            filename = f.name[len(file_id):]  # Remove ID prefix to get original name
-            return extract_text(content, filename)
-        except Exception as e:
-            logger.error(f"Failed to retrieve file {file_id}: {e}")
-            return None
+    # Validate file_id to prevent glob injection (e.g., empty string -> '*', '*' -> '**')
+    if not file_id or not re.match(r'^[a-f0-9-]+$', file_id):
+        return None
+    
+    # Look for exact file by known extensions instead of globbing
+    for ext in SUPPORTED_EXTENSIONS:
+        f = UPLOAD_DIR / f"{file_id}{ext}"
+        if f.exists():
+            try:
+                content = f.read_bytes()
+                return extract_text(content, f"upload{ext}")
+            except Exception as e:
+                logger.error(f"Failed to retrieve file {file_id}: {e}")
+                return None
     return None
 
 
@@ -230,12 +235,19 @@ def delete_file(file_id: str) -> bool:
     Returns:
         True if deleted, False if not found
     """
-    for f in UPLOAD_DIR.glob(f"{file_id}*"):
-        try:
-            f.unlink()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete file {file_id}: {e}")
+    # Validate file_id to prevent glob injection
+    if not file_id or not re.match(r'^[a-f0-9-]+$', file_id):
+        return False
+    
+    # Look for exact file by known extensions instead of globbing
+    for ext in SUPPORTED_EXTENSIONS:
+        f = UPLOAD_DIR / f"{file_id}{ext}"
+        if f.exists():
+            try:
+                f.unlink()
+                return True
+            except Exception as e:
+                logger.error(f"Failed to delete file {file_id}: {e}")
     return False
 
 

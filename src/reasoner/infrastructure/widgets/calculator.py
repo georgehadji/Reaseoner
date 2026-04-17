@@ -106,41 +106,11 @@ class CalculatorWidget(BaseWidget):
             }
 
         except ImportError:
-            # Fallback to basic eval (limited)
-            return self._basic_eval(expression)
-        except Exception as e:
             return {
                 'expression': expression,
-                'error': str(e),
+                'error': 'Expression evaluator not available (simpleeval required)',
                 'valid': False,
             }
-
-    def _basic_eval(self, expression: str) -> dict[str, Any]:
-        """Basic evaluation without simpleeval."""
-        # Only allow safe characters
-        allowed = set("0123456789+-*/.() ^%")
-        if not all(c in allowed for c in expression):
-            return {
-                'expression': expression,
-                'error': 'Invalid characters in expression',
-                'valid': False,
-            }
-
-        try:
-            # Safe eval with limited namespace
-            result = eval(expression, {"__builtins__": {}}, {
-                'pi': math.pi,
-                'e': math.e,
-            })
-
-            return {
-                'expression': expression,
-                'result': result,
-                'result_formatted': self._format_result(result),
-                'valid': True,
-                'engine': 'basic',
-            }
-
         except Exception as e:
             return {
                 'expression': expression,

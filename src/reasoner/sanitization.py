@@ -177,6 +177,26 @@ def sanitize_problem(problem: str) -> tuple[str, list[str]]:
     return result.sanitized, result.warnings
 
 
+def sanitize_for_prompt(text: str) -> tuple[str, list[str]]:
+    """
+    Sanitize text for LLM prompts without HTML escaping.
+
+    Reuses InputSanitizer but preserves <, >, & characters so that
+    legitimate math/code questions are not mangled in prompts.
+    """
+    sanitizer = InputSanitizer(
+        max_length=DEFAULT_SANITIZER_MAX_LENGTH,
+        allow_html=True,
+        block_injection=True,
+    )
+    result = sanitizer.sanitize(text)
+
+    if result.blocked:
+        raise ValueError("Input blocked: potential prompt injection detected")
+
+    return result.sanitized, result.warnings
+
+
 def sanitize_for_logging(text: str, max_length: int = 200) -> str:
     """
     Sanitize text for logging (removes sensitive patterns).

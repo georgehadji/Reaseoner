@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Sparkles } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
 import { ErrorMessage } from './ErrorMessage';
 import { TokenCount } from '@/lib/types';
+import { copyToClipboard } from '@/lib/utils';
 
 export interface RenderedPhase {
   index: number;
@@ -63,12 +64,10 @@ function MessageActions({ content, tokens, duration }: { content: string; tokens
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
-    try {
-      await navigator.clipboard.writeText(content);
+    const ok = await copyToClipboard(content);
+    if (ok) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
     }
   }
 
@@ -127,6 +126,25 @@ export function ChatFeed({
           );
         }
         if (msg.role === 'info') {
+          const isEnhancedPrompt = msg.meta?.enhanced;
+          if (isEnhancedPrompt) {
+            return (
+              <div key={msg.id} className="flex w-full justify-center px-4">
+                <div className="w-full max-w-3xl rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--text-muted)]">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Prompt Enhanced
+                  </div>
+                  <div className="mb-2 text-sm text-[var(--text-subtle)] line-through opacity-70">
+                    {msg.meta?.original}
+                  </div>
+                  <div className="text-sm font-medium text-[var(--text)]">
+                    {msg.meta?.enhanced}
+                  </div>
+                </div>
+              </div>
+            );
+          }
           return (
             <div key={msg.id} className="flex w-full justify-center">
               <div className="max-w-3xl rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs text-[var(--text-subtle)]">

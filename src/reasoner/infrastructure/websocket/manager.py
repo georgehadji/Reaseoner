@@ -418,7 +418,7 @@ async def setup_event_bus_integration() -> None:
         
         if isinstance(event, PhaseCompleted):
             event_data['phase'] = event.phase_name
-            event_data['model_used'] = event.model_used
+            # SECURITY: Do not expose model IDs via WebSocket broadcasts
             event_data['tokens'] = event.tokens
         elif isinstance(event, PipelineCompleted):
             event_data['total_tokens'] = event.total_tokens

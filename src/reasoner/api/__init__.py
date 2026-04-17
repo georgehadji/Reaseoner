@@ -88,7 +88,7 @@ auth_manager = get_auth_manager()
 from reasoner.models import PipelineState
 from reasoner.pipeline import ARAPipeline
 from reasoner.llm import _REGISTRY, ProviderRouter, list_models
-from reasoner.presets import PRESETS, build_custom_router, get_preset, get_method_from_preset, is_valid_preset_name, resolve_preset_name
+from reasoner.presets import PRESETS, build_auto_preset, build_custom_router, get_preset, get_preset_tier, get_method_from_preset, is_valid_preset_name, resolve_preset_name
 from reasoner.gate_agent import GateAgent
 from reasoner.hypergate import HyperGateAgent
 
@@ -513,12 +513,24 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
     run_id = str(uuid.uuid4())
     _active_runs.add(run_id)
     try:
+        # ── Resolve effective preset ──────────────────────────────────────
+        # "auto-budget" / "auto-premium" → HyperGate picks the method;
+        # any other value is treated as an explicit preset (legacy path).
+        raw_preset = req.preset or "auto-budget"
+        is_auto = raw_preset.startswith("auto")
+        auto_tier = raw_preset.split("-", 1)[1] if is_auto and "-" in raw_preset else "budget"
+        # For the gate's own LLM calls we always use the tier's default preset
+        # so that sub-agents get a valid router regardless of the final method.
+        gate_preset_name = f"multi-perspective-{auto_tier}" if is_auto else raw_preset
+        auto_selected_method: str | None = None
+
         if req.routing:
             filtered = _filter_routing(req.routing, "claude-sonnet")
             router = build_custom_router(filtered)
+            effective_preset_name = raw_preset
         else:
-            preset = get_preset(req.preset or "multi-perspective-budget")
-            filtered_routing = _filter_routing(preset.routing, preset.primary_id)
+            gate_preset = get_preset(gate_preset_name)
+            filtered_routing = _filter_routing(gate_preset.routing, gate_preset.primary_id)
             # Tier-based agent persona override for follow-ups
             if initial_state and initial_state.agent_model:
                 for role in ("synthesis", "classification", "decomposition"):
@@ -529,11 +541,12 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                     ["synthesis", "classification", "decomposition"],
                 )
             router = ProviderRouter.from_model_ids(
-                primary_id=preset.primary_id,
+                primary_id=gate_preset.primary_id,
                 routing=filtered_routing,
             )
+            effective_preset_name = gate_preset_name
 
-        # ── Gate Agent: decide direct answer vs full pipeline ──
+        # ── Gate Agent: decide direct answer vs full pipeline ─────────────
         if not req.force_pipeline:
             gate = HyperGateAgent(router)
             decision = await gate.decide(req.problem)
@@ -546,21 +559,44 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                     yield chunk
                 return
 
+            # ── Auto-method: rebuild router with the gate-selected preset ──
+            if is_auto and decision.method and not req.routing:
+                effective_preset_name = build_auto_preset(decision.method, auto_tier)
+                auto_selected_method = decision.method
+                if effective_preset_name != gate_preset_name:
+                    method_preset = get_preset(effective_preset_name)
+                    method_routing = _filter_routing(method_preset.routing, method_preset.primary_id)
+                    if initial_state and initial_state.agent_model:
+                        for role in ("synthesis", "classification", "decomposition"):
+                            method_routing[role] = initial_state.agent_model
+                    router = ProviderRouter.from_model_ids(
+                        primary_id=method_preset.primary_id,
+                        routing=method_routing,
+                    )
+                    logger.info(
+                        "Auto-method: gate selected '%s' → preset '%s'",
+                        decision.method,
+                        effective_preset_name,
+                    )
+
         pipeline = ARAPipeline(
             router=router,
             top_k=req.top_k,
-            parallel_perspectives=(not req.sequential) if not (req.preset and "multi-perspective" in req.preset) else True,
+            parallel_perspectives=(not req.sequential) if "multi-perspective" not in effective_preset_name else True,
             verbose=False,
-            preset_name=req.preset,
+            preset_name=effective_preset_name,
             source_type=req.source_type,
             domain=req.domain,
             enhance_prompt=req.enhance_prompt,
         )
-        state = initial_state or PipelineState(problem=req.problem, preset_name=req.preset)
+        state = initial_state or PipelineState(problem=req.problem, preset_name=effective_preset_name)
 
         # SECURITY: Do not expose routing table or model IDs to clients
         logger.info(f"Pipeline start with routing: {router.describe()}")
-        yield _event({"type": "start"})
+        start_payload: dict = {"type": "start", "preset": effective_preset_name}
+        if auto_selected_method:
+            start_payload["auto_selected_method"] = auto_selected_method
+        yield _event(start_payload)
 
         # Optional prompt enhancement pre-phase
         if req.enhance_prompt and not state.enhanced_problem:
@@ -583,30 +619,30 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             (1.5, "Deep Read",        pipeline._phase_deep_read,    _ser_1_5),
         ]
 
-        if _is_debate(req.preset):
+        if _is_debate(effective_preset_name):
             phases += [
                 (2, "Opening Statements",  pipeline._phase_debate_opening,    _ser_2),
                 (3, "Rebuttals",           pipeline._phase_debate_rebuttal,   _ser_3),
                 (4, "Cross-Examination",   pipeline._phase_debate_judge,      _ser_4),
             ]
-        elif _is_scientific(req.preset):
+        elif _is_scientific(effective_preset_name):
             phases += [
                 (2, "Hypotheses",          pipeline._phase_scientific_hypothesize,  _ser_2),
                 (3, "Falsification Tests", pipeline._phase_scientific_test,         _ser_3),
                 (4, "Stress Testing",      pipeline._phase_4_stress_test,           _ser_4),
             ]
-        elif _is_socratic(req.preset):
+        elif _is_socratic(effective_preset_name):
             phases += [
                 (2, "Maieutic Questions",  pipeline._phase_socratic_question,    _ser_2),
                 (3, "Dialectic Answers",   pipeline._phase_socratic_answer,      _ser_3),
             ]
-        elif _is_orchestrated(req.preset):
+        elif _is_orchestrated(effective_preset_name):
             phases += [
                 (2, "Generation Pool",    pipeline._phase_jury_generate,             _ser_2),
                 (3, "Critic Pool",        pipeline._phase_jury_critique,             _ser_3),
                 (4, "Verification & Meta", pipeline._phase_jury_verify_and_meta_eval, _ser_4),
             ]
-        elif req.preset and "research" in req.preset:
+        elif "research" in effective_preset_name:
             phases += [
                 (2, "Deep Research",      pipeline._phase_research_web_search,   _ser_2),
                 (3, "Perspectives",       pipeline._phase_2_perspectives,        _ser_2), # Using _ser_2 for both to output their respective states. Wait, _ser_2 doesn't output web discovery results. Let's use _ser_1 for Deep Research as it outputs web discovery results. Wait, _ser_1 outputs decomposition. We'll need a custom serializer or just use _ser_2.

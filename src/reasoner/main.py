@@ -103,7 +103,15 @@ def build_router(args: argparse.Namespace) -> ProviderRouter:
                 print(f"  {role:18s} -> {mid}")
         return router
 
-    preset_name = args.preset or DEFAULT_CLI_PRESET
+    raw_preset = args.preset or DEFAULT_CLI_PRESET
+    # "auto", "auto-budget", "auto-premium" are resolved after the gate decision.
+    # For router construction we use the tier's default preset.
+    if raw_preset.startswith("auto"):
+        tier = raw_preset.split("-", 1)[1] if "-" in raw_preset else "budget"
+        preset_name = f"multi-perspective-{tier}"
+    else:
+        preset_name = raw_preset
+
     preset = get_preset(preset_name)
 
     missing = preset.missing_keys()
@@ -114,8 +122,11 @@ def build_router(args: argparse.Namespace) -> ProviderRouter:
         print("  Affected phases will fail. Set keys or choose a different preset.\n")
 
     router = preset.build_router()
-    print(f"\n[Preset: {preset.name}]")
-    print(f"  {preset.description}")
+    if raw_preset.startswith("auto"):
+        print(f"\n[Auto-routing] tier={tier} — method will be selected by HyperGate")
+    else:
+        print(f"\n[Preset: {preset.name}]")
+        print(f"  {preset.description}")
     routing_info = router.describe()
     for role, model in routing_info.items():
         print(f"  {role:22s} -> {model}")
@@ -223,6 +234,11 @@ async def main(args: argparse.Namespace) -> None:
     problem, _ = sanitize_for_prompt(problem)
 
     # ── Gate Agent: decide direct answer vs full pipeline ──
+    raw_preset = args.preset or DEFAULT_CLI_PRESET
+    is_auto = raw_preset.startswith("auto")
+    auto_tier = raw_preset.split("-", 1)[1] if is_auto and "-" in raw_preset else "budget"
+    effective_preset_name = f"multi-perspective-{auto_tier}" if is_auto else raw_preset
+
     if not args.force_pipeline:
         gate = HyperGateAgent(router)
         decision = await gate.decide(problem)
@@ -259,16 +275,24 @@ async def main(args: argparse.Namespace) -> None:
                     print(f"   > {snippet}")
                 print()
             return
+
+        # ── Auto-method: rebuild router with gate-selected preset ──
+        if is_auto and decision.method:
+            from reasoner.presets import build_auto_preset, get_preset
+            effective_preset_name = build_auto_preset(decision.method, auto_tier)
+            print(f"  [Gate] Auto-selected method: {decision.method} → preset: {effective_preset_name}\n")
+            method_preset = get_preset(effective_preset_name)
+            router = method_preset.build_router()
         else:
             print(f"  [Gate] Pipeline selected ({decision.method or 'multi_perspective'}).\n")
 
     pipeline = ARAPipeline(
         router=router,
-        initial_state=initial_state, # Pass the loaded state
+        initial_state=initial_state,
         top_k=args.top_k,
         parallel_perspectives=not args.sequential,
         verbose=not args.quiet,
-        preset_name=args.preset or "multi-perspective-budget",
+        preset_name=effective_preset_name,
         source_type=args.source_type,
         domain=args.domain or None,
         enhance_prompt=args.enhance_prompt,

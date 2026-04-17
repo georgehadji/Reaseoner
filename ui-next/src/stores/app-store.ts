@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { MethodId, Conversation } from '@/lib/types';
-import { METHOD_PRESETS, DEFAULTS } from '@/lib/config';
+import { Conversation } from '@/lib/types';
+
+export type Tier = 'budget' | 'premium';
 
 interface AppState {
   running: boolean;
-  method: MethodId;
-  presetIndex: number;
+  tier: Tier;
   isSequential: boolean;
   isExpert: boolean;
   isWebSearch: boolean;
@@ -21,13 +21,12 @@ interface AppState {
     phases: Array<{ phase: number; name: string; data: unknown }>;
     errors: string[];
     preset: string;
-    method: MethodId;
+    autoSelectedMethod: string | null;
   } | null;
 
   // Actions
   setRunning: (running: boolean) => void;
-  setMethod: (method: MethodId) => void;
-  cyclePreset: () => void;
+  toggleTier: () => void;
   toggleSequential: () => void;
   toggleExpert: () => void;
   toggleWebSearch: () => void;
@@ -40,16 +39,14 @@ interface AppState {
   addPhaseToActiveRun: (phase: { phase: number; name: string; data: unknown }) => void;
   setActiveRunErrors: (errors: string[]) => void;
   clearActiveRun: () => void;
-  getCurrentPreset: () => string;
-  getCurrentPresetLabel: () => string;
+  getAutoPreset: () => string;
 }
 
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       running: false,
-      method: DEFAULTS.method,
-      presetIndex: 0,
+      tier: 'budget',
       isSequential: false,
       isExpert: false,
       isWebSearch: false,
@@ -62,19 +59,8 @@ export const useAppStore = create<AppState>()(
 
       setRunning: (running) => set({ running }),
 
-      setMethod: (method) =>
-        set((state) => {
-          const presets = METHOD_PRESETS[method] || METHOD_PRESETS[DEFAULTS.method];
-          const presetIndex = state.presetIndex >= presets.length ? 0 : state.presetIndex;
-          return { method, presetIndex };
-        }),
-
-      cyclePreset: () =>
-        set((state) => {
-          const presets = METHOD_PRESETS[state.method] || METHOD_PRESETS[DEFAULTS.method];
-          const presetIndex = (state.presetIndex + 1) % presets.length;
-          return { presetIndex };
-        }),
+      toggleTier: () =>
+        set((state) => ({ tier: state.tier === 'budget' ? 'premium' : 'budget' })),
 
       toggleSequential: () => set((state) => ({ isSequential: !state.isSequential })),
       toggleExpert: () => set((state) => ({ isExpert: !state.isExpert })),
@@ -105,30 +91,16 @@ export const useAppStore = create<AppState>()(
 
       clearActiveRun: () => set({ activeRun: null }),
 
-      getCurrentPreset: () => {
-        const presets = METHOD_PRESETS[get().method] || METHOD_PRESETS[DEFAULTS.method];
-        const idx = Math.min(get().presetIndex, presets.length - 1);
-        return presets[idx]?.id || presets[0]?.id;
-      },
-
-      getCurrentPresetLabel: () => {
-        const presets = METHOD_PRESETS[get().method] || METHOD_PRESETS[DEFAULTS.method];
-        const idx = Math.min(get().presetIndex, presets.length - 1);
-        return presets[idx]?.label || presets[0]?.label;
-      },
+      /** Returns the preset string to send to the API: "auto-budget" or "auto-premium". */
+      getAutoPreset: () => `auto-${get().tier}`,
     }),
     {
       name: 'ara-ui-store',
-      version: 1,
-      migrate: (persistedState) => {
-        // Drop persisted method so it always defaults to multi-perspective
-        const s = persistedState as Record<string, unknown>;
-        const { method: _, ...rest } = s;
-        return rest;
-      },
+      version: 2,
+      migrate: () => ({}),   // reset all persisted state on version bump
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        presetIndex: state.presetIndex,
+        tier: state.tier,
         isSequential: state.isSequential,
         isExpert: state.isExpert,
         isEnhancePrompt: state.isEnhancePrompt,

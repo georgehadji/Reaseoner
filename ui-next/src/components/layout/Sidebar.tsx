@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Conversation } from '@/lib/types';
-import { METHODS } from '@/lib/config';
 import { Plus, PanelLeft, Trash2 } from 'lucide-react';
 
 interface SidebarProps {
@@ -182,7 +181,6 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew }: Sid
                 {items.map((conv) => {
                   const title =
                     conv.problem.length > 45 ? conv.problem.slice(0, 45) + '…' : conv.problem;
-                  const methodMeta = METHODS.find((m) => m.id === conv.method);
                   const tokens = conv.total_tokens?.total ?? 0;
 
                   return (
@@ -196,9 +194,9 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew }: Sid
                           {title}
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          {methodMeta && (
-                            <span className="text-[10px] text-[var(--text-muted)]" title={methodMeta.name}>
-                              {methodMeta.icon}
+                          {conv.method && conv.method !== 'multi_perspective' && (
+                            <span className="text-[10px] text-[var(--text-muted)]">
+                              {conv.method.replace(/_/g, '-')}
                             </span>
                           )}
                           {conv.preset && (

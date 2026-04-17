@@ -1,11 +1,10 @@
 'use client';
 
-import { MethodId } from '@/lib/types';
-import { METHOD_PHASES, DEFAULTS } from '@/lib/config';
+import { METHOD_PHASES } from '@/lib/config';
 import { cn } from '@/lib/utils';
 
 interface PhaseTimelineProps {
-  method: MethodId;
+  method: string;
   currentPhase?: number;
   completedPhases: number[];
   errorPhases?: number[];
@@ -21,7 +20,7 @@ export function PhaseTimeline({
   phaseDurations,
   onPhaseClick,
 }: PhaseTimelineProps) {
-  const phases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
+  const phases = METHOD_PHASES[method] || METHOD_PHASES['multi_perspective'] || METHOD_PHASES['multi-perspective'];
 
   return (
     <nav

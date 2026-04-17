@@ -15,22 +15,32 @@ import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
 import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '@/lib/types';
-import { METHOD_PHASES, DEFAULTS } from '@/lib/config';
+import { METHOD_PHASES } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
 import { clearCache, searchWeb } from '@/lib/api-client';
 
+/** Resolve METHOD_PHASES by trying snake_case then kebab-case then fallback. */
+function getMethodPhases(method: string) {
+  return (
+    METHOD_PHASES[method] ||
+    METHOD_PHASES[method.replace(/_/g, '-')] ||
+    METHOD_PHASES['multi_perspective'] ||
+    METHOD_PHASES['multi-perspective'] ||
+    []
+  );
+}
+
 export default function Home() {
   const running = useAppStore((s) => s.running);
   const setRunning = useAppStore((s) => s.setRunning);
-  const method = useAppStore((s) => s.method);
   const composerText = useAppStore((s) => s.composerText);
   const setComposerText = useAppStore((s) => s.setComposerText);
   const isExpert = useAppStore((s) => s.isExpert);
   const isSequential = useAppStore((s) => s.isSequential);
   const isWebSearch = useAppStore((s) => s.isWebSearch);
   const isSmartSearch = useAppStore((s) => s.isSmartSearch);
-  const getCurrentPreset = useAppStore((s) => s.getCurrentPreset);
+  const getAutoPreset = useAppStore((s) => s.getAutoPreset);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
 
   const { history, refresh: refreshHistory, remove: removeHistory } = useConversationHistory();
@@ -41,6 +51,9 @@ export default function Home() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const progressIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+
+  // Auto-selected method from HyperGate — populated from the 'start' SSE event.
+  const [autoSelectedMethod, setAutoSelectedMethod] = useState<string>('multi_perspective');
 
   const [completedPhases, setCompletedPhases] = useState<number[]>([]);
   const [errorPhases, setErrorPhases] = useState<number[]>([]);
@@ -73,6 +86,7 @@ export default function Home() {
     setErrorPhases([]);
     setCurrentPhase(undefined);
     setPhaseDurations({});
+    setAutoSelectedMethod('multi_perspective');
     phaseStartTimesRef.current = {};
 
     const userMsg: ChatFeedMessage = { id: 'u-' + Date.now(), role: 'user', content: problem };
@@ -146,7 +160,7 @@ export default function Home() {
           phases: [],
           errors: [],
           preset: 'web-search',
-          method: 'multi-perspective',
+          method: 'web_search',
           total_tokens: null,
         });
         refreshHistory();
@@ -167,8 +181,6 @@ export default function Home() {
       return;
     }
 
-    const isMultiPerspective = method === 'multi-perspective';
-
     // ── Detect follow-up mode ──
     const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
     const isFollowup = !!lastAssistantMsg && messages.length > 0;
@@ -176,10 +188,18 @@ export default function Home() {
     const phases: RenderedPhase[] = [];
     let finalErrors: string[] = [];
     let finalTokens = { input: 0, output: 0, total: 0 };
+    // Track the method discovered from the 'start' event within this run
+    let runMethod = 'multi_perspective';
 
     // Shared event handler
     const onEvent = (ev: PhaseEvent) => {
-      if (ev.type === 'prompt_enhanced' && ev.enhanced) {
+      if (ev.type === 'start') {
+        // Capture which method the backend auto-selected
+        if (ev.auto_selected_method) {
+          runMethod = ev.auto_selected_method;
+          setAutoSelectedMethod(ev.auto_selected_method);
+        }
+      } else if (ev.type === 'prompt_enhanced' && ev.enhanced) {
         setMessages((prev) => [
           ...prev,
           {
@@ -190,7 +210,7 @@ export default function Home() {
           },
         ]);
       } else if (ev.type === 'phase_start' && typeof ev.phase === 'number') {
-        const methodPhases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
+        const methodPhases = getMethodPhases(runMethod);
         const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
         phaseStartTimesRef.current[ev.phase] = performance.now();
         setCurrentPhase(ev.phase);
@@ -203,7 +223,7 @@ export default function Home() {
           return next;
         });
       } else if (ev.type === 'phase_complete' && typeof ev.phase === 'number') {
-        const methodPhases = METHOD_PHASES[method] || METHOD_PHASES[DEFAULTS.method];
+        const methodPhases = getMethodPhases(runMethod);
         const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
         const phaseNum = ev.phase;
         const phaseData = ev.data ?? {};
@@ -296,8 +316,8 @@ export default function Home() {
           problem,
           phases: phases.map((p) => ({ phase: p.phase, name: p.name, data: p.data })),
           errors: finalErrors,
-          preset: getCurrentPreset(),
-          method,
+          preset: getAutoPreset(),
+          method: runMethod,
           total_tokens: finalTokens,
           duration: totalDuration,
         };
@@ -309,9 +329,9 @@ export default function Home() {
       if (isFollowup) {
         const followupReq: RunFollowupRequest = {
           question: problem,
-          preset: getCurrentPreset(),
-          top_k: isMultiPerspective ? 4 : (isExpert ? 4 : 2),
-          sequential: isMultiPerspective ? false : !isSequential,
+          preset: getAutoPreset(),
+          top_k: isExpert ? 4 : 2,
+          sequential: isSequential,
           enhance_prompt: useAppStore.getState().isEnhancePrompt,
           conversation_id: conversationIdRef.current || lastAssistantMsg.id,
           history: messages
@@ -320,21 +340,17 @@ export default function Home() {
           previous_synthesis: lastAssistantMsg.content || '',
           agent_model: null,
         };
-        // eslint-disable-next-line no-console
-        console.log('RunFollowupRequest payload:', followupReq);
         await startFollowup(followupReq, onEvent);
       } else {
         const newConvId = assistantId;
         conversationIdRef.current = newConvId;
         const req = {
           problem,
-          preset: getCurrentPreset(),
-          top_k: isMultiPerspective ? 4 : (isExpert ? 4 : 2),
-          sequential: isMultiPerspective ? false : !isSequential,
+          preset: getAutoPreset(),
+          top_k: isExpert ? 4 : 2,
+          sequential: isSequential,
           enhance_prompt: useAppStore.getState().isEnhancePrompt,
         };
-        // eslint-disable-next-line no-console
-        console.log('RunRequest payload:', req);
         await startRun(req, onEvent);
       }
     } catch (err) {
@@ -368,6 +384,7 @@ export default function Home() {
     setErrorPhases([]);
     setCurrentPhase(undefined);
     setPhaseDurations({});
+    setAutoSelectedMethod('multi_perspective');
     phaseStartTimesRef.current = {};
     conversationIdRef.current = null;
   }
@@ -395,6 +412,8 @@ export default function Home() {
       loaded.push({ id: 'err-' + conv.id, role: 'error', content: conv.errors.join('\n') });
     }
     setMessages(loaded);
+    // Restore the method so PhaseTimeline shows the right phases for loaded conversations
+    setAutoSelectedMethod(conv.method || 'multi_perspective');
     setCompletedPhases(renderedPhases.map((p) => p.phase));
     setErrorPhases([]);
     setCurrentPhase(undefined);
@@ -409,7 +428,6 @@ export default function Home() {
   const hasMessages = messages.length > 0;
   const activeAssistantMsg = messages.find((m) => m.role === 'assistant' && m.isStreaming);
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-  const currentPreset = getCurrentPreset();
   const followupAgentBadge = lastAssistantMsg ? 'Follow-up mode active' : null;
 
   return (
@@ -442,7 +460,7 @@ export default function Home() {
 
         {hasMessages && activeAssistantMsg && !isWebSearch && (
           <PhaseTimeline
-            method={method}
+            method={autoSelectedMethod}
             currentPhase={currentPhase}
             completedPhases={completedPhases}
             errorPhases={errorPhases}

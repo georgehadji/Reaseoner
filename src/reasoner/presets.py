@@ -40,6 +40,30 @@ _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     "expert_4",
     # Prompt enhancement (opt-in pre-phase)
     "prompt_enhancement",
+    # CoVe roles
+    "cove_draft",
+    "cove_verify",
+    "cove_answer",
+    "cove_revise",
+    # SoT roles
+    "sot_skeleton",
+    "sot_solve",
+    "sot_assemble",
+    # ToT roles
+    "tot_decompose",
+    "tot_generate",
+    "tot_evaluate",
+    "tot_backtrack",
+    # PoT roles
+    "pot_generate",
+    "pot_execute",
+    "pot_interpret",
+    # Self-Discover roles
+    "sd_select",
+    "sd_adapt",
+    "sd_implement",
+    # Post-synthesis verification
+    "post_synthesis_verify",
 })
 
 
@@ -57,6 +81,26 @@ def get_method_from_preset(preset: str) -> str:
         return "scientific"
     if "socratic" in preset:
         return "socratic"
+    if "pre-mortem" in preset or "premortem" in preset:
+        return "pre_mortem"
+    if "bayesian" in preset:
+        return "bayesian"
+    if "dialectical" in preset:
+        return "dialectical"
+    if "analogical" in preset:
+        return "analogical"
+    if "delphi" in preset:
+        return "delphi"
+    if "self-discover" in preset:
+        return "self_discover"
+    if "cove" in preset:
+        return "cove"
+    if "sot" in preset:
+        return "sot"
+    if "tot" in preset:
+        return "tot"
+    if "pot" in preset:
+        return "pot"
     return "multi-perspective"
 
 
@@ -67,6 +111,48 @@ def get_preset_tier(preset_id: str) -> Literal["budget", "premium", "unknown"]:
     if preset_id.endswith("-premium"):
         return "premium"
     return "unknown"
+
+
+# Maps HyperGateAgent method names → preset slug prefixes.
+# Keys are the method strings returned by MethodClassifierSubAgent.
+_METHOD_TO_SLUG: dict[str, str] = {
+    "debate": "debate",
+    "scientific": "scientific",
+    "socratic": "socratic",
+    "multi_perspective": "multi-perspective",
+    "iterative": "multi-perspective",   # no iterative preset — fall back to multi-perspective
+    "research": "research",
+    "jury": "jury",
+    "pre_mortem": "pre-mortem",
+    "bayesian": "bayesian",
+    "dialectical": "dialectical",
+    "analogical": "analogical",
+    "delphi": "delphi",
+    "cove": "cove",
+    "sot": "sot",
+    "tot": "tot",
+    "pot": "pot",
+    "self_discover": "self-discover",
+}
+
+
+def build_auto_preset(method: str, tier: str) -> str:
+    """Translate a HyperGate method name + tier into a valid preset ID.
+
+    Examples:
+        build_auto_preset("debate", "budget")       → "debate-budget"
+        build_auto_preset("self_discover", "premium") → "self-discover-premium"
+        build_auto_preset("unknown_method", "budget") → "multi-perspective-budget"
+
+    The tier must be "budget" or "premium". Any other value falls back to "budget".
+    """
+    safe_tier = tier if tier in ("budget", "premium") else "budget"
+    slug = _METHOD_TO_SLUG.get(method, "multi-perspective")
+    candidate = f"{slug}-{safe_tier}"
+    # Belt-and-suspenders: confirm it actually exists in the registry.
+    if is_valid_preset_name(candidate):
+        return candidate
+    return f"multi-perspective-{safe_tier}"
 
 
 # Agent model used for follow-up synthesis / classification / decomposition.
@@ -221,77 +307,6 @@ _PRESET_CONFIGS: list[dict] = [
             "Kimi K2.5 for constructive: strongest creative breadth in Chinese OSS",
             "DeepSeek for destructive: 85K+ adversarial RL environments",
             "Ministral-8b for minimalist: order-of-magnitude fewer tokens by design",
-        ],
-    },
-    # ── Iterative ────────────────────────────────────────────────────
-    {
-        "id": "iterative-budget",
-        "name": "Iterative (Budget)",
-        "description": "Iterative refinement loop using cheap cross-lab models. DeepSeek generates, Qwen critiques, GLM systemic (cross-lab avoids echo chamber).",
-        "primary_id": "deepseek-v3",
-        "routing": {
-            "prompt_enhancement": "gemma-4-26b",
-            "classification": "gemma-4-26b",
-            "decomposition": "deepseek-v3",
-            "constructive": "deepseek-v3",
-            "destructive": "mistral-large-3",
-            "systemic": "deepseek-v3",
-            "minimalist": "gemma-4-26b",
-            "scoring": "deepseek-v3",
-            "stress_testing": "deepseek-v3",
-            "synthesis": "qwen3-max"
-        },
-        "fallback_routing": {
-            "prompt_enhancement": "glm-4-air",
-            "classification": "glm-4-air",
-            "decomposition": "glm-4-air",
-            "constructive": "qwen3-plus",
-            "destructive": "deepseek-v3",
-            "systemic": "qwen3-plus",
-            "minimalist": "deepseek-v3",
-            "scoring": "glm-4-air",
-            "stress_testing": "qwen3-plus",
-            "synthesis": "glm-4-air"
-        },
-        "notes": [
-            "Critical: constructive=DeepSeek, destructive=Qwen, systemic=GLM — 3 different labs",
-            "Same-lab generator+critic causes echo chamber convergence in the loop",
-        ],
-    },
-    {
-        "id": "iterative-premium",
-        "name": "Iterative (Premium)",
-        "description": "Generates multiple solutions, critiques each, selects best, and refines. Repeats for up to 5 iterations or until score > 8/10. Genetic optimization for complex problems.",
-        "primary_id": "claude-opus",
-        "routing": {
-            "prompt_enhancement": "gemini-flash",
-            "classification": "gemini-flash",
-            "decomposition": "claude-sonnet",
-            "constructive": "claude-opus",
-            "destructive": "deepseek-r1",
-            "systemic": "gemini-flash",
-            "minimalist": "claude-sonnet",
-            "scoring": "sonar-pro",
-            "stress_testing": "claude-opus",
-            "synthesis": "claude-opus"
-        },
-        "fallback_routing": {
-            "prompt_enhancement": "claude-sonnet",
-            "classification": "deepseek-r1",
-            "decomposition": "gemini-flash",
-            "constructive": "claude-sonnet",
-            "destructive": "claude-opus",
-            "systemic": "claude-opus",
-            "minimalist": "deepseek-r1",
-            "scoring": "claude-opus",
-            "stress_testing": "deepseek-r1",
-            "synthesis": "glm-5.1"
-        },
-        "notes": [
-            "Phase 2: 4 different labs (Anthropic, DeepSeek, Google, Claude Sonnet) = no echo chamber",
-            "Phase 3: Perplexity Sonar provides independent live fact-checking",
-            "Phase 4 stress tests the best candidate",
-            "Phase 5 can trigger refinement loop (max 5 iterations)",
         ],
     },
     # ── Debate ───────────────────────────────────────────────────────
@@ -794,6 +809,175 @@ _PRESET_CONFIGS: list[dict] = [
             "expert_3": "gemini-flash",
             "expert_4": "deepseek-v3",
             "synthesis": "claude-sonnet"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet"
+        },
+    },
+    # ── Chain-of-Verification (CoVe) ─────────────────────────────────
+    {
+        "id": "cove-budget",
+        "name": "Chain-of-Verification (Budget)",
+        "description": "Structured fact-checking loop: draft → verify → answer → revise. Budget tier using DeepSeek + Qwen + GLM for cross-lab verification.",
+        "primary_id": "deepseek-v3",
+        "routing": {
+            "prompt_enhancement": "gemma-4-26b",
+            "cove_draft": "deepseek-v3",
+            "cove_verify": "qwen3-max",
+            "cove_answer": "glm-4-air",
+            "cove_revise": "deepseek-v3",
+            "synthesis": "deepseek-v3"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "glm-4-air"
+        },
+    },
+    {
+        "id": "cove-premium",
+        "name": "Chain-of-Verification (Premium)",
+        "description": "Structured fact-checking loop: draft → verify → answer → revise. Premium tier with Claude Opus draft, Sonar verification, and cross-lab revision.",
+        "primary_id": "claude-opus",
+        "routing": {
+            "prompt_enhancement": "gemini-flash",
+            "cove_draft": "claude-opus",
+            "cove_verify": "sonar-pro",
+            "cove_answer": "deepseek-r1",
+            "cove_revise": "claude-opus",
+            "synthesis": "claude-opus"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet"
+        },
+    },
+    # ── Skeleton-of-Thought (SoT) ────────────────────────────────────
+    {
+        "id": "sot-budget",
+        "name": "Skeleton-of-Thought (Budget)",
+        "description": "Parallel decomposition: skeleton → parallel sub-problem solving → assembly. Budget tier with 3-lab parallel execution for latency reduction.",
+        "primary_id": "deepseek-v3",
+        "routing": {
+            "prompt_enhancement": "gemma-4-26b",
+            "sot_skeleton": "deepseek-v3",
+            "sot_solve": "qwen3-max",
+            "sot_assemble": "deepseek-v3",
+            "synthesis": "deepseek-v3"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "glm-4-air"
+        },
+    },
+    {
+        "id": "sot-premium",
+        "name": "Skeleton-of-Thought (Premium)",
+        "description": "Parallel decomposition: skeleton → parallel sub-problem solving → assembly. Premium tier with Claude skeleton and 4-lab parallel solve.",
+        "primary_id": "claude-opus",
+        "routing": {
+            "prompt_enhancement": "gemini-flash",
+            "sot_skeleton": "claude-opus",
+            "sot_solve": "kimi-k2-5",
+            "sot_assemble": "claude-opus",
+            "synthesis": "claude-opus"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet"
+        },
+    },
+    # ── Tree-of-Thoughts (ToT) ───────────────────────────────────────
+    {
+        "id": "tot-budget",
+        "name": "Tree-of-Thoughts (Budget)",
+        "description": "Reasoning as tree search: generate candidates → evaluate → backtrack. Budget tier with bounded depth and branching for planning problems.",
+        "primary_id": "deepseek-v3",
+        "routing": {
+            "prompt_enhancement": "gemma-4-26b",
+            "tot_decompose": "deepseek-v3",
+            "tot_generate": "qwen3-max",
+            "tot_evaluate": "glm-4-air",
+            "tot_backtrack": "deepseek-v3",
+            "synthesis": "deepseek-v3"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "glm-4-air"
+        },
+    },
+    {
+        "id": "tot-premium",
+        "name": "Tree-of-Thoughts (Premium)",
+        "description": "Reasoning as tree search: generate candidates → evaluate → backtrack. Premium tier with Claude decomposition and cross-lab evaluation.",
+        "primary_id": "claude-opus",
+        "routing": {
+            "prompt_enhancement": "gemini-flash",
+            "tot_decompose": "claude-opus",
+            "tot_generate": "deepseek-r1",
+            "tot_evaluate": "sonar-pro",
+            "tot_backtrack": "claude-opus",
+            "synthesis": "claude-opus"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet"
+        },
+    },
+    # ── Program-of-Thoughts (PoT) ────────────────────────────────────
+    {
+        "id": "pot-budget",
+        "name": "Program-of-Thoughts (Budget)",
+        "description": "Generate executable code as intermediate reasoning steps. Budget tier with Python code generation and simulated execution for quantitative problems.",
+        "primary_id": "deepseek-v3",
+        "routing": {
+            "prompt_enhancement": "gemma-4-26b",
+            "pot_generate": "deepseek-v3",
+            "pot_execute": "deepseek-v3",
+            "pot_interpret": "deepseek-v3",
+            "synthesis": "deepseek-v3"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "glm-4-air"
+        },
+    },
+    {
+        "id": "pot-premium",
+        "name": "Program-of-Thoughts (Premium)",
+        "description": "Generate executable code as intermediate reasoning steps. Premium tier with GPT-5 code generation and Claude interpretation for maximum accuracy.",
+        "primary_id": "gpt-5",
+        "routing": {
+            "prompt_enhancement": "gemini-flash",
+            "pot_generate": "gpt-5",
+            "pot_execute": "gpt-5",
+            "pot_interpret": "claude-opus",
+            "synthesis": "claude-opus"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet"
+        },
+    },
+    # ── Self-Discover ────────────────────────────────────────────────
+    {
+        "id": "self-discover-budget",
+        "name": "Self-Discover (Budget)",
+        "description": "Dynamic reasoning module composition: the LLM selects and composes reasoning modules per problem. Budget tier with DeepSeek module selection.",
+        "primary_id": "deepseek-v3",
+        "routing": {
+            "prompt_enhancement": "gemma-4-26b",
+            "sd_select": "deepseek-v3",
+            "sd_adapt": "qwen3-max",
+            "sd_implement": "deepseek-v3",
+            "synthesis": "deepseek-v3"
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "glm-4-air"
+        },
+    },
+    {
+        "id": "self-discover-premium",
+        "name": "Self-Discover (Premium)",
+        "description": "Dynamic reasoning module composition: the LLM selects and composes reasoning modules per problem. Premium tier with Claude selection and cross-lab implementation.",
+        "primary_id": "claude-opus",
+        "routing": {
+            "prompt_enhancement": "gemini-flash",
+            "sd_select": "claude-opus",
+            "sd_adapt": "deepseek-r1",
+            "sd_implement": "claude-opus",
+            "synthesis": "claude-opus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet"

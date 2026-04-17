@@ -1,4 +1,4 @@
-# ARA Pipeline v2.1
+# ARA Pipeline v2.2
 
 **Adaptive Reasoning Architecture** — A dynamic, multi-method reasoning pipeline that orchestrates Large Language Models to decompose complex problems, generate multi-perspective solutions, critique rigorously, stress-test under adversarial conditions, and synthesize actionable recommendations.
 
@@ -39,8 +39,9 @@ ARA Pipeline is a production-grade reasoning engine for complex decision-making.
 
 ### Key Capabilities
 
+- **HyperGate Pre-Router**: Five focused sub-agents run in parallel before any pipeline starts — detecting language, complexity, directness, web-search need, and optimal reasoning method. Simple questions are answered immediately; complex ones are routed to the right method automatically.
 - **Multi-Phase Orchestration**: 6 core phases from classification to synthesis
-- **Specialized Reasoning Methods**: 10+ methodologies — Scientific, Socratic, Debate, Jury, Bayesian, Delphi, and more
+- **Specialized Reasoning Methods**: 16 methodologies — Scientific, Socratic, Debate, Jury, Bayesian, Delphi, Chain-of-Verification, Skeleton-of-Thought, Tree-of-Thoughts, Program-of-Thoughts, Self-Discover, and more
 - **Cross-Lab Diversity**: Each phase routes to a different model family to prevent echo chambers and maximize epistemic coverage
 - **Intelligent Fallbacks**: Automatic cross-lab fallback routing when a provider fails — never falls back blindly to a single primary
 - **Real-Time Streaming**: Server-Sent Events (SSE) deliver per-phase progress, token usage, and model attribution
@@ -51,10 +52,42 @@ ARA Pipeline is a production-grade reasoning engine for complex decision-making.
 
 ## Architecture
 
-### Core Pipeline (6 Phases)
+### HyperGate Agent (Pre-Pipeline Router)
+
+Every request passes through the HyperGate before any reasoning pipeline starts. Five specialized sub-agents run **in parallel** (Phase 1), and a TieBreakerSubAgent resolves conflicts if needed (Phase 2).
 
 ```
 User Problem
+     │
+     ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    HyperGateAgent (Phase 1 — parallel)          │
+│                                                                 │
+│  LanguageDetector  ComplexityEstimator  DirectDetector          │
+│       (lang?)          (simple/med/     (pipeline needed?       │
+│                         complex?)        or answer directly?)   │
+│                                                                 │
+│  WebSearchDetector      MethodClassifier                        │
+│  (real-time data        (which of 16 methods:                   │
+│   needed?)               debate/scientific/tot/…?)             │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ synthesize()  (pure Python, no LLM)
+          ┌────────────────┼────────────────┐
+          │ DIRECT         │ WEB_SEARCH     │ PIPELINE
+          ▼                ▼                ▼
+  Answer immediately  Run live search  Full ARA Pipeline
+  (no pipeline)       and return       (method auto-selected)
+                      results
+```
+
+**Fail-safe design**: any sub-agent error becomes a graceful fallback — never a crash.  
+**Security**: real method names are never exposed to the LLM. Only opaque letters (B–Q) appear in sub-agent prompts.  
+**Caching**: per-sub-agent LRU cache (512 entries) + top-level HyperGateAgent cache for repeat problems.
+
+### Core Pipeline (6 Phases)
+
+```
+User Problem  (routed here by HyperGateAgent when action = "pipeline")
      │
      ▼
 Phase 0: Task Classification
@@ -81,9 +114,10 @@ Phase 5: Synthesis
           → Includes Meta-Cognitive Audit
 ```
 
-**Total**: 8 LLM calls per run (4 parallel in Phase 2)  
+**Total**: 8 LLM calls per run (4 parallel in Phase 2) for standard methods; varies by method  
 **State Management**: Immutable `PipelineState` dataclass persisted between phases  
-**Languages**: Auto-detects and responds in 10+ languages
+**Languages**: Auto-detects and responds in 10+ languages  
+**Post-Synthesis Verification**: Optional cross-model fact-checking for CoVe presets
 
 ---
 
@@ -291,7 +325,7 @@ asyncio.run(main())
 
 Every method has a **Budget** and a **Premium** variant. The Budget tier emphasizes cross-lab diversity at the lowest possible cost (~$0.02/run). The Premium tier uses best-in-class models with explicit cross-lab fallback routing for maximum reliability and epistemic breadth (~$0.15–$0.30/run).
 
-### Standard 6-Phase Presets
+### All Method Presets
 
 | Preset | Tier | Primary | Phase 2 Diversity |
 |--------|------|---------|-------------------|
@@ -309,16 +343,38 @@ Every method has a **Budget** and a **Premium** variant. The Budget tier emphasi
 | `research-premium` | Premium | `sonar-pro` | Sonar Deep Research + Claude + DeepSeek |
 | `jury-budget` | Budget | `deepseek-v3` | DeepSeek + Qwen + GLM |
 | `jury-premium` | Premium | `claude-sonnet` | Kimi + DeepSeek + Claude + Mistral |
+| `cove-budget` | Budget | `deepseek-v3` | DeepSeek draft → Qwen verify → GLM answer → DeepSeek revise |
+| `cove-premium` | Premium | `claude-opus` | Claude draft → Sonar verify → DeepSeek answer → Claude revise |
+| `sot-budget` | Budget | `deepseek-v3` | DeepSeek skeleton → Qwen parallel solve → DeepSeek assemble |
+| `sot-premium` | Premium | `claude-opus` | Claude skeleton → Kimi parallel solve → Claude assemble |
+| `tot-budget` | Budget | `deepseek-v3` | DeepSeek decompose → Qwen generate → GLM evaluate → DeepSeek backtrack |
+| `tot-premium` | Premium | `claude-opus` | Claude decompose → DeepSeek generate → Sonar evaluate → Claude backtrack |
+| `pot-budget` | Budget | `deepseek-v3` | DeepSeek code generation + simulated execution |
+| `pot-premium` | Premium | `gpt-5` | GPT-5 code generation + Claude interpretation |
+| `self-discover-budget` | Budget | `deepseek-v3` | DeepSeek module selection → Qwen adaptation → DeepSeek implementation |
+| `self-discover-premium` | Premium | `claude-opus` | Claude module selection → DeepSeek adaptation → Claude implementation |
 
 ### Specialized Method Presets
 
 | Preset | Method | Description |
 |--------|--------|-------------|
+| `multi-perspective-budget` / `multi-perspective-premium` | Multi-Perspective | Default 6-phase pipeline with cross-lab perspective generation |
+| `iterative-budget` / `iterative-premium` | Iterative Refinement | Multi-round generate → critique → refine cycles |
+| `debate-budget` / `debate-premium` | Debate | Two models compete; a third judges the winner |
+| `scientific-budget` / `scientific-premium` | Scientific | Hypothesis generation, falsification tests, and evidence scoring |
+| `socratic-budget` / `socratic-premium` | Socratic | Elenchus questioning to expose assumptions and clarify definitions |
+| `research-budget` / `research-premium` | Research | Web-grounded deep research with iterative SearXNG search |
+| `jury-budget` / `jury-premium` | Jury | Multiple generators scored by an independent panel of critics |
 | `pre-mortem-budget` / `pre-mortem-premium` | Pre-Mortem | Prospective failure analysis (Gary Klein methodology) |
 | `bayesian-budget` / `bayesian-premium` | Bayesian | Prior → likelihood → posterior → sensitivity |
 | `dialectical-budget` / `dialectical-premium` | Dialectical | Thesis → antithesis → Aufhebung |
 | `analogical-budget` / `analogical-premium` | Analogical | Structure-mapping and cross-domain transfer |
 | `delphi-budget` / `delphi-premium` | Delphi | Expert consensus with convergence tracking |
+| `cove-budget` / `cove-premium` | Chain-of-Verification | Draft → verify → answer → revise (structured fact-checking) |
+| `sot-budget` / `sot-premium` | Skeleton-of-Thought | Skeleton → parallel solve → assemble (latency reduction) |
+| `tot-budget` / `tot-premium` | Tree-of-Thoughts | Decompose → generate → evaluate → backtrack (planning) |
+| `pot-budget` / `pot-premium` | Program-of-Thoughts | Code generation → execution → interpretation (quantitative) |
+| `self-discover-budget` / `self-discover-premium` | Self-Discover | Dynamic reasoning module composition |
 
 ---
 
@@ -339,6 +395,11 @@ ARA Pipeline supports multiple specialized reasoning methodologies beyond the de
 | **Dialectical** | Hegelian thesis-antithesis-synthesis progression |
 | **Analogical** | Structure-mapping and cross-domain transfer |
 | **Delphi** | Expert consensus with convergence tracking |
+| **Chain-of-Verification** | Structured fact-checking: draft → verify → answer → revise |
+| **Skeleton-of-Thought** | Parallel decomposition: skeleton → parallel solve → assemble |
+| **Tree-of-Thoughts** | Reasoning as tree search with candidate evaluation and backtracking |
+| **Program-of-Thoughts** | Executable code as intermediate reasoning (Python generation + execution) |
+| **Self-Discover** | Dynamic selection and composition of reasoning modules per problem |
 
 ---
 
@@ -415,6 +476,7 @@ Reasoner/
 ├── main.py                    # CLI entry point
 ├── api.py                     # FastAPI server with SSE streaming
 ├── pipeline.py                # Core orchestrator (ARAPipeline)
+├── gate_agent.py              # Legacy GateAgent + HyperGateAgent re-export
 ├── models.py                  # Dataclasses, enums, and state persistence
 ├── llm.py                     # Multi-provider LLM abstraction
 ├── presets.py                 # Pre-built routing configurations
@@ -422,6 +484,17 @@ Reasoner/
 ├── phases.py                  # Phase prompts and language detection
 ├── renderer.py                # Terminal output and JSON export
 ├── exceptions.py              # Structured exception taxonomy
+├── hypergate/                 # HyperGate multi-agent pre-router
+│   ├── hyperagent.py          # HyperGateAgent orchestrator (Phase 1 + 2)
+│   ├── base_sub_agent.py      # BaseSubAgent ABC with cache + LLM wiring
+│   ├── models.py              # SubAgentInput, SubAgentOutput, HyperContext
+│   └── sub_agents/
+│       ├── language_detector.py     # Detects input language
+│       ├── complexity_estimator.py  # simple / medium / complex
+│       ├── direct_detector.py       # Is a pipeline needed at all?
+│       ├── web_detector.py          # Is real-time web data needed?
+│       ├── method_classifier.py     # Opaque taxonomy B–Q → method name
+│       └── tie_breaker.py           # Phase 2: resolve ambiguous Phase 1
 ├── neuro/                     # Neuro memory and compression modules
 ├── ui-next/                   # Next.js 16 frontend
 │   ├── src/app/page.tsx

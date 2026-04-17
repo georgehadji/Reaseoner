@@ -52,6 +52,23 @@ GATE_CONFIDENCE_THRESHOLD: float = 0.70
 GATE_DEFAULT_MODEL: str = "gemini-flash"  # non-OpenAI model that supports temperature=0
 
 # ═════════════════════════════════════════════════════════════════════
+# HYPERGATE AGENT (sub-agent orchestrator replacing GateAgent)
+# ═════════════════════════════════════════════════════════════════════
+
+HYPERGATE_DIRECT_THRESHOLD: float = 0.80   # DirectDetector confidence floor
+HYPERGATE_WEB_THRESHOLD: float = 0.75      # WebDetector confidence floor
+HYPERGATE_METHOD_THRESHOLD: float = 0.70   # MethodClassifier confidence floor
+HYPERGATE_AMBIGUOUS_FLOOR: float = 0.45    # Below this on all agents → hard fallback
+HYPERGATE_TIMEOUT_SECONDS: float = 6.0     # Per-sub-agent call timeout
+HYPERGATE_CACHE_SIZE: int = 512            # LRU size (per sub-agent + top-level)
+HYPERGATE_MAX_TOKENS_LANGUAGE: int = 80
+HYPERGATE_MAX_TOKENS_COMPLEXITY: int = 80
+HYPERGATE_MAX_TOKENS_DIRECT: int = 100
+HYPERGATE_MAX_TOKENS_WEB: int = 100
+HYPERGATE_MAX_TOKENS_METHOD: int = 128
+HYPERGATE_MAX_TOKENS_TIEBREAK: int = 200
+
+# ═════════════════════════════════════════════════════════════════════
 # TOKEN BUDGETS
 # ═════════════════════════════════════════════════════════════════════
 

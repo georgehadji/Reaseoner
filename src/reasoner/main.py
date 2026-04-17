@@ -67,7 +67,8 @@ from reasoner.presets import (
     print_presets_summary,
     resolve_preset_name,
 )
-from reasoner.gate_agent import GateAgent
+from reasoner.gate_agent import GateAgent  # kept for backward compat
+from reasoner.hypergate import HyperGateAgent
 
 logging.basicConfig(
     level=logging.INFO,
@@ -223,7 +224,7 @@ async def main(args: argparse.Namespace) -> None:
 
     # ── Gate Agent: decide direct answer vs full pipeline ──
     if not args.force_pipeline:
-        gate = GateAgent(router)
+        gate = HyperGateAgent(router)
         decision = await gate.decide(problem)
         if decision.action == "direct":
             print("  [Gate] Direct answer selected.\n")

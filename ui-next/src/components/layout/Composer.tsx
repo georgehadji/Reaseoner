@@ -20,10 +20,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   const setComposerText = useAppStore((s) => s.setComposerText);
   const tier = useAppStore((s) => s.tier);
   const toggleTier = useAppStore((s) => s.toggleTier);
-  const isSequential = useAppStore((s) => s.isSequential);
-  const toggleSequential = useAppStore((s) => s.toggleSequential);
-  const isExpert = useAppStore((s) => s.isExpert);
-  const toggleExpert = useAppStore((s) => s.toggleExpert);
   const isWebSearch = useAppStore((s) => s.isWebSearch);
   const toggleWebSearch = useAppStore((s) => s.toggleWebSearch);
   const isSmartSearch = useAppStore((s) => s.isSmartSearch);
@@ -95,38 +91,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
             <div className="mt-1 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <TierToggle />
-
-                <button
-                  type="button"
-                  disabled={isWebSearch}
-                  onClick={toggleSequential}
-                  className={cn(
-                    'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                    isSequential
-                      ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                      : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-                    isWebSearch && 'opacity-40 cursor-not-allowed'
-                  )}
-                  title="Sequential vs Parallel"
-                >
-                  {isSequential ? 'Sequential' : 'Parallel'}
-                </button>
-
-                <button
-                  type="button"
-                  disabled={isWebSearch}
-                  onClick={toggleExpert}
-                  className={cn(
-                    'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                    isExpert
-                      ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                      : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-                    isWebSearch && 'opacity-40 cursor-not-allowed'
-                  )}
-                  title="Expert mode"
-                >
-                  Expert
-                </button>
 
                 <button
                   type="button"
@@ -257,38 +221,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           <div className="mt-1 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <TierToggle />
-
-              <button
-                type="button"
-                disabled={isWebSearch}
-                onClick={toggleSequential}
-                className={cn(
-                  'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                  isSequential
-                    ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                    : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-                  isWebSearch && 'opacity-40 cursor-not-allowed'
-                )}
-                title="Sequential vs Parallel"
-              >
-                {isSequential ? 'Sequential' : 'Parallel'}
-              </button>
-
-              <button
-                type="button"
-                disabled={isWebSearch}
-                onClick={toggleExpert}
-                className={cn(
-                  'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                  isExpert
-                    ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                    : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-                  isWebSearch && 'opacity-40 cursor-not-allowed'
-                )}
-                title="Expert mode"
-              >
-                Expert
-              </button>
 
               <button
                 type="button"

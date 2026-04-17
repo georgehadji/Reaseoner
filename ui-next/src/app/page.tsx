@@ -36,8 +36,6 @@ export default function Home() {
   const setRunning = useAppStore((s) => s.setRunning);
   const composerText = useAppStore((s) => s.composerText);
   const setComposerText = useAppStore((s) => s.setComposerText);
-  const isExpert = useAppStore((s) => s.isExpert);
-  const isSequential = useAppStore((s) => s.isSequential);
   const isWebSearch = useAppStore((s) => s.isWebSearch);
   const isSmartSearch = useAppStore((s) => s.isSmartSearch);
   const getAutoPreset = useAppStore((s) => s.getAutoPreset);
@@ -330,8 +328,8 @@ export default function Home() {
         const followupReq: RunFollowupRequest = {
           question: problem,
           preset: getAutoPreset(),
-          top_k: isExpert ? 4 : 2,
-          sequential: isSequential,
+          top_k: 2,
+          sequential: false,
           enhance_prompt: useAppStore.getState().isEnhancePrompt,
           conversation_id: conversationIdRef.current || lastAssistantMsg.id,
           history: messages
@@ -347,8 +345,8 @@ export default function Home() {
         const req = {
           problem,
           preset: getAutoPreset(),
-          top_k: isExpert ? 4 : 2,
-          sequential: isSequential,
+          top_k: 2,
+          sequential: false,
           enhance_prompt: useAppStore.getState().isEnhancePrompt,
         };
         await startRun(req, onEvent);

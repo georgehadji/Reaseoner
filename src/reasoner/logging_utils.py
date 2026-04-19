@@ -14,7 +14,7 @@ import time
 import uuid
 from contextvars import ContextVar
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -175,7 +175,7 @@ class StructuredLogger:
         safe_extra = redact_dict(extra) if extra else {}
         
         entry = StructuredLogEntry(
-            timestamp=datetime.utcnow().isoformat() + "Z",
+            timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             level=level.value,
             source=self.source,
             message=safe_message,

@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import re
+import time
 import httpx
 from urllib.parse import urlparse
 from typing import Any, Optional, Literal
@@ -22,8 +23,9 @@ from reasoner.core.constants import (
     DEFAULT_MAX_DECOMPOSED_QUERIES,
     DEFAULT_SEARCH_RESULTS,
     TRUNCATION,
-    MODEL_GPT4O_MINI,
     MODEL_GEMINI_FLASH,
+    MODEL_QWEN35_9B,
+    MODEL_QWEN35_FLASH,
 )
 
 # Deferred import to avoid circular dependencies at module load time
@@ -55,7 +57,7 @@ _REJECTED_EXTENSIONS = frozenset([".json", ".xml", ".csv", ".zip", ".pdf"])
 _RAW_BLOB_RE = re.compile(r"/blob/[^/]+/.*\.(json|xml|csv|zip|pdf)", re.IGNORECASE)
 
 
-# Known off-topic domains/patterns for high-collision acronyms
+# Known off-topic domains/patterns for high-collision acronyms and low-signal sources
 _OFF_TOPIC_PATTERNS = [
     ("nerdwallet.com", None),  # tax AGI
     ("wikipedia.org", "one big beautiful bill act"),
@@ -63,6 +65,18 @@ _OFF_TOPIC_PATTERNS = [
     ("huggingface.co", "tokenizer.json"),
     ("llm-guide.com", None),  # legal-degree LLM, not AI
     ("pluralsight.com", "best ai models"),  # generic roundup
+    ("wordreference.com", None),  # dictionary definitions
+    ("facebook.com", None),  # social noise
+    ("biography.com", None),  # celebrity bios
+    ("imdb.com", None),  # movie/TV data
+    ("thetimes.com", None),  # paywalled general news
+    ("reddit.com", None),  # often noisy / unsourced
+    ("twitter.com", None),  # social noise
+    ("x.com", None),  # social noise
+    ("pinterest.com", None),  # image SEO spam
+    ("quora.com", None),  # opinion-heavy, low sourcing
+    ("yahoo.com", None),  # generic aggregator
+    ("slideshare.net", None),  # slide decks with thin content
 ]
 
 # Low-signal title patterns (listicles, generic roundups, clickbait)
@@ -72,6 +86,29 @@ _LOW_SIGNAL_TITLE_RE = re.compile(
     r"discover\s+\d+|\d+\s+things?|\d+\s+tips?|\d+\s+reasons?)\b)",
     re.IGNORECASE,
 )
+
+# Common English stop words to exclude from keyword extraction
+_STOP_WORDS = frozenset([
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "must", "shall", "can", "need", "dare",
+    "ought", "used", "to", "of", "in", "for", "on", "with", "at", "by",
+    "from", "as", "into", "through", "during", "before", "after", "above",
+    "below", "between", "under", "again", "further", "then", "once", "here",
+    "there", "when", "where", "why", "how", "all", "each", "few", "more",
+    "most", "other", "some", "such", "no", "nor", "not", "only", "own",
+    "same", "so", "than", "too", "very", "just", "and", "but", "if", "or",
+    "because", "until", "while", "what", "which", "who", "whom", "this",
+    "that", "these", "those", "i", "me", "my", "myself", "we", "our",
+    "you", "your", "he", "him", "his", "she", "her", "it", "its", "they",
+    "them", "their", "s", "t", "don", "doesn", "didn", "wasn", "weren",
+    "won", "wouldn", "couldn", "shouldn", "isn", "aren", "hasn", "haven",
+    "hadn", "ain", "ma", "mightn", "mustn", "needn", "shan", "shouldn",
+    "wasn", "weren", "won", "wouldn",
+])
+
+# Regex to extract English keywords from mixed-language text
+_KEYWORD_RE = re.compile(r"[a-zA-Z][a-zA-Z\-]{2,}", re.IGNORECASE)
 
 
 def _should_include_result(result: dict[str, Any]) -> bool:
@@ -180,18 +217,18 @@ class DiscoveryClient:
                 else:
                     logger.debug("Filtered out search result: %s", refined.get("url"))
 
-            # Fallback: if strict filtering removed everything, return top unfiltered results
-            if not refined_results and results:
-                for r in results[:num_results]:
-                    content = r.get("content", "")[:TRUNCATION.SNIPPET]
-                    refined_results.append({
-                        "title": r.get("title"),
-                        "url": r.get("url"),
-                        "content": content,
-                        "snippet": content,
-                        "source": r.get("engine"),
-                        "full_content": r.get("content", ""),
-                    })
+            # Telemetry: log pass rate
+            total_fetched = len(results[:num_results])
+            passed = len(refined_results)
+            if total_fetched > 0:
+                pct = (passed / total_fetched) * 100
+                logger.info(
+                    "Search quality: %d/%d results passed filtering (%.0f%%) for query=%r",
+                    passed,
+                    total_fetched,
+                    pct,
+                    query[:80],
+                )
 
             return refined_results
         except Exception as exc:
@@ -227,11 +264,55 @@ def reset_discovery_client() -> None:
                 pass
 
 
-_DECOMPOSITION_MODELS = [MODEL_GPT4O_MINI, MODEL_GEMINI_FLASH]
+_DECOMPOSITION_MODELS = [MODEL_QWEN35_9B, MODEL_QWEN35_FLASH, MODEL_GEMINI_FLASH]
+
+# In-memory TTL cache for decomposition results: query -> (sub_queries, timestamp)
+_DECOMPOSITION_CACHE: dict[str, tuple[list[str], float]] = {}
+_DECOMPOSITION_TTL_SECONDS = 300.0
+_MAX_DECOMPOSITION_CACHE_SIZE = 512
+
+
+def _prune_decomposition_cache() -> None:
+    """Evict oldest entries if cache exceeds max size (LRU by insertion time)."""
+    excess = len(_DECOMPOSITION_CACHE) - _MAX_DECOMPOSITION_CACHE_SIZE
+    if excess > 0:
+        # Sort by timestamp ascending and evict oldest
+        sorted_items = sorted(_DECOMPOSITION_CACHE.items(), key=lambda item: item[1][1])
+        for key, _ in sorted_items[:excess]:
+            del _DECOMPOSITION_CACHE[key]
+
+
+def _extract_search_keywords(text: str, max_keywords: int = 8) -> str:
+    """
+    Extract English keywords from mixed-language prompts using regex.
+    Returns a space-separated keyword string suitable for search.
+    """
+    words = _KEYWORD_RE.findall(text)
+    # Lowercase, strip hyphens from ends, filter stop words and very short tokens
+    cleaned = []
+    for w in words:
+        w = w.lower().strip("-")
+        if len(w) > 2 and w not in _STOP_WORDS:
+            cleaned.append(w)
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique = [w for w in cleaned if not (w in seen or seen.add(w))]
+    return " ".join(unique[:max_keywords])
 
 
 async def _decompose_query(query: str, model_id: str | None = None) -> list[str]:
     """Use a lightweight LLM to break a query into 2-3 focused sub-queries."""
+    # Check cache first
+    now = time.time()
+    cached = _DECOMPOSITION_CACHE.get(query)
+    if cached is not None:
+        sub_queries, ts = cached
+        if now - ts < _DECOMPOSITION_TTL_SECONDS:
+            logger.debug("Decomposition cache hit for query: %r", query[:80])
+            return sub_queries
+        # Expired — remove stale entry
+        _DECOMPOSITION_CACHE.pop(query, None)
+
     system_prompt = (
         "You are a search assistant. Given a user query, break it into 2-3 focused, "
         "standalone search queries that together cover the user's intent. "
@@ -258,7 +339,12 @@ async def _decompose_query(query: str, model_id: str | None = None) -> list[str]
         raise ValueError("LLM did not return a JSON array")
     # Filter out empty strings and cap at 3
     result = [str(item).strip() for item in arr if str(item).strip()]
-    return result[:DEFAULT_MAX_DECOMPOSED_QUERIES]
+    result = result[:DEFAULT_MAX_DECOMPOSED_QUERIES]
+
+    # Cache the result
+    _DECOMPOSITION_CACHE[query] = (result, now)
+    _prune_decomposition_cache()
+    return result
 
 
 async def smart_search(
@@ -282,14 +368,24 @@ async def smart_search(
                 break
         except Exception as exc:
             last_error = exc
-            logger.warning("Smart search decomposition with %s failed (%s). Trying fallback LLM.", model_id, exc)
+            logger.warning(
+                "Smart search decomposition with %s failed (%s). Trying fallback LLM. Raw query: %r",
+                model_id,
+                exc,
+                query,
+            )
 
     if not sub_queries:
         logger.warning(
-            "Smart search decomposition failed for all LLMs (%s). Falling back to direct search.",
+            "Smart search decomposition failed for all LLMs (last error: %s). "
+            "Raw query: %r. Falling back to keyword extraction + direct search.",
             last_error,
+            query,
         )
-        return await client.search(query, num_results=num_results, source_type=source_type)
+        # Extract keywords from mixed-language prompts instead of searching raw prompt
+        keyword_query = _extract_search_keywords(query)
+        fallback_query = keyword_query if keyword_query else query
+        return await client.search(fallback_query, num_results=num_results, source_type=source_type)
 
     # Limit results per sub-query to keep total volume manageable
     per_query = max(3, num_results // len(sub_queries))
@@ -318,7 +414,9 @@ async def smart_search(
 
     # Final fallback if everything went wrong
     if not grouped_results:
-        return await client.search(query, num_results=num_results, source_type=source_type)
+        keyword_query = _extract_search_keywords(query)
+        fallback_query = keyword_query if keyword_query else query
+        return await client.search(fallback_query, num_results=num_results, source_type=source_type)
 
     return grouped_results[:num_results]
 

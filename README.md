@@ -1,18 +1,40 @@
-# ARA Pipeline v2.2
+<div align="center">
 
-**Adaptive Reasoning Architecture** — A dynamic, multi-method reasoning pipeline that orchestrates Large Language Models to decompose complex problems, generate multi-perspective solutions, critique rigorously, stress-test under adversarial conditions, and synthesize actionable recommendations.
+<!-- ASCII Banner -->
+<pre>
+ █████╗ ██████╗  █████╗         ██████╗ ██╗██████╗ ███████╗██╗     ██╗███╗   ██╗███████╗
+██╔══██╗██╔══██╗██╔══██╗        ██╔══██╗██║██╔══██╗██╔════╝██║     ██║████╗  ██║██╔════╝
+███████║██████╔╝███████║        ██████╔╝██║██████╔╝█████╗  ██║     ██║██╔██╗ ██║█████╗  
+██╔══██║██╔══██╗██╔══██║        ██╔═══╝ ██║██╔══██╗██╔══╝  ██║     ██║██║╚██╗██║██╔══╝  
+██║  ██║██║  ██║██║  ██║        ██║     ██║██║  ██║███████╗███████╗██║██║ ╚████║███████╗
+╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝        ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝
+v2.2 — Adaptive Reasoning Architecture
+</pre>
 
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js_16-000000.svg?logo=next.js&logoColor=white)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6.svg?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+<!-- Badges -->
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg?style=flat-square&logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Next.js](https://img.shields.io/badge/Next.js_16-000000.svg?style=flat-square&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-3178C6.svg?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4.svg?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+<br>
+[![Tests](https://img.shields.io/badge/tests-800%2B%20passing-brightgreen.svg?style=flat-square&logo=pytest&logoColor=white)](./tests)
+[![Coverage](https://img.shields.io/badge/coverage-~70%25-yellow.svg?style=flat-square)](.)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/tesse/Reasoner?style=flat-square&logo=github)](https://github.com/tesse/Reasoner)
+
+**A production-grade reasoning engine that orchestrates 16+ LLM methodologies — from multi-perspective analysis to scientific hypothesis testing — with automatic method selection, cross-lab diversity, and real-time streaming.**
+
+[🚀 Quick Start](#quick-start) · [📖 Documentation](#documentation) · [🧠 Methods](#reasoning-methods) · [🏗️ Architecture](#architecture) · [🤝 Contributing](#contributing)
+
+</div>
 
 ---
 
-## Table of Contents
+## 📋 Table of Contents
 
 - [Overview](#overview)
-- [Architecture](#architecture)
+- [Why ARA?](#why-ara)
 - [Quick Start](#quick-start)
 - [Installation](#installation)
 - [Configuration](#configuration)
@@ -20,69 +42,318 @@
   - [CLI](#cli)
   - [Web Interface](#web-interface)
   - [Programmatic API](#programmatic-api)
-- [Available Presets](#available-presets)
+- [Architecture](#architecture)
+  - [HyperGate Pre-Router](#hypergate-pre-router)
+  - [Core Pipeline](#core-pipeline)
 - [Reasoning Methods](#reasoning-methods)
+- [Available Presets](#available-presets)
 - [Model Routing Philosophy](#model-routing-philosophy)
 - [Features](#features)
-- [Development](#development)
 - [Project Structure](#project-structure)
 - [Security](#security)
-- [Caching](#caching)
-- [Error Handling](#error-handling)
-- [Multi-Language Support](#multi-language-support)
+- [Development](#development)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
-## Overview
+## 🎯 Overview
 
-ARA Pipeline is a production-grade reasoning engine for complex decision-making. Unlike simple chat completions, it decomposes problems into structured phases, leverages multiple LLMs in parallel from diverse training ecosystems, applies rigorous independent critique, stress-tests solutions, and synthesizes a final recommendation with epistemic labeling (`VERIFIED` / `HYPOTHESIS` / `UNKNOWN`) and an action blueprint.
+ARA Pipeline is not a chatbot. It is a **reasoning orchestrator** that decomposes complex problems into structured phases, leverages multiple LLMs in parallel from diverse training ecosystems, applies rigorous independent critique, stress-tests solutions under adversarial conditions, and synthesizes actionable recommendations with epistemic labeling.
+
+> *"Give me six hours to chop down a tree and I will spend the first four sharpening the axe."*  
+> — Abraham Lincoln
+
+ARA spends its first phases **sharpening** — classifying, decomposing, vetting context — before a single solution is generated.
 
 ### Key Capabilities
 
-- **HyperGate Pre-Router**: Five focused sub-agents run in parallel before any pipeline starts — detecting language, complexity, directness, web-search need, and optimal reasoning method. Simple questions are answered immediately; complex ones are routed to the right method automatically.
-- **Multi-Phase Orchestration**: 6 core phases from classification to synthesis
-- **Specialized Reasoning Methods**: 16 methodologies — Scientific, Socratic, Debate, Jury, Bayesian, Delphi, Chain-of-Verification, Skeleton-of-Thought, Tree-of-Thoughts, Program-of-Thoughts, Self-Discover, and more
-- **Cross-Lab Diversity**: Each phase routes to a different model family to prevent echo chambers and maximize epistemic coverage
-- **Intelligent Fallbacks**: Automatic cross-lab fallback routing when a provider fails — never falls back blindly to a single primary
-- **Real-Time Streaming**: Server-Sent Events (SSE) deliver per-phase progress, token usage, and model attribution
-- **Web-Grounded Research**: Integrated SearXNG search for evidence-based reasoning
-- **Persistent Memory**: Neuro-based long-term memory with compression and tenant isolation
+| Capability | Description |
+|-----------|-------------|
+| 🧠 **HyperGate Pre-Router** | 6 parallel sub-agents automatically detect language, complexity, directness, web-search need, and optimal reasoning method. Simple questions are answered instantly; complex ones are routed to the right methodology. |
+| 🔀 **16 Reasoning Methods** | Scientific, Socratic, Debate, Jury, Bayesian, Delphi, Chain-of-Verification, Skeleton-of-Thought, Tree-of-Thoughts, Program-of-Thoughts, Self-Discover, and more. |
+| 🌍 **Cross-Lab Diversity** | Each phase routes to a different model family to prevent echo chambers and maximize epistemic coverage. |
+| 🔄 **Intelligent Fallbacks** | Automatic cross-lab fallback routing when a provider fails — never falls back blindly to a single primary. |
+| ⚡ **Real-Time Streaming** | Server-Sent Events (SSE) deliver per-phase progress, token usage, cost tracking, and model attribution. |
+| 🔍 **Web-Grounded Research** | Integrated SearXNG search for evidence-based reasoning with iterative RAG. |
+| 🧠 **Persistent Memory** | Neuro-based long-term memory with compression, embedding-based similarity search, and tenant isolation. |
+| 🛡️ **Defense in Depth** | Prompt-injection filtering, input sanitization, rate limiting, CSRF protection, and adversarial persuasion defense. |
 
 ---
 
-## Architecture
+## 💡 Why ARA?
 
-### HyperGate Agent (Pre-Pipeline Router)
+Traditional LLM applications send your question to a single model and return the first answer. ARA treats reasoning as a **first-class engineering problem**:
 
-Every request passes through the HyperGate before any reasoning pipeline starts. Five specialized sub-agents run **in parallel** (Phase 1), and a TieBreakerSubAgent resolves conflicts if needed (Phase 2).
+```
+Traditional:    User → GPT-4 → Answer (1 call, 1 perspective)
+ARA Pipeline:   User → HyperGate → Classify → Decompose → Vet Context
+                      → [16 methods] → Generate (parallel, cross-lab)
+                      → Critique (independent scorer)
+                      → Stress Test (adversarial scenarios)
+                      → Synthesize → Epistemic Labels → Action Blueprint
+                      (8-20+ calls, 4+ model families, rigorous quality gates)
+```
+
+**The result:** fewer hallucinations, better coverage of edge cases, and outputs you can actually act on.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Python 3.12+**
+- **Node.js 20+** (for the web UI)
+- **OpenRouter API Key** (recommended — single key, 350+ models)
+
+### 1. Clone & Setup
+
+```bash
+git clone https://github.com/tesse/Reasoner.git
+cd Reasoner
+
+# Backend
+cp .env.example .env
+# Edit .env and add: OPENROUTER_API_KEY=sk-or-v1-your-key-here
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+# Frontend
+cd ui-next && npm install && cd ..
+```
+
+### 2. Start Everything (One Command)
+
+```bash
+python start_all.py
+```
+
+This starts:
+- 🐍 **FastAPI Backend** on `http://localhost:8001`
+- ⚛️ **Next.js Frontend** on `http://localhost:3000`
+- 🔍 **SearXNG Search** on `http://localhost:8888`
+
+Open [http://localhost:3000](http://localhost:3000) and start reasoning.
+
+### 3. Or Start Services Individually
+
+```bash
+# Terminal 1 — Backend API
+uvicorn asgi:app --reload --host 0.0.0.0 --port 8001
+
+# Terminal 2 — Search Engine
+docker-compose -f docker-compose.searxng.yml up -d
+
+# Terminal 3 — Frontend
+cd ui-next && npm run dev
+```
+
+### 4. CLI Quick Run
+
+```bash
+# Default preset — balanced quality and cost (~$0.05/run)
+python main.py --problem "How should we prioritize our Q3 product roadmap?"
+
+# Budget option — approximately $0.02 per run
+python main.py --problem "..." --preset debate-budget
+
+# Maximum quality — premium models with 4-lab diversity (~$0.20/run)
+python main.py --problem "..." --preset multi-perspective-premium
+```
+
+---
+
+## 🔧 Installation
+
+<details>
+<summary><b>Backend Installation (click to expand)</b></summary>
+
+```bash
+# 1. Create virtual environment
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 2. Install dependencies
+pip install -r requirements.txt
+
+# 3. Verify installation
+python -m pytest tests/ -q
+```
+
+</details>
+
+<details>
+<summary><b>Frontend Installation (click to expand)</b></summary>
+
+```bash
+cd ui-next
+npm install
+
+# Dev server
+npm run dev
+
+# Production build
+npm run build
+```
+
+</details>
+
+---
+
+## ⚙️ Configuration
+
+### Option 1: OpenRouter (Recommended)
+
+One key. 350+ models. Simplest billing.
+
+```bash
+# .env
+OPENROUTER_API_KEY="sk-or-v1-..."
+```
+
+### Option 2: Individual Provider Keys
+
+Mix and match direct provider access:
+
+```bash
+OPENAI_API_KEY="sk-..."
+ANTHROPIC_API_KEY="sk-ant-..."
+GOOGLE_API_KEY="..."
+DEEPSEEK_API_KEY="sk-..."
+MISTRAL_API_KEY="..."
+XAI_API_KEY="..."
+PERPLEXITY_API_KEY="..."
+OLLAMA_BASE_URL="http://localhost:11434"
+```
+
+### Optional Settings
+
+```bash
+# Web search engine
+SEARXNG_URL="http://localhost:8888"
+
+# Admin API key for cache clearing and key management
+ADMIN_API_KEY="your-admin-key"
+
+# Rate limiting
+RATE_LIMIT_PER_MINUTE=60
+RATE_LIMIT_PER_HOUR=1000
+```
+
+---
+
+## 🎮 Usage
+
+### CLI
+
+```bash
+# List available presets and models
+python main.py --list-presets
+python main.py --list-models
+
+# Run with specific preset
+python main.py --problem "Should we adopt microservices?" --preset debate-premium
+
+# Custom routing per role
+python main.py --problem "..." --routing '{"primary":"claude-sonnet","scoring":"sonar-pro"}'
+
+# Load from file and export JSON
+python main.py --problem-file problem.txt --output results.json --preset multi-perspective-premium
+
+# Sequential mode for rate-limited environments
+python main.py --problem "..." --sequential
+
+# Adjust top-k pruning (default: 2)
+python main.py --problem "..." --top-k 3
+```
+
+### Web Interface
+
+The web interface provides a chat-like experience with:
+- ⚡ **Real-time SSE streaming** of phase progress
+- 📊 **Per-phase token usage**, cost tracking, and model attribution
+- 🧠 **Auto-method selection** — HyperGate chooses the best reasoning method for you
+- 💬 **Persistent conversation history** with IndexedDB
+- 🔍 **Web search mode** — bypass the pipeline for direct search results
+
+### Programmatic API
+
+```python
+import asyncio
+from reasoner.pipeline import ARAPipeline
+from reasoner.llm import ProviderRouter
+
+async def main():
+    router = ProviderRouter.from_model_ids(
+        primary_id="claude-sonnet",
+        routing={"scoring": "sonar-pro", "synthesis": "glm-5"}
+    )
+    pipeline = ARAPipeline(router=router, preset_name="multi-perspective-premium")
+    state = await pipeline.run("Your complex problem here")
+
+    print(f"Task Type: {state.task_type}")
+    print(f"Sub-problems: {state.sub_problems}")
+    print(f"Final Answer: {state.final_solution.core_solution}")
+    print(f"Epistemic Label: {state.final_solution.epistemic_label}")
+    print(f"Cost: ${state.total_cost_usd:.4f}")
+
+asyncio.run(main())
+```
+
+### REST API
+
+```bash
+# Run pipeline (returns SSE stream)
+curl -X POST http://localhost:8001/api/run \
+  -H "Content-Type: application/json" \
+  -d '{"problem": "How to optimize cloud costs?", "preset": "research-premium"}'
+
+# Web search
+curl -X POST http://localhost:8001/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "latest LLM reasoning benchmarks 2025"}'
+
+# Health check
+curl http://localhost:8001/api/health
+```
+
+---
+
+## 🏗️ Architecture
+
+### HyperGate Pre-Router
+
+Every request passes through the HyperGate before any reasoning pipeline starts. Six specialized sub-agents run **in parallel**, and a TieBreaker resolves conflicts if needed.
 
 ```
 User Problem
      │
      ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    HyperGateAgent (Phase 1 — parallel)          │
-│                                                                 │
-│  LanguageDetector  ComplexityEstimator  DirectDetector          │
-│       (lang?)          (simple/med/     (pipeline needed?       │
-│                         complex?)        or answer directly?)   │
-│                                                                 │
-│  WebSearchDetector      MethodClassifier                        │
-│  (real-time data        (which of 16 methods:                   │
-│   needed?)               debate/scientific/tot/…?)             │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │ synthesize()  (pure Python, no LLM)
+┌─────────────────────────────────────────────────────────────┐
+│              HyperGateAgent (Phase 1 — parallel)            │
+│                                                             │
+│  LanguageDetector    ComplexityEstimator    DirectDetector  │
+│       (lang?)            (simple/med/        (pipeline or   │
+│                           complex?)           direct?)      │
+│                                                             │
+│  WebSearchDetector       MethodClassifier                   │
+│  (real-time data         (16 methods:                       │
+│   needed?)                debate/scientific/tot/…?)        │
+└──────────────────────────┬──────────────────────────────────┘
+                           │ synthesize()  (pure Python)
           ┌────────────────┼────────────────┐
           │ DIRECT         │ WEB_SEARCH     │ PIPELINE
           ▼                ▼                ▼
-  Answer immediately  Run live search  Full ARA Pipeline
-  (no pipeline)       and return       (method auto-selected)
-                      results
+  Answer immediately   Run live search    Full ARA Pipeline
+  (no pipeline)        and return         (method auto-selected)
 ```
 
 **Fail-safe design**: any sub-agent error becomes a graceful fallback — never a crash.  
 **Security**: real method names are never exposed to the LLM. Only opaque letters (B–Q) appear in sub-agent prompts.  
-**Caching**: per-sub-agent LRU cache (512 entries) + top-level HyperGateAgent cache for repeat problems.
+**Caching**: per-sub-agent LRU cache (512 entries) + top-level HyperGateAgent cache.
 
 ### Core Pipeline (6 Phases)
 
@@ -91,254 +362,75 @@ User Problem  (routed here by HyperGateAgent when action = "pipeline")
      │
      ▼
 Phase 0: Task Classification
-     │    → Classifies task type (analytical, strategic, creative, technical, hybrid)
+     │    → Classifies task type (analytical, strategic, creative, technical)
      │    → Auto-detects language for multi-language synthesis
      ▼
 Phase 1: Problem Decomposition
-     │    → Generates ≤5 sub-problems, assumption audit, and failure modes
+     │    → Generates ≤5 sub-problems, assumption audit, failure modes
      ▼
 Phase 2: Multi-Perspective Generation
-     │    → Constructive, Destructive, Systemic, and Minimalist perspectives
+     │    → Constructive, Destructive, Systemic, Minimalist perspectives
      │    → Executed in parallel across diverse models from different labs
      ▼
 Phase 3: Critique & Pruning
-     │    → Scores candidates 0-10 per criterion using an independent model
+     │    → Independent model scores candidates 0-10 per criterion
      │    → Retains top-k solutions (default: 2)
      ▼
 Phase 4: Stress Testing
-     │    → Evaluates under Optimal, Constraint Violation, and Adversarial scenarios
+     │    → Evaluates under Optimal, Constraint Violation, Adversarial scenarios
      ▼
 Phase 5: Synthesis
-          → Produces VERIFIED / HYPOTHESIS / UNKNOWN labeled output
-          → Generates Action Blueprint with Go/No-Go criteria
-          → Includes Meta-Cognitive Audit
+          → VERIFIED / HYPOTHESIS / UNKNOWN labeled output
+          → Action Blueprint with Go/No-Go criteria
+          → Meta-Cognitive Audit
 ```
 
-**Total**: 8 LLM calls per run (4 parallel in Phase 2) for standard methods; varies by method  
-**State Management**: Immutable `PipelineState` dataclass persisted between phases  
-**Languages**: Auto-detects and responds in 10+ languages  
-**Post-Synthesis Verification**: Optional cross-model fact-checking for CoVe presets
+**State Management**: Immutable `PipelineState` dataclass persisted between phases.  
+**Total LLM Calls**: 8+ per run (4 parallel in Phase 2); varies by method.  
+**Languages**: Auto-detects and responds in 10+ languages.
 
 ---
 
-## Quick Start
+## 🧠 Reasoning Methods
 
-OpenRouter is the recommended configuration — a single API key provides access to 350+ models.
+ARA supports **16 specialized reasoning methodologies** beyond the default orchestrated pipeline:
 
-### 1. Obtain an OpenRouter API Key
-
-Visit [https://openrouter.ai/keys](https://openrouter.ai/keys) to create an account and generate a key.
-
-### 2. Configure Environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and add your key:
-
-```bash
-OPENROUTER_API_KEY=sk-or-v1-your-key-here
-```
-
-### 3. Run the Pipeline
-
-```bash
-# Recommended default — balanced quality and cost
-python main.py --problem "How should we prioritize our product roadmap for Q3?" --preset multi-perspective-budget
-
-# Budget option — approximately $0.02 per run
-python main.py --problem "..." --preset debate-budget
-
-# Maximum quality — premium models with 4-lab diversity
-python main.py --problem "..." --preset multi-perspective-premium
-```
-
-### 4. Start the Web Interface
-
-```bash
-# Terminal 1 — Backend
-uvicorn asgi:app --reload --host 0.0.0.0 --port 8000
-
-# Terminal 2 — Frontend (Next.js)
-cd ui-next
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+| Method | Description | Best For |
+|--------|-------------|----------|
+| **Orchestrated** | Default 6-phase pipeline with multi-perspective generation | General complex problems |
+| **Debate** | Two models compete; a third judges the winner | Polarized decisions |
+| **Scientific** | Hypothesis generation, falsification tests, evidence scoring | Research & validation |
+| **Socratic** | Elenchus questioning to expose assumptions | Clarifying ambiguous problems |
+| **Jury** | Multiple generators scored by an independent panel of critics | High-stakes decisions |
+| **Research** | Web-grounded deep research with iterative SearXNG search | Evidence-heavy questions |
+| **Pre-Mortem** | Prospective hindsight failure analysis (Gary Klein methodology) | Risk assessment |
+| **Bayesian** | Prior → likelihood → posterior → sensitivity reasoning | Probabilistic reasoning |
+| **Dialectical** | Hegelian thesis-antithesis-synthesis progression | Philosophical analysis |
+| **Analogical** | Structure-mapping and cross-domain transfer | Creative problem solving |
+| **Delphi** | Expert consensus with convergence tracking | Forecasting |
+| **Chain-of-Verification** | Draft → verify → answer → revise | Fact-checking |
+| **Skeleton-of-Thought** | Skeleton → parallel solve → assemble | Latency reduction |
+| **Tree-of-Thoughts** | Reasoning as tree search with evaluation and backtracking | Planning & optimization |
+| **Program-of-Thoughts** | Executable code as intermediate reasoning | Quantitative problems |
+| **Self-Discover** | Dynamic selection and composition of reasoning modules | Novel problem types |
 
 ---
 
-## Installation
+## 🎛️ Available Presets
 
-### Prerequisites
+Every method has a **Budget** (~$0.02/run) and **Premium** (~$0.15–$0.30/run) variant.
 
-- Python 3.12+
-- Node.js 20+ (for the Next.js frontend)
-- An API key from OpenRouter or individual providers
-
-### Backend
-
-```bash
-# Clone or navigate to the repository
-cd Reasoner
-
-# Create a virtual environment (recommended)
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Frontend
-
-```bash
-cd ui-next
-npm install
-```
-
----
-
-## Configuration
-
-### Option 1: OpenRouter (Recommended)
-
-The simplest configuration requires only one key:
-
-```bash
-OPENROUTER_API_KEY="sk-or-v1-..."
-```
-
-Benefits:
-- Single API key for 350+ models
-- Simplified billing and key management
-- Cross-ecosystem diversity with automatic routing
-
-### Option 2: Individual Provider Keys
-
-If you prefer direct provider access, add the relevant keys to `.env`:
-
-```bash
-OPENAI_API_KEY="sk-..."
-ANTHROPIC_API_KEY="sk-ant-..."
-GOOGLE_API_KEY="..."
-DEEPSEEK_API_KEY="sk-..."
-DASHSCOPE_API_KEY="..."
-ZHIPUAI_API_KEY="..."
-MOONSHOT_API_KEY="..."
-MISTRAL_API_KEY="..."
-XAI_API_KEY="..."
-PERPLEXITY_API_KEY="..."
-OLLAMA_API_KEY="..."
-```
-
-You may also mix both approaches — OpenRouter for most models and direct keys where needed.
-
-### Optional: SearXNG Search
-
-For web-grounded reasoning, configure a SearXNG instance:
-
-```bash
-SEARXNG_URL="http://localhost:8080"
-```
-
-A Docker Compose file is provided for quick setup:
-
-```bash
-docker-compose -f docker-compose.searxng.yml up -d
-```
-
----
-
-## Usage
-
-### CLI
-
-```bash
-# List available presets
-python main.py --list-presets
-
-# List available models
-python main.py --list-models
-
-# Run with default preset
-python main.py --problem "How should we prioritize our product roadmap for Q3?"
-
-# Run with a specific preset
-python main.py --problem "..." --preset multi-perspective-budget
-
-# Custom routing per role
-python main.py --problem "..." --routing '{"primary":"claude-sonnet","scoring":"sonar-pro"}'
-
-# Load problem from file and export results
-python main.py --problem-file problem.txt --output results.json --preset multi-perspective-premium
-
-# Sequential mode for rate-limited environments
-python main.py --problem "..." --sequential
-
-# Adjust pruning threshold
-python main.py --problem "..." --top-k 3
-```
-
-### Web Interface
-
-The web interface provides a chat-like experience with:
-- Real-time SSE streaming of phase progress
-- Per-phase token usage and model attribution
-- Interactive preset and method selection
-- Persistent conversation history
-
-```bash
-uvicorn asgi:app --reload --host 0.0.0.0 --port 8000
-cd ui-next && npm run dev
-```
-
-### Programmatic API
-
-```python
-import asyncio
-from pipeline import ARAPipeline
-from llm import ProviderRouter
-
-async def main():
-    router = ProviderRouter.from_model_ids(
-        primary_id="claude-sonnet",
-        routing={"scoring": "sonar-pro", "synthesis": "glm-5"}
-    )
-
-    pipeline = ARAPipeline(router=router, top_k=2)
-    state = await pipeline.run("Your complex problem here")
-
-    print(state.task_type)
-    print(state.decomposition.sub_problems)
-    print(state.scores)
-    print(state.final_solution.core_solution)
-    print(state.final_solution.meta_audit.non_obvious_insight)
-
-asyncio.run(main())
-```
-
----
-
-## Available Presets
-
-Every method has a **Budget** and a **Premium** variant. The Budget tier emphasizes cross-lab diversity at the lowest possible cost (~$0.02/run). The Premium tier uses best-in-class models with explicit cross-lab fallback routing for maximum reliability and epistemic breadth (~$0.15–$0.30/run).
-
-### All Method Presets
+<details>
+<summary><b>View all 24+ presets (click to expand)</b></summary>
 
 | Preset | Tier | Primary | Phase 2 Diversity |
 |--------|------|---------|-------------------|
 | `multi-perspective-budget` | Budget | `deepseek-v3` | DeepSeek + Qwen + GLM |
 | `multi-perspective-premium` | Premium | `claude-opus` | Kimi + DeepSeek + Claude + Mistral |
-| `iterative-budget` | Budget | `deepseek-v3` | DeepSeek + Qwen + GLM |
-| `iterative-premium` | Premium | `claude-opus` | Claude + DeepSeek + Gemini + Sonar |
 | `debate-budget` | Budget | `deepseek-v3` | DeepSeek + Qwen + GLM |
 | `debate-premium` | Premium | `claude-sonnet` | GPT-5 + Claude + DeepSeek |
 | `scientific-budget` | Budget | `sonar` | DeepSeek + Qwen + GLM |
 | `scientific-premium` | Premium | `sonar-pro` | Sonar Deep Research + Claude + DeepSeek |
-| `socratic-budget` | Budget | `deepseek-v3` | DeepSeek + Qwen + GLM |
-| `socratic-premium` | Premium | `deepseek-v3` | Kimi + DeepSeek + GLM + Qwen |
 | `research-budget` | Budget | `sonar` | DeepSeek + Qwen + GLM |
 | `research-premium` | Premium | `sonar-pro` | Sonar Deep Research + Claude + DeepSeek |
 | `jury-budget` | Budget | `deepseek-v3` | DeepSeek + Qwen + GLM |
@@ -353,63 +445,23 @@ Every method has a **Budget** and a **Premium** variant. The Budget tier emphasi
 | `pot-premium` | Premium | `gpt-5` | GPT-5 code generation + Claude interpretation |
 | `self-discover-budget` | Budget | `deepseek-v3` | DeepSeek module selection → Qwen adaptation → DeepSeek implementation |
 | `self-discover-premium` | Premium | `claude-opus` | Claude module selection → DeepSeek adaptation → Claude implementation |
+| `pre-mortem-budget` / `pre-mortem-premium` | — | — | Prospective failure analysis |
+| `bayesian-budget` / `bayesian-premium` | — | — | Probabilistic reasoning |
+| `dialectical-budget` / `dialectical-premium` | — | — | Thesis-antithesis-synthesis |
+| `analogical-budget` / `analogical-premium` | — | — | Cross-domain transfer |
+| `delphi-budget` / `delphi-premium` | — | — | Expert consensus |
 
-### Specialized Method Presets
-
-| Preset | Method | Description |
-|--------|--------|-------------|
-| `multi-perspective-budget` / `multi-perspective-premium` | Multi-Perspective | Default 6-phase pipeline with cross-lab perspective generation |
-| `iterative-budget` / `iterative-premium` | Iterative Refinement | Multi-round generate → critique → refine cycles |
-| `debate-budget` / `debate-premium` | Debate | Two models compete; a third judges the winner |
-| `scientific-budget` / `scientific-premium` | Scientific | Hypothesis generation, falsification tests, and evidence scoring |
-| `socratic-budget` / `socratic-premium` | Socratic | Elenchus questioning to expose assumptions and clarify definitions |
-| `research-budget` / `research-premium` | Research | Web-grounded deep research with iterative SearXNG search |
-| `jury-budget` / `jury-premium` | Jury | Multiple generators scored by an independent panel of critics |
-| `pre-mortem-budget` / `pre-mortem-premium` | Pre-Mortem | Prospective failure analysis (Gary Klein methodology) |
-| `bayesian-budget` / `bayesian-premium` | Bayesian | Prior → likelihood → posterior → sensitivity |
-| `dialectical-budget` / `dialectical-premium` | Dialectical | Thesis → antithesis → Aufhebung |
-| `analogical-budget` / `analogical-premium` | Analogical | Structure-mapping and cross-domain transfer |
-| `delphi-budget` / `delphi-premium` | Delphi | Expert consensus with convergence tracking |
-| `cove-budget` / `cove-premium` | Chain-of-Verification | Draft → verify → answer → revise (structured fact-checking) |
-| `sot-budget` / `sot-premium` | Skeleton-of-Thought | Skeleton → parallel solve → assemble (latency reduction) |
-| `tot-budget` / `tot-premium` | Tree-of-Thoughts | Decompose → generate → evaluate → backtrack (planning) |
-| `pot-budget` / `pot-premium` | Program-of-Thoughts | Code generation → execution → interpretation (quantitative) |
-| `self-discover-budget` / `self-discover-premium` | Self-Discover | Dynamic reasoning module composition |
+</details>
 
 ---
 
-## Reasoning Methods
-
-ARA Pipeline supports multiple specialized reasoning methodologies beyond the default orchestrated pipeline:
-
-| Method | Description |
-|--------|-------------|
-| **Orchestrated** | Default 6-phase pipeline with multi-perspective generation |
-| **Debate** | Two models compete; a third judges the winner |
-| **Scientific** | Hypothesis generation, falsification tests, and evidence scoring |
-| **Socratic** | Elenchus questioning to expose assumptions and clarify definitions |
-| **Jury** | Multiple generators scored by an independent panel of critics |
-| **Research** | Web-grounded deep research with iterative SearXNG search |
-| **Pre-Mortem** | Prospective hindsight failure analysis |
-| **Bayesian** | Prior-likelihood-posterior-sensitivity reasoning |
-| **Dialectical** | Hegelian thesis-antithesis-synthesis progression |
-| **Analogical** | Structure-mapping and cross-domain transfer |
-| **Delphi** | Expert consensus with convergence tracking |
-| **Chain-of-Verification** | Structured fact-checking: draft → verify → answer → revise |
-| **Skeleton-of-Thought** | Parallel decomposition: skeleton → parallel solve → assemble |
-| **Tree-of-Thoughts** | Reasoning as tree search with candidate evaluation and backtracking |
-| **Program-of-Thoughts** | Executable code as intermediate reasoning (Python generation + execution) |
-| **Self-Discover** | Dynamic selection and composition of reasoning modules per problem |
-
----
-
-## Model Routing Philosophy
+## 🔀 Model Routing Philosophy
 
 ### Why Cross-Lab Diversity Matters
 
-Different model families are trained on different data distributions, reward functions, and safety paradigms. When multiple perspectives (Phase 2) or critiques (Phase 3) come from the **same lab**, the pipeline converges to an **echo chamber** — the models agree on the same hidden assumptions and miss the same blind spots.
+Different model families are trained on different data distributions, reward functions, and safety paradigms. When multiple perspectives come from the **same lab**, the pipeline converges to an **echo chamber** — the models agree on the same hidden assumptions and miss the same blind spots.
 
-### Our Design Rules
+### Design Rules
 
 1. **Phase 2 (Perspectives)** — Minimum 3 different labs in Budget, 4 in Premium.
 2. **Phase 3 (Scoring)** — Scorer must be from a different ecosystem than the dominant Phase-2 generator.
@@ -433,138 +485,215 @@ Different model families are trained on different data distributions, reward fun
 
 ---
 
-## Features
+## ✨ Features
 
-- **Token & Cost Tracking**: Per-phase input/output token counts and model attribution streamed live via SSE
-- **Cross-Lab Fallbacks**: If a provider fails, the pipeline retries with an alternative model from a different training ecosystem
-- **Structured JSON Protocol**: Strict output schemas ensure parseable, pipeline-continuous state
-- **Epistemic Labeling**: Every claim is labeled `VERIFIED`, `HYPOTHESIS`, or `UNKNOWN`
-- **Token Budgets**: Per-phase generation limits prevent runaway costs
-- **Neuro Memory**: Long-term memory with `Recall` (bootstrap) and `Learn` (ingest) endpoints
-- **Compression**: Automatic context compression to optimize token usage
+<details>
+<summary><b>Core Engine Features</b></summary>
+
+- **🔀 16 Reasoning Methods** — From scientific hypothesis testing to Socratic elenchus
+- **🧠 HyperGate Auto-Routing** — Automatic method selection with 6 parallel sub-agents
+- **🌍 Cross-Lab Diversity** — Prevents echo chambers by routing phases to different model families
+- **🔄 Intelligent Fallbacks** — Cross-lab fallback chains when providers fail
+- **📊 Token & Cost Tracking** — Per-phase input/output tokens and model attribution streamed live
+- **🛡️ Epistemic Labeling** — Every claim labeled `VERIFIED`, `HYPOTHESIS`, or `UNKNOWN` (Decomposition + Perspectives + Synthesis)
+- **📝 Action Blueprints** — Structured Go/No-Go criteria with meta-cognitive audit
+- **🔍 Web-Grounded Research** — Integrated SearXNG search with iterative RAG (covers historical, religious, and philosophical topics)
+- **🧠 Neuro Memory** — Long-term memory with compression, embeddings, and tenant isolation
+- **⚡ Real-Time Streaming** — SSE per-phase progress with typewriter synthesis effect
+- **🌐 Multi-Language** — Auto-detects and responds in 10+ languages with dual-layer enforcement (system prompt + user prompt)
+- **🔒 JSON Schema Hardening** — Strict perspective schema validation with graceful fallback for non-standard LLM outputs
+
+</details>
+
+<details>
+<summary><b>Security & Reliability</b></summary>
+
+- **Input Validation** — XSS stripping, null-byte removal, prompt-injection regex guards, unicode NFKC normalization
+- **Rate Limiting** — Token-bucket + sliding window per client (configurable)
+- **Authentication** — SHA-256 API key auth with scope-based authorization
+- **CSRF Protection** — HMAC-signed tokens via Next.js proxy layer
+- **Circuit Breakers** — Resilience patterns for external provider failures
+- **Error Sanitization** — Generic messages to clients; detailed logging server-side
+- **Security Headers** — HSTS, CSP, X-Frame-Options, X-Content-Type-Options
+- **Prompt Schema Validation** — Strict JSON schema enforcement for structured LLM outputs with defensive serialization fallback
+- **Prompt Schema Validation** — Strict JSON schema enforcement for structured LLM outputs with defensive serialization fallback
+
+</details>
+
+<details>
+<summary><b>Infrastructure</b></summary>
+
+- **FastAPI Backend** — Async Python 3.12 with ~30 REST endpoints + WebSocket
+- **Next.js 16 Frontend** — App Router, TypeScript 5, Tailwind CSS v4, Zustand state
+- **CQRS / Event Sourcing** — SQLite (default) / PostgreSQL (optional) event stores
+- **Caching Layers** — Disk JSON + in-memory + Neuro L1/L2/L3 hierarchy
+- **Self-Healing CI/CD** — GitHub Actions with 4-loop introspection pipeline
+- **Widget System** — Pluggable weather, stocks, calculator, discover, image/video search
+
+</details>
 
 ---
 
-## Development
+## 📁 Project Structure
+
+```
+Reasoner/
+├── main.py                          # CLI entry point
+├── asgi.py                          # ASGI entry point (FastAPI)
+├── start_all.py                     # Dev orchestrator (backend + frontend + docker)
+├── requirements.txt                 # Python dependencies
+├── docker-compose.searxng.yml       # SearXNG search engine
+│
+├── src/reasoner/
+│   ├── api/                         # FastAPI HTTP/SSE interface (~30 endpoints)
+│   ├── application/                 # CQRS commands, queries, event bus, handlers
+│   ├── core/                        # Domain core: constants, settings, protocols, search
+│   ├── hypergate/                   # Auto-method selector (6 sub-agents)
+│   ├── infrastructure/              # Adapters: LLM ports, persistence, WebSocket, widgets
+│   ├── neuro/                       # Persistent memory engine (L1/L2/L3 cache)
+│   ├── subagents/                   # PhaseSubAgent v2.2 (critique, decomposition, etc.)
+│   ├── healing/                     # Self-healing system + auto-generated tests
+│   ├── pipeline.py                  # ARAPipeline orchestrator (~2,300 lines)
+│   ├── llm.py                       # Multi-provider LLM abstraction
+│   ├── models.py                    # PipelineState + 20+ dataclasses
+│   ├── presets.py                   # 24+ PipelinePreset configs
+│   ├── auth.py                      # API key authentication
+│   ├── rate_limiter.py              # Token-bucket rate limiting
+│   ├── sanitization.py              # Prompt-injection defense
+│   └── phases.py                    # Phase prompt template library
+│
+├── ui-next/                         # Next.js 16 + React 19 + TypeScript 5
+│   ├── src/app/                     # App Router pages + API proxy routes
+│   ├── src/components/              # Chat, layout, phases, widgets, UI
+│   ├── src/hooks/                   # usePipelineStream, useKeyboardShortcuts
+│   ├── src/lib/                     # API client, security, IndexedDB
+│   └── src/stores/                  # Zustand global state
+│
+├── tests/                           # pytest suite (~800 tests)
+├── docs/                            # Additional documentation
+├── cache/                           # Server-side response cache
+└── uploads/                         # File upload storage
+```
+
+---
+
+## 🔒 Security
+
+- **Defense in Depth** — Multiple layers: input sanitization → auth → rate limiting → CSRF → header security
+- **Prompt Injection Defense** — Regex-based pattern detection + truncation-aware checks
+- **Path Traversal Protection** — TaggedMemory validates tag names against path traversal
+- **Rate Limiting** — Per-client token buckets with sliding windows and hard caps
+- **Memory Limits** — RSS guard middleware returns 503 before OOM kills
+- **Request Timeouts** — 300s default (skipped for SSE streaming endpoints)
+
+---
+
+## 🛠️ Development
 
 ### Running Tests
 
 ```bash
+# Full suite
 python -m pytest tests/ -v
+
+# Quick run (skip slow/integration tests)
+python -m pytest tests/ -v -m "not slow and not integration"
+
+# With coverage
+python -m pytest tests/ --cov=src/reasoner --cov-report=html
 ```
 
-### Building the Frontend
+### Frontend Development
 
 ```bash
 cd ui-next
-npm run build
-```
 
-### Linting and Type Checking
-
-```bash
-cd ui-next
+# Type checking
 npx tsc --noEmit
+
+# Dev server
+npm run dev
+
+# Production build
+npm run build
+
+# E2E tests
+npx playwright test
+```
+
+### Code Quality
+
+```bash
+# Python linting
+ruff check src/reasoner/
+ruff format src/reasoner/
+
+# Frontend linting
+cd ui-next && npm run lint
 ```
 
 ---
 
-## Project Structure
+## 📚 Documentation
 
-```
-Reasoner/
-├── main.py                    # CLI entry point
-├── api.py                     # FastAPI server with SSE streaming
-├── pipeline.py                # Core orchestrator (ARAPipeline)
-├── gate_agent.py              # Legacy GateAgent + HyperGateAgent re-export
-├── models.py                  # Dataclasses, enums, and state persistence
-├── llm.py                     # Multi-provider LLM abstraction
-├── presets.py                 # Pre-built routing configurations
-├── parsing.py                 # JSON extraction and repair logic
-├── phases.py                  # Phase prompts and language detection
-├── renderer.py                # Terminal output and JSON export
-├── exceptions.py              # Structured exception taxonomy
-├── hypergate/                 # HyperGate multi-agent pre-router
-│   ├── hyperagent.py          # HyperGateAgent orchestrator (Phase 1 + 2)
-│   ├── base_sub_agent.py      # BaseSubAgent ABC with cache + LLM wiring
-│   ├── models.py              # SubAgentInput, SubAgentOutput, HyperContext
-│   └── sub_agents/
-│       ├── language_detector.py     # Detects input language
-│       ├── complexity_estimator.py  # simple / medium / complex
-│       ├── direct_detector.py       # Is a pipeline needed at all?
-│       ├── web_detector.py          # Is real-time web data needed?
-│       ├── method_classifier.py     # Opaque taxonomy B–Q → method name
-│       └── tie_breaker.py           # Phase 2: resolve ambiguous Phase 1
-├── neuro/                     # Neuro memory and compression modules
-├── ui-next/                   # Next.js 16 frontend
-│   ├── src/app/page.tsx
-│   ├── src/components/
-│   └── package.json
-├── tests/                     # pytest suite
-├── cache/                     # Server-side response cache
-└── docs/                      # Additional documentation
-```
+| Document | Description |
+|----------|-------------|
+| [`ARCHITECTURE_MINDMAP.md`](ARCHITECTURE_MINDMAP.md) | **Complete architectural analysis** — structural, behavioral, domain, and infrastructure views |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System architecture and design patterns |
+| [`docs/METHODS.md`](docs/METHODS.md) | Reasoning method specifications |
+| [`docs/IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) | Implementation details and track records |
+| [`docs/OPENROUTER_MIGRATION.md`](docs/OPENROUTER_MIGRATION.md) | Migrating from direct APIs to OpenRouter |
+| [`docs/ENVIRONMENT.md`](docs/ENVIRONMENT.md) | Environment variable reference |
+| [`SAAS.md`](SAAS.md) | SaaS roadmap and production deployment plan |
+| [`TODO.md`](TODO.md) | Development roadmap and task tracking |
 
 ---
 
-## Security
+## 🤝 Contributing
 
-- **Input Validation**: Problem length limits and character sanitization
-- **Rate Limiting**: Configurable API-level rate limiting
-- **CORS Restriction**: Limited to localhost origins in development
-- **Security Headers**: HSTS, X-Frame-Options, X-Content-Type-Options, and more
-- **Error Sanitization**: Generic error messages to clients; detailed logging on the server
+Contributions are welcome! Please read our [TODO.md](TODO.md) for the current roadmap and open tasks.
 
----
+### Quick Contribution Guide
 
-## Caching
+1. **Fork** the repository
+2. **Create a branch** (`git checkout -b feature/amazing-feature`)
+3. **Run tests** (`python -m pytest tests/ -x`)
+4. **Commit** your changes (`git commit -m 'Add amazing feature'`)
+5. **Push** to the branch (`git push origin feature/amazing-feature`)
+6. **Open a Pull Request**
 
-- **Server-Side**: JSON cache in `cache/` keyed by SHA256 hash of problem + preset + parameters
-- **Client-Side**: IndexedDB for conversation history in the browser
-- **Cache Invalidation**: Automatic versioning ensures stale caches are discarded on protocol updates
-- **Manual Clearing**: Available via the UI or the `/api/cache` endpoint
+### Areas Where Help is Especially Welcome
 
----
-
-## Error Handling
-
-The pipeline is designed to degrade gracefully rather than fail hard:
-
-- **Authentication Errors**: Identifies which model requires an API key
-- **Model Not Found**: Returns clear, actionable error messages for invalid model IDs
-- **Parse Errors**: Graceful fallback with partial data extraction and repair logic
-- **Network Errors**: Exponential backoff retry logic
-- **Rate Limits**: Automatic cooldown and retry
+- 🐳 **Docker deployment** — Full-stack `docker-compose.yml`
+- 📊 **Observability** — Prometheus metrics, structured logging, distributed tracing
+- 🧪 **Test coverage** — Expanding beyond the current ~70%
+- 🌍 **i18n** — Additional language support and translation infrastructure
+- 📱 **Mobile responsiveness** — Frontend UI improvements for smaller screens
 
 ---
 
-## Multi-Language Support
+## 🙏 Acknowledgments
 
-Language detection occurs in Phase 0 and is propagated throughout all subsequent phases. Supported languages include:
-
-- English (default)
-- Greek (Ελληνικά)
-- Russian (Русский)
-- Arabic (العربية)
-- Chinese (中文)
-- Japanese (日本語)
-- Korean (한국어)
-- Spanish (Español)
-- German (Deutsch)
-- Turkish (Türkçe)
+- **OpenRouter** — For democratizing access to 350+ models through a single API
+- **SearXNG** — For the privacy-respecting, self-hosted search engine
+- **FastAPI** — For the modern, high-performance Python web framework
+- **Next.js Team** — For the React framework that powers our frontend
+- The broader **open-source LLM community** — For the rapid innovation in reasoning methodologies
 
 ---
 
-## Documentation
+## 📜 License
 
-- [`OPENROUTER_MIGRATION.md`](docs/OPENROUTER_MIGRATION.md) — Migrating from direct APIs to OpenRouter
-- [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) — System architecture and design patterns
-- [`METHODS.md`](docs/METHODS.md) — Reasoning method specifications
-- [`IMPLEMENTATION.md`](docs/IMPLEMENTATION.md) — Implementation details and track records
-- [`tasks/model_optimization_plan.md`](tasks/model_optimization_plan.md) — Phase-by-phase model routing optimization plan
+This project is released under the [MIT License](LICENSE).
+
+> **Disclaimer**: This is a research and development tool. Outputs should be reviewed by human experts before making high-stakes decisions. The epistemic labels (`VERIFIED` / `HYPOTHESIS` / `UNKNOWN`) are heuristic estimates, not guarantees of factual correctness.
 
 ---
 
-## License
+<div align="center">
 
-This project is provided as-is for research and development purposes.
+**[⬆ Back to Top](#ara-pipeline-v22)**
+
+Made with ❤️ and a lot of reasoning
+
+</div>

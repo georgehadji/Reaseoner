@@ -18,6 +18,7 @@ import argparse
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import time
@@ -31,7 +32,7 @@ from reasoner.core.constants import DEFAULT_SEARXNG_URL
 # ─────────────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
-MAIN_SERVER_CMD = [sys.executable, "-m", "uvicorn", "asgi:app", "--host", "0.0.0.0", "--port", "8000"]
+MAIN_SERVER_CMD = [sys.executable, "-m", "uvicorn", "asgi:app", "--host", "0.0.0.0", "--port", "8001"]
 NEURO_SERVER_CMD = [sys.executable, "-m", "reasoner.neuro.cli", "start"]
 FRONTEND_DIR = REPO_ROOT / "ui-next"
 FRONTEND_CMD = ["npm", "run", "dev"]
@@ -56,6 +57,89 @@ def run_preflight_checks() -> bool:
     result = subprocess.run([sys.executable, str(REPO_ROOT / "src" / "reasoner" / "server_check.py")], cwd=REPO_ROOT)
     print()
     return result.returncode == 0
+
+
+def _import_smoke_test() -> bool:
+    """Verify the backend app imports cleanly before spawning uvicorn."""
+    print("[CHECK] Import smoke test...")
+    cmd = [
+        sys.executable,
+        "-c",
+        (
+            "import sys; "
+            f"sys.path.insert(0, '{REPO_ROOT / 'src'}'); "
+            "from reasoner.api import app; "
+            "print('Import OK')"
+        ),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("[FAIL]  Backend import failed:")
+        print(result.stderr or result.stdout)
+        return False
+    print("[OK]    Backend imports cleanly")
+    return True
+
+
+def _port_in_use(port: int) -> tuple[bool, int | None]:
+    """Check if a TCP port is already bound. Returns (in_use, pid)."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)
+            result = s.connect_ex(("127.0.0.1", port))
+            if result != 0:
+                return False, None
+    except Exception:
+        return False, None
+
+    # Port is in use — try to find the owning PID
+    pid = None
+    if sys.platform == "win32":
+        try:
+            output = subprocess.check_output(
+                ["netstat", "-ano", "-p", "TCP"],
+                text=True,
+            )
+            for line in output.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.strip().split()
+                    if parts:
+                        try:
+                            pid = int(parts[-1])
+                        except ValueError:
+                            pass
+                    break
+        except Exception:
+            pass
+    else:
+        try:
+            output = subprocess.check_output(
+                ["lsof", "-ti", f":{port}"],
+                text=True,
+            )
+            pids = [int(p) for p in output.strip().split() if p.strip().isdigit()]
+            if pids:
+                pid = pids[0]
+        except Exception:
+            pass
+    return True, pid
+
+
+def _wait_for_health(port: int, timeout: float = 30.0) -> bool:
+    """Poll the backend health endpoint until it responds 200."""
+    import urllib.request
+    url = f"http://127.0.0.1:{port}/"
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            req = urllib.request.Request(url, method="HEAD")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
 
 
 def spawn_process(
@@ -172,6 +256,31 @@ def main() -> int:
             print("Pre-flight checks failed. Aborting.")
             return 1
 
+    # ── Import smoke test ────────────────────────────────────────
+    if not _import_smoke_test():
+        print("\n[ABORT] Backend failed to import. Common fixes:")
+        print("        1. Ensure all dependencies are installed: pip install -r requirements.txt")
+        print("        2. Check for syntax errors in recently edited files")
+        print("        3. Verify PYTHONPATH includes the 'src' directory")
+        return 1
+
+    # ── Port conflict check ──────────────────────────────────────
+    for svc, port in (
+        ("Main API Server", args.main_port),
+        ("Neuro Server", args.neuro_port),
+        ("Next.js Frontend", args.frontend_port),
+    ):
+        in_use, pid = _port_in_use(port)
+        if in_use:
+            print(f"\n[ABORT] {svc} port {port} is already in use.", end="")
+            if pid:
+                print(f" (PID {pid})")
+            else:
+                print()
+            print(f"        Stop the existing process or use a different port:")
+            print(f"        python start_all.py --main-port {port + 1}")
+            return 1
+
     processes: list[tuple[str, subprocess.Popen]] = []
     searxng_started_by_us = False
 
@@ -223,8 +332,12 @@ def main() -> int:
         main_proc = spawn_process("Main API Server", main_cmd)
         processes.append(("Main API Server", main_proc))
 
-        # Give the main server a moment to bind
-        time.sleep(1)
+        # ── Health polling ───────────────────────────────────────────
+        print("[WAIT]  Polling backend health...")
+        if _wait_for_health(args.main_port, timeout=30.0):
+            print(f"[OK]    Backend responding on port {args.main_port}")
+        else:
+            print(f"[WARN]  Backend did not respond within 30s. It may still be starting.")
 
         # Start standalone neuro server if requested
         if not args.no_neuro:

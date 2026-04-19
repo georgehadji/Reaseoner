@@ -4,6 +4,13 @@ import { useRef, useCallback } from 'react';
 import { fetchWithCsrf } from '@/lib/security-client';
 import { PhaseEvent, RunRequest, RunFollowupRequest } from '@/lib/types';
 
+function getDevErrorMessage(status: number, text: string): string {
+  if (status === 504) {
+    return 'Backend unreachable (port 8001). Run: uvicorn asgi:app --port 8001';
+  }
+  return `HTTP ${status}: ${text.slice(0, 200)}`;
+}
+
 export function usePipelineStream() {
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -19,9 +26,13 @@ export function usePipelineStream() {
 
       if (!resp.ok) {
         const text = await resp.text().catch(() => '');
+        const isDev = process.env.NODE_ENV !== 'production';
+        const message = isDev
+          ? getDevErrorMessage(resp.status, text)
+          : `HTTP ${resp.status}: ${text.slice(0, 200)}`;
         // eslint-disable-next-line no-console
         console.error('Pipeline HTTP error:', resp.status, text);
-        throw new Error(`HTTP ${resp.status}: ${text.slice(0, 200)}`);
+        throw new Error(message);
       }
       if (!resp.body) throw new Error('No response body');
 
@@ -44,6 +55,20 @@ export function usePipelineStream() {
               } catch {
                 // ignore malformed sse lines
               }
+            }
+          }
+        }
+        // Flush any bytes the decoder held for multi-byte sequences, then
+        // process whatever partial line remained in the buffer (e.g. the
+        // 'done' event when the server closes before the trailing newline).
+        buffer += decoder.decode();
+        for (const line of buffer.split('\n')) {
+          if (line.startsWith('data: ')) {
+            try {
+              const ev: PhaseEvent = JSON.parse(line.slice(6));
+              onEvent(ev);
+            } catch {
+              // ignore malformed sse lines
             }
           }
         }

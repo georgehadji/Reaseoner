@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { CSRF_HEADER } from './security-constants';
 import { RunRequest } from './types';
 
+// Turbopack cache-bust hash — changing this forces a recompile of routes that import it.
+export const SECURITY_SERVER_HASH = 'v1-8001';
+
 export function generateCsrfToken(): string {
   const arr = new Uint8Array(32);
   crypto.getRandomValues(arr);
@@ -220,8 +223,12 @@ const RATE_LIMITS: Record<string, { limit: number; windowMs: number }> = {
   default: { limit: 30, windowMs: 60_000 },
 };
 
+const RATE_LIMIT_MAX_ENTRIES = 10_000;
+const RATE_LIMIT_EVICTION_BATCH = 100;
+
 type RateLimitBucket = { count: number; resetAt: number };
 const rateLimitStore = new Map<string, RateLimitBucket>();
+let rateLimitCallCount = 0;
 
 function getClientIp(req: NextRequest): string {
   const forwarded = req.headers.get('x-forwarded-for');
@@ -229,6 +236,25 @@ function getClientIp(req: NextRequest): string {
     return forwarded.split(',')[0].trim();
   }
   return req.headers.get('x-real-ip') || 'unknown';
+}
+
+function _evictExpiredRateLimitBuckets(now: number): void {
+  for (const [key, bucket] of rateLimitStore) {
+    if (now > bucket.resetAt) {
+      rateLimitStore.delete(key);
+    }
+  }
+}
+
+function _pruneRateLimitStore(): void {
+  if (rateLimitStore.size <= RATE_LIMIT_MAX_ENTRIES) return;
+  // Evict oldest buckets by resetAt (FIFO-style)
+  const entries = Array.from(rateLimitStore.entries());
+  entries.sort((a, b) => a[1].resetAt - b[1].resetAt);
+  const toRemove = entries.slice(0, RATE_LIMIT_EVICTION_BATCH);
+  for (const [key] of toRemove) {
+    rateLimitStore.delete(key);
+  }
 }
 
 export function rateLimit(
@@ -239,6 +265,13 @@ export function rateLimit(
   const key = `${ip}:${action}`;
   const cfg = RATE_LIMITS[action] || RATE_LIMITS.default;
   const now = Date.now();
+
+  // Periodic eviction to prevent unbounded growth
+  rateLimitCallCount += 1;
+  if (rateLimitCallCount % 100 === 0) {
+    _evictExpiredRateLimitBuckets(now);
+    _pruneRateLimitStore();
+  }
 
   const bucket = rateLimitStore.get(key);
   if (!bucket || now > bucket.resetAt) {

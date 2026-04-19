@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { EXAMPLE_PROMPTS } from '@/lib/config';
 import { cn } from '@/lib/utils';
-import { ArrowUp, Sparkles, Globe, Zap, Wand2 } from 'lucide-react';
+import { ArrowUp, Sparkles, Globe } from 'lucide-react';
 
 interface ComposerProps {
   running: boolean;
@@ -22,10 +22,8 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   const toggleTier = useAppStore((s) => s.toggleTier);
   const isWebSearch = useAppStore((s) => s.isWebSearch);
   const toggleWebSearch = useAppStore((s) => s.toggleWebSearch);
-  const isSmartSearch = useAppStore((s) => s.isSmartSearch);
-  const toggleSmartSearch = useAppStore((s) => s.toggleSmartSearch);
-  const isEnhancePrompt = useAppStore((s) => s.isEnhancePrompt);
-  const toggleEnhancePrompt = useAppStore((s) => s.toggleEnhancePrompt);
+
+
 
   const hasContent = composerText.trim().length > 0;
 
@@ -48,19 +46,23 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
 
   /** Tier toggle button — shared between centered and non-centered layouts */
   function TierToggle() {
+    const isPremium = tier === 'premium';
     return (
       <button
         type="button"
         disabled={isWebSearch}
         onClick={toggleTier}
         className={cn(
-          'flex h-8 items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-3 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]',
+          'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+          isPremium
+            ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
+            : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
           isWebSearch && 'opacity-40 cursor-not-allowed'
         )}
-        title={tier === 'budget' ? 'Switch to Premium models' : 'Switch to Budget models'}
+        title={isPremium ? 'Premium mode active — click to switch to Budget' : 'Budget mode active — click to switch to Premium'}
       >
-        <Sparkles className="h-3.5 w-3.5 text-[var(--text-subtle)]" />
-        <span>{tier === 'budget' ? 'Budget' : 'Premium'}</span>
+        <Sparkles className="h-3.5 w-3.5" />
+        <span>Premium</span>
       </button>
     );
   }
@@ -94,23 +96,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
 
                 <button
                   type="button"
-                  disabled={isWebSearch}
-                  onClick={toggleEnhancePrompt}
-                  className={cn(
-                    'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                    isEnhancePrompt
-                      ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                      : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-                    isWebSearch && 'opacity-40 cursor-not-allowed'
-                  )}
-                  title="Rewrite prompt for clarity and context"
-                >
-                  <Wand2 className="h-3.5 w-3.5" />
-                  Enhance
-                </button>
-
-                <button
-                  type="button"
                   onClick={toggleWebSearch}
                   className={cn(
                     'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
@@ -118,28 +103,13 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
                       ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
                       : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
                   )}
-                  title="Web Search (no LLM)"
+                  title="Web search with LLM-powered decomposition"
                 >
                   <Globe className="h-3.5 w-3.5" />
                   {isWebSearch ? 'Web Search' : 'Web'}
                 </button>
 
-                {isWebSearch && (
-                  <button
-                    type="button"
-                    onClick={toggleSmartSearch}
-                    className={cn(
-                      'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                      isSmartSearch
-                        ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                        : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-                    )}
-                    title="Decompose query into focused searches using a lightweight LLM"
-                  >
-                    <Zap className="h-3.5 w-3.5" />
-                    Smart
-                  </button>
-                )}
+
               </div>
 
               {running ? (
@@ -163,12 +133,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
                 </button>
               )}
             </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            {EXAMPLE_PROMPTS.map((text) => (
-              <ExampleChip key={text} text={text} />
-            ))}
           </div>
 
           <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
@@ -196,9 +160,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
             <span className="text-xs font-medium text-[var(--text-muted)]">Web Search</span>
             <span className="max-w-full break-words text-xs text-[var(--text-subtle)]">
-              {isSmartSearch
-                ? 'Advanced web search with LLM processing.'
-                : 'Advanced web search without LLM processing.'}
+              Advanced web search with LLM processing.
             </span>
           </div>
         )}
@@ -224,23 +186,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
 
               <button
                 type="button"
-                disabled={isWebSearch}
-                onClick={toggleEnhancePrompt}
-                className={cn(
-                  'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                  isEnhancePrompt
-                    ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                    : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-                  isWebSearch && 'opacity-40 cursor-not-allowed'
-                )}
-                title="Rewrite prompt for clarity and context"
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                Enhance
-              </button>
-
-              <button
-                type="button"
                 onClick={toggleWebSearch}
                 className={cn(
                   'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
@@ -248,28 +193,13 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
                     ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
                     : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
                 )}
-                title="Web Search (no LLM)"
+                title="Web search with LLM-powered decomposition"
               >
                 <Globe className="h-3.5 w-3.5" />
                 {isWebSearch ? 'Web Search' : 'Web'}
               </button>
 
-              {isWebSearch && (
-                <button
-                  type="button"
-                  onClick={toggleSmartSearch}
-                  className={cn(
-                    'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                    isSmartSearch
-                      ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                      : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-                  )}
-                  title="Decompose query into focused searches using a lightweight LLM"
-                >
-                  <Zap className="h-3.5 w-3.5" />
-                  Smart
-                </button>
-              )}
+
             </div>
 
             {running ? (

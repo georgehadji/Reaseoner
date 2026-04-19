@@ -2,7 +2,16 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Sparkles } from 'lucide-react';
+import { ChevronDown, Sparkles, Bot } from 'lucide-react';
+
+interface SubagentInfo {
+  name: string;
+  model: string;
+  tokens_in?: number;
+  tokens_out?: number;
+  duration_ms?: number;
+  error?: string | null;
+}
 
 interface SynthesisCardProps {
   index: number;
@@ -12,11 +21,17 @@ interface SynthesisCardProps {
   defaultOpen?: boolean;
   tokens?: { input?: number; output?: number } | null;
   models?: string[] | null;
+  subagents?: SubagentInfo[] | null;
   duration?: number;
 }
 
 function formatModelLabel(model: string) {
   return model.split('/').pop() || model;
+}
+
+function formatDurationMs(ms: number) {
+  if (ms < 1000) return `${ms.toFixed(0)}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
 }
 
 export function SynthesisCard({
@@ -27,9 +42,19 @@ export function SynthesisCard({
   defaultOpen = true,
   tokens,
   models,
+  subagents,
   duration,
 }: SynthesisCardProps) {
   const [open, setOpen] = useState(defaultOpen);
+
+  const subagentTooltip = subagents
+    ? subagents
+        .map(
+          (s) =>
+            `${s.name} → ${formatModelLabel(s.model)}${s.error ? ' [error]' : ''}`
+        )
+        .join('\n')
+    : '';
 
   return (
     <div className="mb-6 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-2)]">
@@ -56,6 +81,15 @@ export function SynthesisCard({
                 {models.length === 1 ? formatModelLabel(models[0]) : `${formatModelLabel(models[0])} +${models.length - 1}`}
               </span>
             ) : null}
+            {subagents && subagents.length > 0 ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-md bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-subtle)]"
+                title={subagentTooltip}
+              >
+                <Bot className="h-3 w-3" />
+                {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+              </span>
+            ) : null}
           </div>
           <ChevronDown
             className={cn(
@@ -64,7 +98,41 @@ export function SynthesisCard({
             )}
           />
         </button>
-        {open && <div className="px-4 pb-4 pt-1">{children}</div>}
+        {open && (
+          <div className="px-4 pb-4 pt-1">
+            {subagents && subagents.length > 0 && (
+              <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>
+                <div className="flex flex-wrap gap-2">
+                  {subagents.map((s) => (
+                    <div
+                      key={s.name}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
+                        s.error
+                          ? 'bg-red-500/10 text-red-400'
+                          : 'bg-[var(--surface-2)] text-[var(--text-subtle)]'
+                      )}
+                      title={s.error || undefined}
+                    >
+                      <Bot className="h-3 w-3 shrink-0" />
+                      <span className="font-medium">{s.name}</span>
+                      <span className="text-[var(--text-muted)]">→</span>
+                      <span>{formatModelLabel(s.model)}</span>
+                      <span className="text-[var(--text-muted)]">
+                        {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
+                      </span>
+                      <span className="text-[var(--text-muted)]">
+                        · {formatDurationMs(s.duration_ms ?? 0)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {children}
+          </div>
+        )}
       </div>
     </div>
   );

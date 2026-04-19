@@ -1,30 +1,20 @@
 wing: reasoner
 rooms:
-- name: application
-  description: Files from src/reasoner/application/
 - name: cache
   description: Files from cache/
-- name: core
-  description: Files from src/reasoner/core/
-- name: healing
-  description: Files from src/reasoner/healing/
-- name: history
-  description: Files from history/
-- name: configuration
-  description: Files from src/reasoner/infrastructure/
-- name: neuro
-  description: Files from src/reasoner/neuro/
-- name: shared
-  description: Files from src/reasoner/shared/
-- name: testing
-  description: Files from tests/
-- name: uploads
-  description: Files from uploads/
 - name: documentation
   description: Files from docs/
-- name: scripts
-  description: Files from scripts/
-- name: design
-  description: Files from assets/
+- name: history
+  description: Files from history/
+- name: legacy
+  description: Files from legacy/
+- name: src
+  description: Files from src/
+- name: testing
+  description: Files from tests/
+- name: ui_next
+  description: Files from ui-next/
+- name: uploads
+  description: Files from uploads/
 - name: general
   description: Files that don't fit other rooms

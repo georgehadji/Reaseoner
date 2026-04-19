@@ -89,6 +89,7 @@ class CacheConfig:
     l1_max_bundles: int = 50
     l1_ttl_seconds: int = 86400
     l1_similarity_threshold: float = 0.75
+    l2_max_entries: int = 500
     l2_similarity_threshold: float = 0.5
     l3_similarity_threshold: float = 0.4
 

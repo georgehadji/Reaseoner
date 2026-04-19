@@ -68,9 +68,7 @@ def _safe_eval_expr(node: ast.AST, depth: int = 0) -> Any:
     """
     if depth > 100:
         raise SafeExpressionError("Expression too deeply nested")
-    if isinstance(node, ast.Num):  # Python 3.7 and earlier
-        return node.n
-    elif isinstance(node, ast.Constant):  # Python 3.8+
+    if isinstance(node, ast.Constant):  # Python 3.8+
         if isinstance(node.value, bool):
             raise SafeExpressionError("Boolean constants not allowed")
         if isinstance(node.value, (int, float, complex)):

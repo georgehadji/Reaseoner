@@ -1,0 +1,130 @@
+"""
+SynthesisHyperAgent — orchestrates 3 parallel analysis subagents + 1 writer.
+
+Phase 1 (parallel):
+  - ConsensusMapperSubAgent     → what do all perspectives agree on?
+  - ContradictionResolverSubAgent → where do they disagree?
+  - EvidenceWeighterSubAgent    → which arguments have strongest evidence?
+
+Phase 2 (sequential):
+  - SynthesisWriterSubAgent     → writes final answer using all analyses
+
+All subagent outputs are stored in state.synthesis_subagent_outputs for transparency.
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+from reasoner.llm import ProviderRouter
+from reasoner.models import FinalSolution, PipelineState
+from reasoner.subagents.models import PhaseSubAgentOutput
+from reasoner.subagents.synthesis.consensus_mapper import ConsensusMapperSubAgent
+from reasoner.subagents.synthesis.contradiction_resolver import ContradictionResolverSubAgent
+from reasoner.subagents.synthesis.evidence_weighter import EvidenceWeighterSubAgent
+from reasoner.subagents.synthesis.synthesis_writer import SynthesisWriterSubAgent
+
+logger = logging.getLogger(__name__)
+
+
+class SynthesisHyperAgent:
+    """Orchestrates parallel synthesis subagents and produces FinalSolution."""
+
+    def __init__(self) -> None:
+        self._consensus = ConsensusMapperSubAgent()
+        self._contradiction = ContradictionResolverSubAgent()
+        self._evidence = EvidenceWeighterSubAgent()
+
+    async def execute(self, state: PipelineState, router: ProviderRouter) -> FinalSolution:
+        logger.info("[SynthesisHyperAgent] starting Phase 1: 3 parallel analysis subagents")
+
+        # ── Phase 1: parallel analysis ────────────────────────────────
+        results = await asyncio.gather(
+            self._consensus.execute(state, router),
+            self._contradiction.execute(state, router),
+            self._evidence.execute(state, router),
+            return_exceptions=True,
+        )
+
+        def _unwrap(res, name: str) -> PhaseSubAgentOutput:
+            if isinstance(res, BaseException):
+                logger.warning("[SynthesisHyperAgent] %s failed: %s", name, res)
+                return PhaseSubAgentOutput(
+                    agent_name=name,
+                    result={},
+                    confidence=0.0,
+                    reasoning="",
+                    tokens_in=0,
+                    tokens_out=0,
+                    model="unknown",
+                    duration_ms=0.0,
+                    error=str(res),
+                )
+            return res
+
+        consensus_out = _unwrap(results[0], "consensus_mapper")
+        contradiction_out = _unwrap(results[1], "contradiction_resolver")
+        evidence_out = _unwrap(results[2], "evidence_weighter")
+
+        # Store for transparency / resume
+        state.synthesis_subagent_outputs = [
+            consensus_out.to_dict(),
+            contradiction_out.to_dict(),
+            evidence_out.to_dict(),
+        ]
+
+        logger.info(
+            "[SynthesisHyperAgent] Phase 1 complete: consensus_conf=%.2f contradiction_conf=%.2f evidence_conf=%.2f",
+            consensus_out.confidence,
+            contradiction_out.confidence,
+            evidence_out.confidence,
+        )
+
+        # ── Phase 2: synthesis writer ─────────────────────────────────
+        writer = SynthesisWriterSubAgent(context={
+            "consensus": consensus_out,
+            "contradictions": contradiction_out,
+            "evidence": evidence_out,
+        })
+        writer_out = await writer.execute(state, router)
+        state.synthesis_subagent_outputs.append(writer_out.to_dict())
+
+        logger.info(
+            "[SynthesisHyperAgent] writer complete: confidence=%.2f model=%s",
+            writer_out.confidence,
+            writer_out.model,
+        )
+
+        # ── Build FinalSolution ───────────────────────────────────────
+        result = writer_out.result
+        from reasoner.models import ClaimLabel, MetaCognitiveAudit
+
+        meta_audit_raw = result.get("meta_audit", {})
+        meta_audit = MetaCognitiveAudit(
+            most_dangerous_assumption=meta_audit_raw.get("most_dangerous_assumption", ""),
+            dominant_bias=meta_audit_raw.get("dominant_bias", ""),
+            remaining_uncertainty=meta_audit_raw.get("remaining_uncertainty", ""),
+            assumption_failure_impact=meta_audit_raw.get("assumption_failure_impact", ""),
+            non_obvious_insight=meta_audit_raw.get("non_obvious_insight", ""),
+        )
+
+        raw_labels = result.get("claim_labels", {})
+        clean_labels = {}
+        for k, v in raw_labels.items():
+            try:
+                clean_labels[k] = ClaimLabel(v)
+            except ValueError:
+                clean_labels[k] = ClaimLabel.UNKNOWN
+
+        return FinalSolution(
+            core_solution=result.get("core_solution", ""),
+            critical_insights=result.get("critical_insights", []),
+            action_blueprint=result.get("action_blueprint", []),
+            open_questions=result.get("open_questions", []),
+            claim_labels=clean_labels,
+            meta_audit=meta_audit,
+            sources=result.get("sources", []),
+            generator_attribution={},
+            critic_weighting={},
+        )

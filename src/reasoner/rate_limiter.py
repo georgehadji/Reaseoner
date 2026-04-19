@@ -78,15 +78,17 @@ class RateLimiter:
         """Reset sliding windows if expired."""
         now = time.time()
         
-        # Reset minute window
-        if now - bucket.minute_window_start >= 60:
+        # Reset minute window (snap to exact boundary, O(1))
+        elapsed_minutes = int((now - bucket.minute_window_start) // 60)
+        if elapsed_minutes > 0:
             bucket.requests_minute = 0
-            bucket.minute_window_start = now
+            bucket.minute_window_start += elapsed_minutes * 60
         
-        # Reset hour window
-        if now - bucket.hour_window_start >= 3600:
+        # Reset hour window (snap to exact boundary, O(1))
+        elapsed_hours = int((now - bucket.hour_window_start) // 3600)
+        if elapsed_hours > 0:
             bucket.requests_hour = 0
-            bucket.hour_window_start = now
+            bucket.hour_window_start += elapsed_hours * 3600
     
     async def is_allowed(self, client_id: str) -> tuple[bool, dict]:
         """

@@ -8,7 +8,7 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -303,6 +303,9 @@ class RunRequest(BaseModel):
     @field_validator('preset')
     @classmethod
     def validate_preset(cls, v: str) -> str:
+        # Allow auto-* sentinel values that trigger HyperGate method selection
+        if v.startswith('auto-') and v.split('-', 1)[1] in ('budget', 'premium'):
+            return v
         if not is_valid_preset_name(v):
             raise ValueError(f'Invalid preset: {v}')
         return resolve_preset_name(v)
@@ -371,6 +374,22 @@ from .serializers import (
 )
 
 
+def _get_phase_subagents(state: PipelineState, phase_name: str) -> list[dict[str, Any]]:
+    """Return subagent outputs for a given phase name."""
+    mapping = {
+        "Decomposition": "decomposition_subagent_outputs",
+        "Critique & Pruning": "critique_subagent_outputs",
+        "Synthesis": "synthesis_subagent_outputs",
+        "Deep Research": "search_subagent_outputs",
+    }
+    attr = mapping.get(phase_name)
+    if attr:
+        outputs = getattr(state, attr, [])
+        if isinstance(outputs, list):
+            return outputs
+    return []
+
+
 async def _stream_direct_answer(
     router: ProviderRouter,
     problem: str,
@@ -395,10 +414,11 @@ async def _stream_direct_answer(
         )
     except Exception as exc:
         logger.warning("Direct answer LLM call failed: %s", exc)
-        yield _event({"type": "phase_error", "phase": 0, "error": "Processing error during analysis step."})
+        err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
+        yield _event({"type": "phase_error", "phase": 0, "error": err_msg})
         yield _event({
             "type": "done",
-            "errors": ["Processing error during analysis step."],
+            "errors": [err_msg],
             "total_tokens": {"input": 0, "output": 0, "total": 0},
             "duration": time.monotonic() - phase_start,
         })
@@ -683,9 +703,11 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                 await fn(state)
             except Exception as exc:
                 import traceback
-                print(f"Phase {num} error: {str(exc)}\n{traceback.format_exc()}")
-                # SECURITY: Do not expose internal phase names to clients
-                err_msg = "Processing error during analysis step."
+                tb = traceback.format_exc()
+                print(f"Phase {num} error: {str(exc)}\n{tb}")
+                logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
+                # SECURITY: expose exception type and safe message, never raw traceback
+                err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
                 state.errors.append(err_msg)
                 yield _event({"type": "phase_error", "phase": num, "error": err_msg})
                 # Halt pipeline on critical phase failures to prevent synthesis on corrupted state
@@ -693,11 +715,48 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                     break
                 continue
             duration = time.monotonic() - phase_start
+            # Drain real-time agent events that accumulated during this phase
+            while state.pending_events:
+                ev = state.pending_events.pop(0)
+                yield _event(ev)
             state.phase_durations[phase_key] = duration
+            # ── Typewriter streaming for Synthesis ────────────────────────
+            if name == "Synthesis":
+                core = ""
+                if state.final_solution and hasattr(state.final_solution, "core_solution"):
+                    core = state.final_solution.core_solution or ""
+                if core:
+                    words = core.split()
+                    chunk_size = 2
+                    for i in range(0, len(words), chunk_size):
+                        chunk = " ".join(words[i:i + chunk_size])
+                        if i + chunk_size < len(words):
+                            chunk += " "
+                        yield _event({"type": "text_chunk", "text": chunk})
+                        await asyncio.sleep(0.1)  # ~20 words/sec
+            # ──────────────────────────────────────────────────────────────
             data = serializer(state)
             if isinstance(data, dict):
                 data["tokens"] = state.phase_tokens.get(phase_key, {"input": 0, "output": 0})
                 data["duration"] = duration
+                # Attach models used in this phase
+                phase_models = getattr(state, '_phase_models_by_key', {}).get(phase_key, [])
+                if phase_models:
+                    data["models"] = phase_models
+                # Attach subagents that ran in this phase
+                subagent_outputs = _get_phase_subagents(state, name)
+                if subagent_outputs:
+                    data["subagents"] = [
+                        {
+                            "name": s.get("agent_name", "unknown"),
+                            "model": s.get("model", "unknown"),
+                            "tokens_in": s.get("tokens_in", 0),
+                            "tokens_out": s.get("tokens_out", 0),
+                            "duration_ms": s.get("duration_ms", 0),
+                            "error": s.get("error"),
+                        }
+                        for s in subagent_outputs
+                    ]
             yield _event({
                 "type": "phase_complete",
                 "phase": num,
@@ -794,7 +853,7 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
                 "http://127.0.0.1:50001/neuro/learn",
                 json={
                     "prompt": req.question,
-                    "response": state.previous_synthesis,
+                    "response": (state.final_solution.core_solution if state.final_solution else state.previous_synthesis),
                     "agent_id": req.conversation_id,
                     "metadata": {
                         "turn_number": state.turn_number,
@@ -1024,16 +1083,21 @@ async def clear_cache():
             cleared += 1
         except OSError:
             pass
+    _MEMORY_CACHE.clear()
     return {"cleared": cleared}
 
 
 @app.post("/api/stop")
-async def stop_pipeline():
-    # Mark all active runs as cancelled.
-    # Each run checks its own flag, so concurrent runs remain isolated.
-    for run_id in list(_active_runs):
-        _cancelled_runs[run_id] = True
-    return {"status": "stop requested"}
+async def stop_pipeline(run_id: str | None = None):
+    # If a specific run_id is provided, cancel only that run.
+    # Otherwise cancel all active runs (global stop, e.g. from the UI stop button).
+    if run_id:
+        targets = [run_id] if run_id in _active_runs else []
+    else:
+        targets = list(_active_runs)
+    for rid in targets:
+        _cancelled_runs[rid] = True
+    return {"status": "stop requested", "cancelled": targets}
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -1072,7 +1136,7 @@ async def get_uploaded_file(file_id: str):
     """Get text content of an uploaded file."""
     text = get_file_text(file_id)
     if text is None:
-        return {"error": "File not found"}, 404
+        raise HTTPException(status_code=404, detail="File not found")
     return {"file_id": file_id, "text": text}
 
 
@@ -1081,7 +1145,7 @@ async def delete_uploaded_file(file_id: str):
     """Delete an uploaded file."""
     success = delete_file(file_id)
     if not success:
-        return {"error": "File not found"}, 404
+        raise HTTPException(status_code=404, detail="File not found")
     return {"status": "deleted"}
 
 
@@ -1362,9 +1426,9 @@ class WeatherRequest(BaseModel):
 @app.get("/api/weather")
 async def get_weather(location: str = ""):
     """Get weather data for a location (legacy endpoint)."""
+    if not location:
+        raise HTTPException(status_code=400, detail="Location parameter required")
     try:
-        if not location:
-            return {"error": "Location parameter required"}, 400
         # get_weather_data is async; the former sync wrapper was removed because
         # it caused RuntimeError ("event loop already running") inside FastAPI.
         from reasoner.widgets import get_weather_data
@@ -1372,7 +1436,7 @@ async def get_weather(location: str = ""):
         return weather_data
     except Exception as e:
         logger.error(f"Weather error: {e}")
-        return {"error": str(e)}, 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class StockRequest(BaseModel):
@@ -1382,15 +1446,15 @@ class StockRequest(BaseModel):
 @app.get("/api/stocks")
 async def get_stock(symbol: str = ""):
     """Get stock data for a symbol (legacy endpoint)."""
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol parameter required")
     try:
-        if not symbol:
-            return {"error": "Symbol parameter required"}, 400
         from reasoner.widgets import get_stock_data
         stock_data = get_stock_data(symbol.upper())
         return stock_data
     except Exception as e:
         logger.error(f"Stock error: {e}")
-        return {"error": str(e)}, 500
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class CalculationRequest(BaseModel):
@@ -1467,7 +1531,7 @@ async def get_history_entry(entry_id: str):
     safe_id = Path(entry_id).name
     path = HISTORY_DIR / f"{safe_id}.json"
     if not path.exists() or not str(path.resolve()).startswith(str(HISTORY_DIR.resolve())):
-        return {"error": "Entry not found"}, 404
+        raise HTTPException(status_code=404, detail="Entry not found")
     return json.loads(path.read_text(encoding="utf-8"))
 
 
@@ -1478,12 +1542,14 @@ async def delete_history_entry(entry_id: str):
     path = HISTORY_DIR / f"{safe_id}.json"
     try:
         if not path.exists() or not str(path.resolve()).startswith(str(HISTORY_DIR.resolve())):
-            return {"error": "Entry not found"}, 404
+            raise HTTPException(status_code=404, detail="Entry not found")
         path.unlink(missing_ok=True)
         return {"status": "deleted"}
+    except HTTPException:
+        raise
     except OSError as e:
         logger.error(f"Failed to delete history entry {entry_id}: {e}")
-        return {"error": "Failed to delete entry"}, 500
+        raise HTTPException(status_code=500, detail="Failed to delete entry")
 
 
 @app.delete("/api/history")
@@ -1819,11 +1885,11 @@ async def health_check():
     Returns system status, memory usage, and provider availability.
     """
     import sys
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     health = {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "version": "2.0",
         "python": sys.version,
         "checks": {},

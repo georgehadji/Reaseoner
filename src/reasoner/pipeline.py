@@ -10,12 +10,13 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import asdict
 from typing import Any
 from reasoner.models import (PipelineState, SolutionCandidate, CritiqueScore, StressTestResult,
                 ScenarioType, GenerationCandidate, CriticScore, VerificationResult,
-                MetaEvaluation, ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit)
+                MetaEvaluation, ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit, TaskType)
 from reasoner.parsing import ParseError, extract_json, safe_list, safe_float
 from reasoner.llm import ProviderRouter
 from reasoner.core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
@@ -45,6 +46,18 @@ TOKEN_OPTIMIZATION = {
     "prompt_compression": True,   # Use compressed prompts
     "neuro_compression": False,   # Use neuro-style text compression (experimental)
     "caching": True,              # Enable token-aware caching
+}
+
+# ─────────────────────────────────────────────────────────────────────
+# PHASE SUBAGENT FEATURE FLAGS
+# Toggle per-phase hyperagent orchestration (default OFF for safety)
+# ─────────────────────────────────────────────────────────────────────
+USE_PHASE_SUBAGENTS = {
+    "enhancement": os.getenv("USE_SUBAGENT_ENHANCEMENT", "false").lower() == "true",
+    "decomposition": os.getenv("USE_SUBAGENT_DECOMPOSITION", "false").lower() == "true",
+    "critique": os.getenv("USE_SUBAGENT_CRITIQUE", "false").lower() == "true",
+    "synthesis": os.getenv("USE_SUBAGENT_SYNTHESIS", "false").lower() == "true",
+    "search": os.getenv("USE_SUBAGENT_SEARCH", "false").lower() == "true",
 }
 
 # Get token cache instance
@@ -131,13 +144,20 @@ class ARAPipeline:
 
     @staticmethod
     def _enrich_query(query: str, problem: str) -> str:
-        """Append disambiguation terms for known collision acronyms."""
+        """Append disambiguation terms for known collision acronyms and ambiguous words."""
         problem_lower = problem.lower()
         query_lower = query.lower()
         # AGI disambiguation
         if "agi" in query_lower and ("artificial general intelligence" in problem_lower or "singularity" in problem_lower or "timeline" in problem_lower):
             if "artificial general intelligence" not in query_lower:
                 query += " artificial general intelligence"
+        # Greek "ανάπτυξη" (development) disambiguation: if problem is about AI/software,
+        # ensure query doesn't default to child development
+        if ("ανάπτυξη" in problem_lower or "ανάπτυξη" in query_lower):
+            if any(k in problem_lower for k in ["ai", "agent", "software", "programming", "python", "τεχνητή νοημοσύνη", "πράκτορας"]):
+                if "παιδ" not in problem_lower and "child" not in problem_lower and "παιδαγωγ" not in problem_lower:
+                    if "λογισμικού" not in query_lower and "software" not in query_lower and "προγραμματισμός" not in query_lower:
+                        query += " λογισμικού προγραμματισμός"
         return query.strip()
     
     async def _call_llm_cached(
@@ -260,7 +280,6 @@ class ARAPipeline:
         """Determines the reasoning method from the preset name."""
         preset = self.preset_name or ""
         if "debate" in preset: return "debate"
-        if "iterative" in preset: return "iterative"
         if "jury" in preset or "orchestrated" in preset: return "jury"
         if "research" in preset: return "research"
         if "scientific" in preset: return "scientific"
@@ -270,6 +289,11 @@ class ARAPipeline:
         if "dialectical" in preset: return "dialectical"
         if "analogical" in preset: return "analogical"
         if "delphi" in preset: return "delphi"
+        if "self-discover" in preset: return "self_discover"
+        if "cove" in preset: return "cove"
+        if "sot" in preset: return "sot"
+        if "tot" in preset: return "tot"
+        if "pot" in preset: return "pot"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
@@ -301,15 +325,27 @@ class ARAPipeline:
         self._log("ORCHESTRATOR", f"Routing to '{method}' method pipeline.", state)
 
         # --- DEEP READ (Optional - for critical sources) ---
-        # Only run deep read if enabled and not already done by research method
-        if method != "research":
+        # Run deep read for research method, OR for technical/hybrid problems
+        # that ask for learning resources, frameworks, or tutorials.
+        _edu_keywords = {"learn", "tutorial", "framework", "steps", "how to", "getting started",
+                         "βήματα", "μάθω", "εκμάθηση", "οδηγός", "resources"}
+        _historical_religious_keywords = {
+            "schism", "church", "orthodox", "catholic", "protestant", "bible", "theology",
+            "christianity", "islam", "judaism", "buddhism", "hinduism", "reformation",
+            "crusade", "empire", "byzantine", "medieval", "ancient", "history", "historical",
+            "philosophy", "philosopher", "plato", "aristotle", "kant", "nietzsche",
+        }
+        _is_knowledge_dense = (
+            state.task_type in (TaskType.TECHNICAL, TaskType.HYBRID, TaskType.ANALYTICAL)
+            and any(kw in state.problem.lower() for kw in _edu_keywords | _historical_religious_keywords)
+        )
+        if method == "research" or _is_knowledge_dense:
             await self._phase_deep_read(state)
         
         # --- CROSS-PHASE VALIDATION ---
         self._validate_evidence_coverage(state)
 
         if method == "debate": await self._run_debate_pipeline(state)
-        elif method == "iterative": await self._run_iterative_pipeline(state)
         elif method == "jury": await self._run_jury_pipeline(state)
         elif method == "research": await self._run_research_pipeline(state)
         elif method == "scientific": await self._run_scientific_pipeline(state)
@@ -319,10 +355,19 @@ class ARAPipeline:
         elif method == "dialectical": await self._run_dialectical_pipeline(state)
         elif method == "analogical": await self._run_analogical_pipeline(state)
         elif method == "delphi": await self._run_delphi_pipeline(state)
+        elif method == "cove": await self._run_cove_pipeline(state)
+        elif method == "sot": await self._run_sot_pipeline(state)
+        elif method == "tot": await self._run_tot_pipeline(state)
+        elif method == "pot": await self._run_pot_pipeline(state)
+        elif method == "self_discover": await self._run_self_discover_pipeline(state)
         else: await self._run_multi_perspective_pipeline(state)
 
         # --- UNIVERSAL END PHASE ---
         await self._phase_synthesis(state)
+
+        # --- OPTIONAL POST-SYNTHESIS CROSS-MODEL VERIFICATION ---
+        if getattr(self, 'post_synthesis_verify', False) or (state.preset_name and "cove" in state.preset_name):
+            await self._phase_post_synthesis_verify(state)
         
         return state
 
@@ -334,25 +379,6 @@ class ARAPipeline:
         await self._phase_2_perspectives(state)
         await self._phase_3_critique(state)
         await self._phase_4_stress_test(state)
-
-    async def _run_iterative_pipeline(self, state: PipelineState):
-        MAX_ROUNDS = 3
-        CONVERGENCE_THRESHOLD = 8.5
-        for i in range(MAX_ROUNDS):
-            self._log("ITERATIVE", f"Starting round {i+1}/{MAX_ROUNDS}", state)
-            await self._phase_2_perspectives(state, use_reflexion=True)
-            await self._phase_3_critique(state)
-            # Store insights for the next round
-            new_memories = [s.steel_man for s in state.scores if s.steel_man]
-            state.reflexion_memory.extend(new_memories)
-            # A2: Early convergence exit
-            if state.scores:
-                mean_score = sum(s.logical_consistency for s in state.scores) / len(state.scores)
-                if mean_score >= CONVERGENCE_THRESHOLD:
-                    self._log("ITERATIVE", f"Converged at round {i+1} (mean={mean_score:.2f}≥{CONVERGENCE_THRESHOLD}). Stopping early.", state)
-                    break
-            if i < MAX_ROUNDS - 1: # Don't clear on last round
-                state.candidates, state.scores, state.top_candidates = [], [], []
 
     async def _run_debate_pipeline(self, state: PipelineState):
         await self._phase_debate_opening(state)
@@ -380,6 +406,33 @@ class ARAPipeline:
         await self._phase_socratic_question(state)
         await self._phase_socratic_answer(state)
 
+    async def _run_cove_pipeline(self, state: PipelineState):
+        await self._phase_cove_draft(state)
+        await self._phase_cove_verify(state)
+        await self._phase_cove_answer(state)
+        await self._phase_cove_revise(state)
+
+    async def _run_sot_pipeline(self, state: PipelineState):
+        await self._phase_sot_skeleton(state)
+        await self._phase_sot_solve(state)
+        await self._phase_sot_assemble(state)
+
+    async def _run_tot_pipeline(self, state: PipelineState):
+        await self._phase_tot_decompose(state)
+        await self._phase_tot_generate(state)
+        await self._phase_tot_evaluate(state)
+        await self._phase_tot_backtrack(state)
+
+    async def _run_pot_pipeline(self, state: PipelineState):
+        await self._phase_pot_generate(state)
+        await self._phase_pot_execute(state)
+        await self._phase_pot_interpret(state)
+
+    async def _run_self_discover_pipeline(self, state: PipelineState):
+        await self._phase_sd_select(state)
+        await self._phase_sd_adapt(state)
+        await self._phase_sd_implement(state)
+
     # ────────────────────────────────────────────────────────────────────
     # Modular, Reusable & Method-Specific Phase Implementations
     # ────────────────────────────────────────────────────────────────────
@@ -390,9 +443,29 @@ class ARAPipeline:
         if state.enhanced_problem:
             self._log("PROMPT-ENHANCE", "Using cached enhanced prompt.", state)
             return
-        self._log("PROMPT-ENHANCE", "Enhancing user prompt...", state)
+
+        # ── Subagent path (opt-in via env) ────────────────────────────
+        if USE_PHASE_SUBAGENTS["enhancement"]:
+            self._log("PROMPT-ENHANCE", "Using EnhancementHyperAgent (subagent mode)...", state)
+            from reasoner.subagents.enhancement.hyper_agent import EnhancementHyperAgent
+            agent = EnhancementHyperAgent()
+            try:
+                enhanced = await agent.execute(state, self.router)
+                if enhanced and len(enhanced) >= 20 and enhanced != state.problem:
+                    state.enhanced_problem = enhanced
+                    self._log("PROMPT-ENHANCE", f"Enhanced prompt: {enhanced[:TRUNCATION.API_STORAGE]}...", state)
+                else:
+                    state.enhanced_problem = state.problem
+                    self._log("PROMPT-ENHANCE", "Subagent enhancement returned no changes; using original prompt.", state)
+            except Exception as exc:
+                state.enhanced_problem = state.problem
+                self._log("PROMPT-ENHANCE", f"Subagent enhancement failed ({exc}); using original prompt.", state)
+            return
+
+        # ── Legacy monolithic path ─────────────────────────────────────
+        self._log("PROMPT-ENHANCE", "Enhancing user prompt (monolithic mode)...", state)
         from reasoner.phases import detect_language
-        lang = detect_language(state.problem)
+        lang = state.language or detect_language(state.problem)
         raw, _ = await self._call_llm_cached(
             role="prompt_enhancement",
             system_prompt=phases.PROMPT_ENHANCEMENT_SYSTEM,
@@ -435,7 +508,26 @@ class ARAPipeline:
 
     async def _phase_1_decompose(self, state: PipelineState):
         self._log("PHASE-1", "Decomposing problem...", state)
-        # Ensure decomposition uses enhanced prompt if available
+
+        # ── Subagent path (opt-in via env) ────────────────────────────
+        if USE_PHASE_SUBAGENTS["decomposition"]:
+            from reasoner.subagents.decomposition.hyper_agent import DecompositionHyperAgent
+            agent = DecompositionHyperAgent()
+            try:
+                original_problem = state.problem
+                if state.enhanced_problem:
+                    state.problem = state.enhanced_problem
+                state.decomposition = await agent.execute(state, self.router)
+                state.problem = original_problem
+                self._log("PHASE-1", "DecompositionHyperAgent complete.", state)
+            except Exception as exc:
+                state.problem = original_problem
+                self._log("PHASE-1", f"DecompositionHyperAgent failed ({exc}), falling back to legacy.", state)
+                # Fall through to legacy path
+            else:
+                return
+
+        # ── Legacy monolithic path ─────────────────────────────────────
         original_problem = state.problem
         if state.enhanced_problem:
             state.problem = state.enhanced_problem
@@ -468,6 +560,32 @@ class ARAPipeline:
             await self._vet_results(state, state.web_discovery_results)
             return
         
+        # --- QUERY DISAMBIGUATION ---
+        # Skip the disambiguation LLM call for short, unambiguous queries to save tokens
+        _AMBIGUOUS_PRONOUNS_RE = re.compile(
+            r"\b(it|this|that|these|those|they|them|their|he|she|his|her|him)\b",
+            re.IGNORECASE,
+        )
+        disambiguated_problem = state.problem
+        if len(state.problem) < 120 and not _AMBIGUOUS_PRONOUNS_RE.search(state.problem):
+            self._log("VETTING", "Query is short and unambiguous — skipping disambiguation.", state)
+        else:
+            try:
+                raw_disam, _ = await self._call_llm_cached(
+                    role="primary",
+                    phase_key="disambiguation",
+                    system_prompt=phases.DISAMBIGUATION_SYSTEM,
+                    user_prompt=phases.disambiguation_prompt(state.problem, state.task_type.value if state.task_type else None),
+                    max_tokens=256, state=state)
+                disam_data = extract_json(raw_disam) or {}
+                if disam_data.get("was_ambiguous"):
+                    disambiguated_problem = disam_data.get("rewritten_query", state.problem)
+                    self._log("VETTING", f"Disambiguated query: '{disambiguated_problem}' (was ambiguous: {disam_data.get('reasoning', '')})", state)
+                else:
+                    self._log("VETTING", "Query is clear — no disambiguation needed.", state)
+            except Exception as exc:
+                self._log("VETTING", f"Disambiguation failed ({exc}) — using original problem.", state)
+        
         max_iterations = 3
         current_results: list[dict] = []
         seen_urls: set[str] = set()
@@ -478,6 +596,10 @@ class ARAPipeline:
             self._log("VETTING", f"Failed to initialize discovery client: {e}", state)
             state.errors.append(f"Vetting: Client init failed: {e}")
             return
+        
+        # Temporarily replace problem with disambiguated version for search
+        original_problem = state.problem
+        state.problem = disambiguated_problem
         
         # Iterative search loop
         for i in range(1, max_iterations + 1):
@@ -528,7 +650,7 @@ class ARAPipeline:
             self._log("VETTING", f"Executing queries: {queries}", state)
             
             # Execute searches concurrently with query enrichment
-            enriched_queries = [self._enrich_query(q, state.problem) for q in queries]
+            enriched_queries = [self._enrich_query(q, disambiguated_problem) for q in queries]
             async def _search(q: str):
                 try:
                     return await client.search(q, num_results=5, source_type=source_type, domain=self.domain)
@@ -554,6 +676,15 @@ class ARAPipeline:
             if dropped:
                 self._log("VETTING", f"Dropped {dropped} low-quality results this iteration.", state)
             self._log("VETTING", f"Found {len(current_results)} unique results so far.", state)
+
+            # Early-exit: if fewer than 3 results passed filtering after the first iteration,
+            # stop burning tokens on useless searches and proceed with LLM-only analysis.
+            if i == 1 and len(current_results) < 3:
+                self._log("VETTING", f"Only {len(current_results)} results passed filtering after first iteration. Aborting further searches.", state)
+                break
+        
+        # Restore original problem
+        state.problem = original_problem
         
         state.web_discovery_results = current_results
         self._log("VETTING", f"Iterative search complete. Total results: {len(current_results)}", state)
@@ -561,36 +692,55 @@ class ARAPipeline:
         # Apply CoT vetting to all results
         await self._vet_results(state, current_results)
     
+    async def _vet_single(self, state: PipelineState, result: dict) -> dict:
+        """Vet a single search result. Mutates and returns the result dict."""
+        retrieved_text = result.get("snippet", "")
+        if not retrieved_text:
+            return result
+        sanitized_text = sanitize_for_prompt(retrieved_text)[0]
+        try:
+            raw_flags, _ = await self._call_llm_cached(
+                role="context_vetting",
+                system_prompt=phases.COT_DETECTION_SYSTEM,
+                user_prompt=phases.cot_detection_prompt(state, sanitized_text),
+                max_tokens=512, state=state)
+            flags_data = extract_json(raw_flags)
+            result["vetting_flags"] = flags_data.get("flags", [])
+            if result["vetting_flags"]:
+                self._log("VETTING", f"Flagged issues in a retrieved snippet (source: {result.get('source')}).", state)
+        except ParseError as e:
+            self._log("VETTING", f"CoT vetting parse error for snippet (source: {result.get('source')}): {e}", state)
+            result["vetting_flags"] = [{"statement": "(CoT vetting parse error)", "reasoning": str(e)}]
+        except Exception as e:
+            self._log("VETTING", f"CoT vetting failed for snippet (source: {result.get('source')}): {e}", state)
+            result["vetting_flags"] = [{"statement": "(CoT vetting failed)", "reasoning": str(e)}]
+        return result
+
     async def _vet_results(self, state: PipelineState, results: list[dict]) -> None:
-        """Apply CoT vetting to search results."""
-        self._log("VETTING", "Applying CoT vetting to results...", state)
-        
-        vetted_results = []
-        for result in results:
-            retrieved_text = result.get("snippet", "")
-            if not retrieved_text:
-                continue
-            sanitized_text = sanitize_for_prompt(retrieved_text)[0]
-            try:
-                raw_flags, _ = await self._call_llm_cached(
-                    role="context_vetting",
-                    system_prompt=phases.COT_DETECTION_SYSTEM,
-                    user_prompt=phases.cot_detection_prompt(state, sanitized_text),
-                    max_tokens=512, state=state)
-                flags_data = extract_json(raw_flags)
-                result["vetting_flags"] = flags_data.get("flags", [])
-                if result["vetting_flags"]:
-                    self._log("VETTING", f"Flagged issues in a retrieved snippet (source: {result.get('source')}).", state)
-            except ParseError as e:
-                self._log("VETTING", f"CoT vetting parse error for snippet (source: {result.get('source')}): {e}", state)
-                result["vetting_flags"] = [{"statement": "(CoT vetting parse error)", "reasoning": str(e)}]
-            except Exception as e:
-                self._log("VETTING", f"CoT vetting failed for snippet (source: {result.get('source')}): {e}", state)
-                result["vetting_flags"] = [{"statement": "(CoT vetting failed)", "reasoning": str(e)}]
-            vetted_results.append(result)
-        
+        """Apply CoT vetting to search results in parallel (max 4 concurrent)."""
+        self._log("VETTING", f"Applying CoT vetting to {len(results)} results...", state)
+
+        semaphore = asyncio.Semaphore(4)
+        async def _vet_with_limit(r: dict) -> dict:
+            async with semaphore:
+                return await self._vet_single(state, r)
+
+        vetted_results = await asyncio.gather(*[_vet_with_limit(r) for r in results])
+
+        # Compute context quality for synthesis circuit breaker
+        if not vetted_results:
+            state.context_quality = "missing"
+        else:
+            flagged_count = sum(1 for r in vetted_results if r.get("vetting_flags"))
+            total = len(vetted_results)
+            if flagged_count == total and total > 0:
+                state.context_quality = "contaminated"
+            elif flagged_count > total // 2:
+                state.context_quality = "partial"
+            else:
+                state.context_quality = "good"
+        self._log("VETTING", f"Context vetting complete. Quality: {state.context_quality}", state)
         state.vetted_context = vetted_results
-        self._log("VETTING", "Context vetting complete.", state)
 
     async def _phase_deep_read(self, state: PipelineState, max_sources: int = 3) -> None:
         """
@@ -623,100 +773,129 @@ class ARAPipeline:
             ]
         
         if not sources_to_scrape:
-            self._log("DEEP_READ", "No sources available for deep reading.", state)
-            return
+            self._log("DEEP_READ", "No sources available for deep reading. Attempting fallback search...", state)
+            # Fallback: try a direct broad search with the problem
+            try:
+                client, _ = await get_discovery_client(source_type="general")
+                fallback_results = await client.search(
+                    state.problem, num_results=5, source_type="general", domain=self.domain
+                )
+                if fallback_results:
+                    sources_to_scrape = [
+                        r.get("url") for r in fallback_results[:max_sources]
+                        if r.get("url")
+                    ]
+                    # Add fallback results to web_discovery_results so vetting can use them
+                    state.web_discovery_results.extend(fallback_results)
+                    self._log("DEEP_READ", f"Fallback search found {len(sources_to_scrape)} sources.", state)
+                else:
+                    self._log("DEEP_READ", "Fallback search also found no sources.", state)
+                    state.errors.append("Deep Read: no sources found for deep reading")
+            except Exception as exc:
+                self._log("DEEP_READ", f"Fallback search failed: {exc}", state)
+                state.errors.append(f"Deep Read: fallback search failed: {exc}")
+            if not sources_to_scrape:
+                return
         
         self._log("DEEP_READ", f"Deep reading {len(sources_to_scrape)} sources...", state)
-        
+
         # Feature flag for safety: set REASONER_DEEP_READ_LLM=0 to disable LLM extraction
         use_llm_extraction = os.getenv("REASONER_DEEP_READ_LLM", "1") != "0"
-        
-        try:
-            scraped_results = await scrape_urls(sources_to_scrape)
-            
-            for scraped in scraped_results:
-                url = scraped.get("url")
-                title = scraped.get("title", "Unknown")
-                
-                # Find matching result in vetted_context
-                matching_result = None
-                for result in state.vetted_context:
-                    if result.get("url") == url:
-                        matching_result = result
-                        break
-                
-                if not matching_result:
-                    continue
-                
-                if scraped.get("success"):
-                    matching_result["deep_content"] = scraped.get("content", "")
-                    matching_result["deep_title"] = title
-                    self._log("DEEP_READ", f"Successfully scraped: {title}", state)
-                    
-                    if use_llm_extraction:
-                        try:
-                            sanitized_content = sanitize_for_prompt(scraped.get("content", ""))[0]
-                            raw_extraction, _ = await self._call_llm_cached(
-                                role="primary",
-                                system_prompt=phases.DEEP_READ_SYSTEM,
-                                user_prompt=phases.deep_read_prompt(
-                                    state, url, title, sanitized_content
-                                ),
-                                phase_key="deep_read",
-                                max_tokens=1024, state=state)
-                            extraction = extract_json(raw_extraction)
-                            matching_result["summary"] = extraction.get("summary", "").strip()
-                            matching_result["key_facts"] = safe_list(extraction.get("key_facts"))
-                            matching_result["relevant_quotes"] = safe_list(extraction.get("relevant_quotes"))
-                            matching_result["extraction_success"] = True
-                            self._log("DEEP_READ", f"Extracted summary for: {title}", state)
-                        except ParseError as exc:
-                            self._log("DEEP_READ", f"Extraction parse error for {url}: {exc}", state)
-                            # Fail-soft: use raw content as summary
-                            matching_result["summary"] = scraped.get("content", "")[:TRUNCATION.CONTENT]
-                            matching_result["key_facts"] = []
-                            matching_result["relevant_quotes"] = []
-                            matching_result["extraction_success"] = False
-                        except Exception as exc:
-                            self._log("DEEP_READ", f"Extraction failed for {url}: {exc}", state)
-                            matching_result["summary"] = scraped.get("content", "")[:TRUNCATION.CONTENT]
-                            matching_result["key_facts"] = []
-                            matching_result["relevant_quotes"] = []
-                            matching_result["extraction_success"] = False
-                    else:
-                        # Legacy path: no LLM extraction
+
+        async def _process_scraped(scraped: dict, matching_result: dict) -> None:
+            """Process a single scraped result (success or failure path)."""
+            url = scraped.get("url")
+            title = scraped.get("title", "Unknown")
+
+            if scraped.get("success"):
+                matching_result["deep_content"] = scraped.get("content", "")
+                matching_result["deep_title"] = title
+                self._log("DEEP_READ", f"Successfully scraped: {title}", state)
+
+                if use_llm_extraction:
+                    try:
+                        sanitized_content = sanitize_for_prompt(scraped.get("content", ""))[0]
+                        raw_extraction, _ = await self._call_llm_cached(
+                            role="primary",
+                            system_prompt=phases.DEEP_READ_SYSTEM,
+                            user_prompt=phases.deep_read_prompt(
+                                state, url, title, sanitized_content
+                            ),
+                            phase_key="deep_read",
+                            max_tokens=1024, state=state)
+                        extraction = extract_json(raw_extraction)
+                        matching_result["summary"] = extraction.get("summary", "").strip()
+                        matching_result["key_facts"] = safe_list(extraction.get("key_facts"))
+                        matching_result["relevant_quotes"] = safe_list(extraction.get("relevant_quotes"))
+                        matching_result["extraction_success"] = True
+                        self._log("DEEP_READ", f"Extracted summary for: {title}", state)
+                    except ParseError as exc:
+                        self._log("DEEP_READ", f"Extraction parse error for {url}: {exc}", state)
+                        # Fail-soft: use raw content as summary
+                        matching_result["summary"] = scraped.get("content", "")[:TRUNCATION.CONTENT]
+                        matching_result["key_facts"] = []
+                        matching_result["relevant_quotes"] = []
+                        matching_result["extraction_success"] = False
+                    except Exception as exc:
+                        self._log("DEEP_READ", f"Extraction failed for {url}: {exc}", state)
                         matching_result["summary"] = scraped.get("content", "")[:TRUNCATION.CONTENT]
                         matching_result["key_facts"] = []
                         matching_result["relevant_quotes"] = []
                         matching_result["extraction_success"] = False
                 else:
-                    self._log("DEEP_READ", f"Failed to scrape {url}: {scraped.get('error')}", state)
-                    # Shallow-read fallback using title + snippet
-                    if use_llm_extraction:
-                        try:
-                            snippet = sanitize_for_prompt(matching_result.get("snippet", ""))[0]
-                            raw_fallback, _ = await self._call_llm_cached(
-                                role="primary",
-                                phase_key="deep_read",
-                                system_prompt=phases.SHALLOW_READ_SYSTEM,
-                                user_prompt=phases.shallow_read_prompt(state, url, title, snippet),
-                                max_tokens=512, state=state)
-                            fallback = extract_json(raw_fallback)
-                            matching_result["summary"] = fallback.get("summary", "").strip()
-                            matching_result["key_facts"] = safe_list(fallback.get("key_facts"))
-                            matching_result["relevant_quotes"] = safe_list(fallback.get("relevant_quotes"))
-                            matching_result["extraction_success"] = False
-                        except Exception as exc:
-                            self._log("DEEP_READ", f"Shallow read fallback failed for {url}: {exc}", state)
-                            matching_result["summary"] = f"(Scrape failed: {scraped.get('error')})"
-                            matching_result["key_facts"] = []
-                            matching_result["relevant_quotes"] = []
-                            matching_result["extraction_success"] = False
-                    else:
+                    # Legacy path: no LLM extraction
+                    matching_result["summary"] = scraped.get("content", "")[:TRUNCATION.CONTENT]
+                    matching_result["key_facts"] = []
+                    matching_result["relevant_quotes"] = []
+                    matching_result["extraction_success"] = False
+            else:
+                self._log("DEEP_READ", f"Failed to scrape {url}: {scraped.get('error')}", state)
+                # Shallow-read fallback using title + snippet
+                if use_llm_extraction:
+                    try:
+                        snippet = sanitize_for_prompt(matching_result.get("snippet", ""))[0]
+                        raw_fallback, _ = await self._call_llm_cached(
+                            role="primary",
+                            phase_key="deep_read",
+                            system_prompt=phases.SHALLOW_READ_SYSTEM,
+                            user_prompt=phases.shallow_read_prompt(state, url, title, snippet),
+                            max_tokens=512, state=state)
+                        fallback = extract_json(raw_fallback)
+                        matching_result["summary"] = fallback.get("summary", "").strip()
+                        matching_result["key_facts"] = safe_list(fallback.get("key_facts"))
+                        matching_result["relevant_quotes"] = safe_list(fallback.get("relevant_quotes"))
+                        matching_result["extraction_success"] = False
+                    except Exception as exc:
+                        self._log("DEEP_READ", f"Shallow read fallback failed for {url}: {exc}", state)
                         matching_result["summary"] = f"(Scrape failed: {scraped.get('error')})"
                         matching_result["key_facts"] = []
                         matching_result["relevant_quotes"] = []
                         matching_result["extraction_success"] = False
+                else:
+                    matching_result["summary"] = f"(Scrape failed: {scraped.get('error')})"
+                    matching_result["key_facts"] = []
+                    matching_result["relevant_quotes"] = []
+                    matching_result["extraction_success"] = False
+
+        try:
+            scraped_results = await scrape_urls(sources_to_scrape)
+
+            # Build url -> result lookup (sequential, cheap)
+            url_to_result = {r.get("url"): r for r in state.vetted_context if r.get("url")}
+
+            tasks = []
+            for scraped in scraped_results:
+                matching_result = url_to_result.get(scraped.get("url"))
+                if matching_result:
+                    tasks.append(_process_scraped(scraped, matching_result))
+
+            # Run LLM extractions in parallel (max 4 concurrent)
+            semaphore = asyncio.Semaphore(4)
+            async def _with_limit(task):
+                async with semaphore:
+                    return await task
+
+            await asyncio.gather(*[_with_limit(t) for t in tasks])
             
             self._log("DEEP_READ", "Deep read complete.", state)
             
@@ -760,6 +939,20 @@ class ARAPipeline:
 
     async def _phase_synthesis(self, state: PipelineState):
         self._log("SYNTHESIS", "Synthesizing final solution...", state)
+
+        # ── Subagent path (opt-in via env) ────────────────────────────
+        if USE_PHASE_SUBAGENTS["synthesis"]:
+            from reasoner.subagents.synthesis.hyper_agent import SynthesisHyperAgent
+            agent = SynthesisHyperAgent()
+            try:
+                state.final_solution = await agent.execute(state, self.router)
+                self._log("SYNTHESIS", "SynthesisHyperAgent complete.", state)
+                return
+            except Exception as exc:
+                self._log("SYNTHESIS", f"SynthesisHyperAgent failed ({exc}), falling back to legacy.", state)
+                # Fall through to legacy path
+
+        # ── Legacy monolithic path ─────────────────────────────────────
         # TOKEN OPTIMIZATION: Use synthesis-specific token budget + caching (highest budget)
         lang_instruction = phases.get_language_instruction(state)
         system_prompt = f"{lang_instruction}\n\n{phases.SYNTHESIS_SYSTEM}"
@@ -876,7 +1069,7 @@ class ARAPipeline:
         )
 
     # --- MULTI-PERSPECTIVE & ITERATIVE PHASES ---
-    async def _phase_2_perspectives(self, state: PipelineState, use_reflexion: bool = False):
+    async def _phase_2_perspectives(self, state: PipelineState):
         self._log("PHASE-2", "Running multi-perspective analysis...", state)
 
         _PERSPECTIVE_HALLUCINATION_KEYWORDS = {"greek text", "greek characters", "parsing errors", "encoding issues", "unicode problems"}
@@ -889,7 +1082,9 @@ class ARAPipeline:
 
         async def _get_perspective(p_name: str):
             p_enum = PerspectiveType(p_name)
-            system_prompt = phases.PERSPECTIVE_SYSTEMS.get(p_name)
+            base_system = phases.PERSPECTIVE_SYSTEMS.get(p_name, "")
+            lang_instruction = phases.get_language_instruction(state)
+            system_prompt = f"{lang_instruction}\n\n{base_system}"
             # TOKEN OPTIMIZATION: Use phase-aware context with aggressive compression
             user_prompt = phases.perspective_prompt(state, p_name)
             # TOKEN OPTIMIZATION: Use perspective-specific token budget + caching
@@ -905,10 +1100,16 @@ class ARAPipeline:
             # must not be None — downstream prompt builders slice content and iterate insights.
             core_analysis = data.get("core_analysis") or ""
             if not isinstance(core_analysis, str):
-                core_analysis = json.dumps(core_analysis) if isinstance(core_analysis, (dict, list)) else str(core_analysis)
-            key_insights = data.get("key_insights") or []
-            if not isinstance(key_insights, list):
-                key_insights = [str(key_insights)] if key_insights else []
+                core_analysis = json.dumps(core_analysis, ensure_ascii=False) if isinstance(core_analysis, (dict, list)) else str(core_analysis)
+            # DEFENSIVE: If LLM returned valid JSON but wrong schema, serialize the whole dict as content
+            if not core_analysis and isinstance(data, dict) and len(data) > 1:
+                core_analysis = json.dumps(data, ensure_ascii=False)
+                key_insights = []
+                self._log("PHASE-2", f"Perspective '{p_name}' returned non-standard schema; using full JSON as content.", state)
+            else:
+                key_insights = data.get("key_insights") or []
+                if not isinstance(key_insights, list):
+                    key_insights = [str(key_insights)] if key_insights else []
             return SolutionCandidate(
                 perspective=p_enum,
                 content=core_analysis,
@@ -948,22 +1149,37 @@ class ARAPipeline:
             state.scores = []
             state.top_candidates = []
             return
-        # TOKEN OPTIMIZATION: Use scoring-specific token budget + caching
-        raw, _ = await self._call_llm_cached(
-            role="scoring",
-            system_prompt=phases.CRITIQUE_SYSTEM,
-            user_prompt=phases.critique_prompt(state),
-            state=state,
-            max_tokens=get_token_budget("scoring") if TOKEN_OPTIMIZATION["dynamic_budgets"] else DEFAULT_MAX_TOKENS
-        )
-        try:
-            data = extract_json(raw)
-        except ParseError as exc:
-            self._log("PHASE-3", f"Failed to parse critique response: {exc}", state)
-            state.errors.append(f"Critique parse error: {exc}")
-            data = {}
-        state.scores = _parse_critique_scores(data.get("scores", []))
-        # Pruning logic and potential recovery path
+
+        # ── Subagent path (opt-in via env) ────────────────────────────
+        if USE_PHASE_SUBAGENTS["critique"]:
+            from reasoner.subagents.critique.hyper_agent import CritiqueHyperAgent
+            agent = CritiqueHyperAgent()
+            try:
+                state.scores = await agent.execute(state, self.router)
+                self._log("PHASE-3", f"CritiqueHyperAgent produced {len(state.scores)} scores.", state)
+            except Exception as exc:
+                self._log("PHASE-3", f"CritiqueHyperAgent failed ({exc}), falling back to legacy.", state)
+                state.scores = []
+            # Fall through to shared pruning logic
+
+        else:
+            # ── Legacy monolithic path ─────────────────────────────────
+            raw, _ = await self._call_llm_cached(
+                role="scoring",
+                system_prompt=phases.CRITIQUE_SYSTEM,
+                user_prompt=phases.critique_prompt(state),
+                state=state,
+                max_tokens=get_token_budget("scoring") if TOKEN_OPTIMIZATION["dynamic_budgets"] else DEFAULT_MAX_TOKENS
+            )
+            try:
+                data = extract_json(raw)
+            except ParseError as exc:
+                self._log("PHASE-3", f"Failed to parse critique response: {exc}", state)
+                state.errors.append(f"Critique parse error: {exc}")
+                data = {}
+            state.scores = _parse_critique_scores(data.get("scores", []))
+
+        # ── Shared pruning logic ──────────────────────────────────────
         for score in state.scores:
             if score.confidence_vs_accuracy_penalty > 5.0: # Threshold for triggering recovery
                 candidate_to_check = next((c for c in state.candidates if c.perspective == score.perspective), None)
@@ -1787,3 +2003,299 @@ class ARAPipeline:
             state.errors.append(f"Recovery Path: Verification failed for candidate (id: {candidate_to_verify.perspective if isinstance(candidate_to_verify, SolutionCandidate) else candidate_to_verify.generator_id}): {str(e)}")
         
         self._log("RECOVERY", "Recovery path complete.", state)
+
+
+    # ═══════════════════════════════════════════════════════════════════
+    # v2.2 NEW METHODS: Chain-of-Verification (CoVe)
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def _phase_cove_draft(self, state: PipelineState):
+        self._log("COVE", "Drafting initial answer...", state)
+        raw, _ = await self._call_llm_cached(
+            role="cove_draft",
+            system_prompt=phases.COVE_DRAFT_SYSTEM,
+            user_prompt=phases.cove_draft_prompt(state), state=state)
+        data = extract_json(raw)
+        state.cove_state["draft_answer"] = data.get("draft_answer", "")
+        state.cove_state["claims"] = data.get("claims", [])
+
+    async def _phase_cove_verify(self, state: PipelineState):
+        self._log("COVE", "Generating verification questions...", state)
+        raw, _ = await self._call_llm_cached(
+            role="cove_verify",
+            system_prompt=phases.COVE_VERIFY_SYSTEM,
+            user_prompt=phases.cove_verify_prompt(state), state=state)
+        data = extract_json(raw)
+        state.cove_state["verification_questions"] = data.get("verification_questions", [])
+
+    async def _phase_cove_answer(self, state: PipelineState):
+        self._log("COVE", "Answering verification questions independently...", state)
+        raw, _ = await self._call_llm_cached(
+            role="cove_answer",
+            system_prompt=phases.COVE_ANSWER_SYSTEM,
+            user_prompt=phases.cove_answer_prompt(state), state=state)
+        data = extract_json(raw)
+        state.cove_state["verification_answers"] = data.get("answers", [])
+
+    async def _phase_cove_revise(self, state: PipelineState):
+        self._log("COVE", "Revising answer based on verification...", state)
+        raw, _ = await self._call_llm_cached(
+            role="cove_revise",
+            system_prompt=phases.COVE_REVISE_SYSTEM,
+            user_prompt=phases.cove_revise_prompt(state), state=state)
+        data = extract_json(raw)
+        state.cove_state["revised_answer"] = data.get("revised_answer", "")
+        state.cove_state["changes_made"] = data.get("changes_made", [])
+        state.cove_state["remaining_uncertainties"] = data.get("remaining_uncertainties", [])
+        # Feed revised answer into candidates for synthesis
+        state.candidates.append(SolutionCandidate(
+            perspective=PerspectiveType.CONSTRUCTIVE,
+            content=state.cove_state.get("revised_answer", ""),
+            key_insights=state.cove_state.get("changes_made", []),
+            model_used=state.phase_models.get("cove_revise", "unknown"),
+        ))
+
+    # ═══════════════════════════════════════════════════════════════════
+    # v2.2 NEW METHODS: Skeleton-of-Thought (SoT)
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def _phase_sot_skeleton(self, state: PipelineState):
+        self._log("SoT", "Generating problem skeleton...", state)
+        raw, _ = await self._call_llm_cached(
+            role="sot_skeleton",
+            system_prompt=phases.SOT_SKELETON_SYSTEM,
+            user_prompt=phases.sot_skeleton_prompt(state), state=state)
+        data = extract_json(raw)
+        state.sot_state["sub_problems"] = data.get("sub_problems", [])
+
+    async def _phase_sot_solve(self, state: PipelineState):
+        self._log("SoT", "Solving sub-problems in parallel...", state)
+        sub_problems = state.sot_state.get("sub_problems", [])
+        if not sub_problems:
+            state.errors.append("SoT: No sub-problems to solve.")
+            return
+        # Semaphore to limit parallel LLM calls (max 4 concurrent)
+        semaphore = asyncio.Semaphore(4)
+        async def _solve_one(sp: dict) -> dict:
+            async with semaphore:
+                raw, _ = await self._call_llm_cached(
+                    role="sot_solve",
+                    system_prompt=phases.SOT_SOLVE_SYSTEM,
+                    user_prompt=phases.sot_solve_prompt(state, sp), state=state)
+                data = extract_json(raw)
+                return {
+                    "sub_problem_id": sp.get("id", ""),
+                    "solution": data.get("solution", ""),
+                    "key_insights": data.get("key_insights", []),
+                    "assumptions": data.get("assumptions", []),
+                }
+        tasks = [_solve_one(sp) for sp in sub_problems]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        solutions = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                state.errors.append(f"SoT: Sub-problem {i+1} solve failed: {result}")
+                continue
+            solutions.append(result)
+        state.sot_state["solutions"] = solutions
+
+    async def _phase_sot_assemble(self, state: PipelineState):
+        self._log("SoT", "Assembling sub-problem solutions...", state)
+        raw, _ = await self._call_llm_cached(
+            role="sot_assemble",
+            system_prompt=phases.SOT_ASSEMBLE_SYSTEM,
+            user_prompt=phases.sot_assemble_prompt(state), state=state)
+        data = extract_json(raw)
+        state.sot_state["assembled_answer"] = data.get("assembled_answer", "")
+        state.sot_state["transitions"] = data.get("transitions", [])
+        state.sot_state["resolved_conflicts"] = data.get("resolved_conflicts", [])
+        # Feed assembled answer into candidates for synthesis
+        state.candidates.append(SolutionCandidate(
+            perspective=PerspectiveType.CONSTRUCTIVE,
+            content=state.sot_state.get("assembled_answer", ""),
+            key_insights=state.sot_state.get("transitions", []),
+            model_used=state.phase_models.get("sot_assemble", "unknown"),
+        ))
+
+    # ═══════════════════════════════════════════════════════════════════
+    # v2.2 NEW METHODS: Tree-of-Thoughts (ToT)
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def _phase_tot_decompose(self, state: PipelineState):
+        self._log("ToT", "Decomposing into decision points...", state)
+        raw, _ = await self._call_llm_cached(
+            role="tot_decompose",
+            system_prompt=phases.TOT_DECOMPOSE_SYSTEM,
+            user_prompt=phases.tot_decompose_prompt(state), state=state)
+        data = extract_json(raw)
+        state.tot_state["decision_points"] = data.get("decision_points", [])
+        state.tot_state["current_path"] = []
+
+    async def _phase_tot_generate(self, state: PipelineState):
+        self._log("ToT", "Generating candidate actions...", state)
+        dps = state.tot_state.get("decision_points", [])
+        if not dps:
+            state.errors.append("ToT: No decision points to generate candidates for.")
+            return
+        current_dp = dps[len(state.tot_state.get("current_path", []))]
+        raw, _ = await self._call_llm_cached(
+            role="tot_generate",
+            system_prompt=phases.TOT_GENERATE_SYSTEM,
+            user_prompt=phases.tot_generate_prompt(state, current_dp), state=state)
+        data = extract_json(raw)
+        state.tot_state["current_candidates"] = data.get("candidates", [])
+
+    async def _phase_tot_evaluate(self, state: PipelineState):
+        self._log("ToT", "Evaluating candidates...", state)
+        candidates = state.tot_state.get("current_candidates", [])
+        if not candidates:
+            state.errors.append("ToT: No candidates to evaluate.")
+            return
+        raw, _ = await self._call_llm_cached(
+            role="tot_evaluate",
+            system_prompt=phases.TOT_EVALUATE_SYSTEM,
+            user_prompt=phases.tot_evaluate_prompt(state, candidates), state=state)
+        data = extract_json(raw)
+        state.tot_state["evaluations"] = data.get("evaluations", [])
+        state.tot_state["best_candidate"] = data.get("best_candidate", "")
+        # Append best candidate to current path
+        best = data.get("best_candidate", "")
+        if best:
+            state.tot_state["current_path"].append(best)
+
+    async def _phase_tot_backtrack(self, state: PipelineState):
+        self._log("ToT", "Backtracking / finalizing path...", state)
+        raw, _ = await self._call_llm_cached(
+            role="tot_backtrack",
+            system_prompt=phases.TOT_BACKTRACK_SYSTEM,
+            user_prompt=phases.tot_backtrack_prompt(state), state=state)
+        data = extract_json(raw)
+        state.tot_state["backtrack_decision"] = data.get("decision", "terminate")
+        state.tot_state["final_path"] = data.get("final_path", [])
+        state.tot_state["tot_confidence"] = data.get("confidence", 0.0)
+        # Feed final path into candidates for synthesis
+        path_text = " → ".join(state.tot_state.get("final_path", []))
+        state.candidates.append(SolutionCandidate(
+            perspective=PerspectiveType.CONSTRUCTIVE,
+            content=f"Tree-of-Thoughts optimal path: {path_text}",
+            key_insights=[f"Decision: {data.get('decision', 'terminate')}"],
+            model_used=state.phase_models.get("tot_backtrack", "unknown"),
+        ))
+
+    # ═══════════════════════════════════════════════════════════════════
+    # v2.2 NEW METHODS: Program-of-Thoughts (PoT)
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def _phase_pot_generate(self, state: PipelineState):
+        self._log("PoT", "Generating executable code...", state)
+        raw, _ = await self._call_llm_cached(
+            role="pot_generate",
+            system_prompt=phases.POT_GENERATE_SYSTEM,
+            user_prompt=phases.pot_generate_prompt(state), state=state)
+        data = extract_json(raw)
+        state.pot_state["code"] = data.get("code", "")
+        state.pot_state["explanation"] = data.get("explanation", "")
+        state.pot_state["expected_output_type"] = data.get("expected_output_type", "")
+
+    async def _phase_pot_execute(self, state: PipelineState):
+        self._log("PoT", "Executing generated code...", state)
+        code = state.pot_state.get("code", "")
+        if not code:
+            state.errors.append("PoT: No code to execute.")
+            return
+        # Simulated execution via LLM (sandbox not available)
+        raw, _ = await self._call_llm_cached(
+            role="pot_execute",
+            system_prompt=phases.POT_EXECUTE_SYSTEM,
+            user_prompt=phases.pot_execute_prompt(state), state=state)
+        data = extract_json(raw)
+        state.pot_state["execution_output"] = data.get("output", "")
+        state.pot_state["execution_success"] = data.get("success", False)
+        state.pot_state["execution_error"] = data.get("error", "")
+        state.pot_state["intermediate_steps"] = data.get("intermediate_steps", [])
+
+    async def _phase_pot_interpret(self, state: PipelineState):
+        self._log("PoT", "Interpreting execution results...", state)
+        raw, _ = await self._call_llm_cached(
+            role="pot_interpret",
+            system_prompt=phases.POT_INTERPRET_SYSTEM,
+            user_prompt=phases.pot_interpret_prompt(state), state=state)
+        data = extract_json(raw)
+        state.pot_state["interpretation"] = data.get("interpretation", "")
+        state.pot_state["computed_answer"] = data.get("answer", "")
+        state.pot_state["caveats"] = data.get("caveats", [])
+        # Feed computed answer into candidates for synthesis
+        state.candidates.append(SolutionCandidate(
+            perspective=PerspectiveType.CONSTRUCTIVE,
+            content=state.pot_state.get("computed_answer", ""),
+            key_insights=state.pot_state.get("caveats", []),
+            model_used=state.phase_models.get("pot_interpret", "unknown"),
+        ))
+
+    # ═══════════════════════════════════════════════════════════════════
+    # v2.2 NEW METHODS: Self-Discover
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def _phase_sd_select(self, state: PipelineState):
+        self._log("SELF-DISCOVER", "Selecting reasoning modules...", state)
+        raw, _ = await self._call_llm_cached(
+            role="sd_select",
+            system_prompt=phases.SD_SELECT_SYSTEM,
+            user_prompt=phases.sd_select_prompt(state), state=state)
+        data = extract_json(raw)
+        state.self_discover_state["selected_modules"] = data.get("selected_modules", [])
+        state.self_discover_state["composition_strategy"] = data.get("composition_strategy", "")
+
+    async def _phase_sd_adapt(self, state: PipelineState):
+        self._log("SELF-DISCOVER", "Adapting modules to problem...", state)
+        raw, _ = await self._call_llm_cached(
+            role="sd_adapt",
+            system_prompt=phases.SD_ADAPT_SYSTEM,
+            user_prompt=phases.sd_adapt_prompt(state), state=state)
+        data = extract_json(raw)
+        state.self_discover_state["adapted_modules"] = data.get("adapted_modules", [])
+
+    async def _phase_sd_implement(self, state: PipelineState):
+        self._log("SELF-DISCOVER", "Implementing adapted reasoning pipeline...", state)
+        raw, _ = await self._call_llm_cached(
+            role="sd_implement",
+            system_prompt=phases.SD_IMPLEMENT_SYSTEM,
+            user_prompt=phases.sd_implement_prompt(state), state=state)
+        data = extract_json(raw)
+        state.self_discover_state["module_outputs"] = data.get("module_outputs", [])
+        state.self_discover_state["final_answer"] = data.get("final_answer", "")
+        state.self_discover_state["module_attribution"] = data.get("module_attribution", {})
+        # Feed final answer into candidates for synthesis
+        state.candidates.append(SolutionCandidate(
+            perspective=PerspectiveType.CONSTRUCTIVE,
+            content=state.self_discover_state.get("final_answer", ""),
+            key_insights=[m.get("output", "") for m in state.self_discover_state.get("module_outputs", [])],
+            model_used=state.phase_models.get("sd_implement", "unknown"),
+        ))
+
+    # ═══════════════════════════════════════════════════════════════════
+    # v2.2 POST-SYNTHESIS ENHANCEMENT: Cross-Model Verification
+    # ═══════════════════════════════════════════════════════════════════
+
+    async def _phase_post_synthesis_verify(self, state: PipelineState) -> None:
+        """Optional cross-model verification of the final synthesis."""
+        if not state.final_solution:
+            return
+        synthesis_text = state.final_solution.core_solution
+        if not synthesis_text:
+            return
+        self._log("POST-SYNTHESIS", "Running cross-model verification...", state)
+        try:
+            raw, _ = await self._call_llm_cached(
+                role="post_synthesis_verify",
+                system_prompt=phases.POST_SYNTHESIS_VERIFY_SYSTEM,
+                user_prompt=phases.post_synthesis_verify_prompt(synthesis_text, state), state=state)
+            data = extract_json(raw)
+            state.final_solution.verification_audit = {
+                "verification_questions": data.get("verification_questions", []),
+                "evaluation": data.get("evaluation", []),
+                "recommendations": data.get("recommendations", []),
+            }
+        except (ParseError, Exception) as e:
+            self._log("POST-SYNTHESIS", f"Verification failed: {e}", state)
+            state.errors.append(f"Post-synthesis verification error: {e}")

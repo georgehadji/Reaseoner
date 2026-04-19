@@ -39,6 +39,9 @@ class TaggedMemory:
 
     def add(self, tag: str, entry: dict[str, Any]) -> None:
         """Append an entry to a tag and persist to disk."""
+        import re
+        if not tag or not re.match(r'^[a-zA-Z0-9_-]+$', tag):
+            raise ValueError(f"Invalid tag name: {tag!r}")
         self._store[tag].append(entry)
         file_path = self.base_dir / f"{tag}.jsonl"
         with file_path.open("a", encoding="utf-8") as fh:

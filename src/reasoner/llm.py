@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import threading
 from abc import ABC, abstractmethod
 from typing import Any
@@ -139,7 +140,7 @@ class BaseLLMProvider(ABC):
         temperature: float = 0.7,
     ) -> str:
         last_error: Exception | None = None
-        for attempt in range(self.max_retries):
+        for attempt in range(self.max_retries + 1):
             try:
                 return await self.complete(
                     system_prompt, user_prompt, max_tokens, temperature
@@ -149,7 +150,8 @@ class BaseLLMProvider(ABC):
                 # Don't retry non-retryable errors
                 if not is_retryable(exc):
                     raise
-                await asyncio.sleep(2 ** attempt)
+                if attempt < self.max_retries:
+                    await asyncio.sleep(min(2 ** attempt, 4) + random.uniform(0, 0.5))
         raise LLMError(
             f"{self.__class__.__name__}({self.model}) failed "
             f"after {self.max_retries} retries: {last_error}"
@@ -245,13 +247,14 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         # DeepSeek
         'deepseek-v3', 'deepseek-r1', 'deepseek-chat', 'deepseek-coder',
         # Qwen
-        'qwen3-max', 'qwen3-plus', 'qwen3-turbo', 'qwen2.5', 'qwen-max',
+        'qwen3-max', 'qwen3-plus', 'qwen3-turbo', 'qwen3.5-flash', 'qwen3.5-9b',
+        'qwen3.6-plus', 'qwen2.5', 'qwen-max',
         # Kimi
         'kimi-k2', 'kimi-k2-5', 'kimi-plus',
         # GLM/ZhipuAI
         'glm-5', 'glm-4-plus', 'glm-4-air', 'glm-4',
         # MiniMax
-        'minimax-01', 'minimax-text',
+        'minimax-01', 'minimax-text', 'minimax-m2.5', 'minimax-m2.5-free', 'minimax-m2.7',
         # Mistral
         'mistral-large-latest', 'mistral-medium', 'mistral-small', 'codestral',
         # Google Gemini
@@ -260,6 +263,8 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         'grok-4', 'grok-3', 'grok-3-mini', 'grok-beta',
         # Perplexity (search-grounded, temperature has limited effect)
         'sonar-pro', 'sonar', 'sonar-deep-research',
+        # Xiaomi
+        'mimo-v2-pro', 'mimo-v2-flash', 'mimo-v2-omni',
     })
 
     async def complete(
@@ -407,7 +412,7 @@ class OpenRouterProvider(OpenAICompatibleProvider):
 # Whitelist of supported models.  Everything except Ollama routes through OpenRouter.
 _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     # Anthropic
-    "claude-opus":      {"model": "anthropic/claude-opus-4.7"},
+    "claude-opus":      {"model": "qwen/qwen3.6-plus"},
     MODEL_CLAUDE_SONNET: {"model": "anthropic/claude-sonnet-4.6"},
     "claude-haiku":     {"model": "anthropic/claude-haiku-4.5"},
     # OpenAI
@@ -443,9 +448,12 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "deepseek-r1":      {"model": "deepseek/deepseek-r1-0528"},
     # Qwen
     "qwen3-max":        {"model": "qwen/qwen3.6-plus"},
+    "qwen3.6-plus":     {"model": "qwen/qwen3.6-plus"},
     "qwen3-plus":       {"model": "qwen/qwen3.5-plus-02-15"},
     "qwen3-turbo":      {"model": "qwen/qwen-turbo"},
-    "qwen3-coder":      {"model": "qwen/qwen-coder-plus"},
+    "qwen3-coder":      {"model": "qwen/qwen3-coder-plus"},
+    "qwen3.5-flash":    {"model": "qwen/qwen3.5-flash-02-23"},
+    "qwen3.5-9b":       {"model": "qwen/qwen3.5-9b"},
     # Kimi
     "kimi-k2":          {"model": "moonshotai/kimi-k2"},
     "kimi-k2-5":        {"model": "moonshotai/kimi-k2.5"},
@@ -470,8 +478,9 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "mimo-v2-flash":  {"model": "xiaomi/mimo-v2-flash"},
     # MiniMax
     "minimax-m2":       {"model": "minimax/minimax-01"},
-    "minimax-m2-5":     {"model": "minimax/minimax-m2.5"},
-    "minimax-m2-7":     {"model": "minimax/minimax-m2.7"},
+    "minimax-m2.5":     {"model": "minimax/minimax-m2.5"},
+    "minimax-m2.5-free": {"model": "minimax/minimax-m2.5:free"},
+    "minimax-m2.7":     {"model": "minimax/minimax-m2.7"},
     # Ollama (local)
     "ollama-llama3":    {"cls": "compat", "model": "llama3",    "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
     "ollama-llama3.1":  {"cls": "compat", "model": "llama3.1",  "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},

@@ -8,6 +8,7 @@ Supports aggregate reconstruction and temporal queries.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import asyncio
 from pathlib import Path
@@ -16,6 +17,8 @@ from datetime import datetime
 from dataclasses import asdict
 
 from reasoner.core.events.domain_events import DomainEvent, EventType
+
+logger = logging.getLogger(__name__)
 
 
 class EventStore:
@@ -156,12 +159,15 @@ class EventStore:
 
                 conn.commit()
             except sqlite3.Error as e:
+                conn.rollback()
                 logger.error(f"Database error saving events: {e}")
                 raise
             except json.JSONDecodeError as e:
+                conn.rollback()
                 logger.error(f"Failed to serialize event payload: {e}")
                 raise
             except Exception as e:
+                conn.rollback()
                 logger.error(f"Unexpected error saving events: {e}")
                 raise
     
@@ -241,8 +247,6 @@ class EventStore:
             if status:
                 updates.append("status = ?")
                 values.append(status)
-        
-        values.append(event.aggregate_id)
         
         conn.execute(f"""
             INSERT INTO aggregates 
@@ -462,12 +466,15 @@ class EventStore:
 
                 conn.commit()
             except sqlite3.Error as e:
+                conn.rollback()
                 logger.error(f"Database error saving snapshot for {aggregate_id}: {e}")
                 raise
             except (TypeError, ValueError) as e:
+                conn.rollback()
                 logger.error(f"Failed to serialize state for {aggregate_id}: {e}")
                 raise
             except Exception as e:
+                conn.rollback()
                 logger.error(f"Unexpected error saving snapshot for {aggregate_id}: {e}")
                 raise
     
@@ -580,9 +587,11 @@ class EventStore:
                 conn.commit()
                 logger.info(f"Aggregate {aggregate_id} and all related data deleted")
             except sqlite3.Error as e:
+                conn.rollback()
                 logger.error(f"Database error deleting aggregate {aggregate_id}: {e}")
                 raise
             except Exception as e:
+                conn.rollback()
                 logger.error(f"Unexpected error deleting aggregate {aggregate_id}: {e}")
                 raise
     

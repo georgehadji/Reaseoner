@@ -95,7 +95,7 @@ class AuthManager:
         """Hash API key using SHA-256."""
         return hashlib.sha256(key.encode()).hexdigest()
 
-    def generate_key(
+    async def generate_key(
         self,
         name: str,
         expires_in_days: Optional[int] = None,
@@ -139,7 +139,8 @@ class AuthManager:
             created_by=created_by,
         )
 
-        self._keys[key_hash] = api_key
+        async with self._lock:
+            self._keys[key_hash] = api_key
         return raw_key
 
     async def authenticate(self, api_key: Optional[str]) -> Optional[APIKey]:
@@ -155,7 +156,7 @@ class AuthManager:
         Raises:
             AuthenticationError: If key is invalid/expired
         """
-        if not api_key:
+        if not api_key or not api_key.strip():
             raise AuthenticationError("Missing API key")
 
         key_hash = self._hash_key(api_key)

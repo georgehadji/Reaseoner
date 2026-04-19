@@ -90,12 +90,9 @@ class InputSanitizer:
         if original != sanitized:
             warnings.append("Removed control characters")
 
-        # Check length
-        if len(sanitized) > self.max_length:
-            sanitized = sanitized[:self.max_length]
-            warnings.append(f"Truncated to {self.max_length} characters")
-
-        # Check for prompt injection patterns
+        # Check for prompt injection patterns BEFORE truncation
+        # so that malicious payloads cannot evade detection by exceeding
+        # the length limit and getting silently truncated.
         if self.block_injection:
             injection_match = self._injection_regex.search(sanitized)
             if injection_match:
@@ -106,6 +103,11 @@ class InputSanitizer:
                     warnings=["Potential prompt injection detected"],
                     blocked=True,
                 )
+
+        # Check length
+        if len(sanitized) > self.max_length:
+            sanitized = sanitized[:self.max_length]
+            warnings.append(f"Truncated to {self.max_length} characters")
 
         # HTML escape if not allowed
         if not self.allow_html:

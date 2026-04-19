@@ -1,7 +1,7 @@
 'use client';
 
 import { RenderedPhase } from '@/components/chat/ChatFeed';
-import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
+import { TypewriterMarkdown } from '@/components/chat/TypewriterMarkdown';
 import { PhaseCard } from './PhaseCard';
 import { SynthesisCard } from './SynthesisCard';
 import { ClassificationCard } from './ClassificationCard';
@@ -36,6 +36,21 @@ function getModels(data: unknown): string[] | null {
   return m.filter((x): x is string => typeof x === 'string');
 }
 
+function getSubagents(data: unknown): Array<{ name: string; model: string; tokens_in?: number; tokens_out?: number; duration_ms?: number; error?: string | null }> | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const s = d.subagents;
+  if (!Array.isArray(s)) return null;
+  return s.filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null).map((x) => ({
+    name: String(x.name || 'unknown'),
+    model: String(x.model || 'unknown'),
+    tokens_in: typeof x.tokens_in === 'number' ? x.tokens_in : undefined,
+    tokens_out: typeof x.tokens_out === 'number' ? x.tokens_out : undefined,
+    duration_ms: typeof x.duration_ms === 'number' ? x.duration_ms : undefined,
+    error: x.error != null ? String(x.error) : undefined,
+  }));
+}
+
 function getDuration(data: unknown): number | undefined {
   if (!data || typeof data !== 'object') return undefined;
   const d = data as Record<string, unknown>;
@@ -47,15 +62,14 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
+  const subagents = getSubagents(data);
   const duration = getDuration(data);
 
   // Direct Response / Web Search: render inline without a phase card
   if (name === 'Direct Response' || name === 'Web Search') {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <div className="markdown-body text-[17px] leading-relaxed">
-        <MarkdownRenderer>{md}</MarkdownRenderer>
-      </div>
+      <TypewriterMarkdown text={md} wordsPerSecond={10} />
     );
   }
 
@@ -67,7 +81,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     ('task_type' in data || 'rationale' in data)
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
         <ClassificationCard data={data} />
       </PhaseCard>
     );
@@ -83,7 +97,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     scoresArray.length > 0
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
         <CritiqueCard data={data} />
       </PhaseCard>
     );
@@ -97,10 +111,8 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
-        <div className="markdown-body text-[17px] leading-relaxed">
-          <MarkdownRenderer>{md}</MarkdownRenderer>
-        </div>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+        <TypewriterMarkdown text={md} wordsPerSecond={10} />
       </PhaseCard>
     );
   }
@@ -113,10 +125,8 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
-        <div className="markdown-body text-[17px] leading-relaxed">
-          <MarkdownRenderer>{md}</MarkdownRenderer>
-        </div>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+        <TypewriterMarkdown text={md} wordsPerSecond={10} />
       </PhaseCard>
     );
   }
@@ -130,10 +140,8 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
-        <div className="markdown-body text-[17px] leading-relaxed">
-          <MarkdownRenderer>{md}</MarkdownRenderer>
-        </div>
+      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+        <TypewriterMarkdown text={md} wordsPerSecond={10} />
       </SynthesisCard>
     );
   }
@@ -141,10 +149,8 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   // Fallback to markdown for everything else
   const md = buildMarkdownFromPhase(index, phaseNum, name, data);
   return (
-    <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} duration={duration}>
-      <div className="markdown-body text-[17px] leading-relaxed">
-        <MarkdownRenderer>{md}</MarkdownRenderer>
-      </div>
+    <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <TypewriterMarkdown text={md} wordsPerSecond={10} />
     </PhaseCard>
   );
 }

@@ -9,14 +9,15 @@ export function useServerStatus() {
     let mounted = true;
 
     async function check() {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
         const resp = await fetch('/api/presets', { signal: controller.signal });
-        clearTimeout(timeoutId);
         if (mounted) setOnline(resp.ok);
       } catch {
         if (mounted) setOnline(false);
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 

@@ -37,7 +37,11 @@ def _cache_key(req: "RunRequest") -> str:
         "top_k":   req.top_k,
         "routing": req.routing,
         "force_pipeline": req.force_pipeline,
-        "v": 3,
+        "sequential": req.sequential,
+        "enhance_prompt": req.enhance_prompt,
+        "source_type": req.source_type,
+        "domain": req.domain,
+        "v": 4,
     }, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 

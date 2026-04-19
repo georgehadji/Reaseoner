@@ -106,6 +106,20 @@ def _wrap_external_content(text: str) -> str:
     return f"<<<EXTERNAL_CONTENT>>>\n{text}\n<<<END_EXTERNAL_CONTENT>>>"
 
 # ─────────────────────────────────────────────────────────────────────
+# QUERY DISAMBIGUATION (Optional Pre-Phase)
+# ─────────────────────────────────────────────────────────────────────
+DISAMBIGUATION_SYSTEM = "You are an analytical assistant. Detect whether a problem is ambiguous and could be interpreted in multiple ways. Output ONLY valid JSON."
+
+def disambiguation_prompt(problem: str, task_type: str | None) -> str:
+    task_hint = f"Task type: {task_type}. " if task_type else ""
+    return (
+        f'Analyze whether the following problem is ambiguous or could be interpreted in multiple ways. '
+        f'{task_hint}If ambiguous, explain why and provide a clearer rewritten version. If clear, state that it is unambiguous.\n\n'
+        f'Problem: {_wrap_user_input(problem)}\n\n'
+        f'Output JSON: {{"was_ambiguous": true/false, "rewritten_query": "<clearest version>", "reasoning": "<why>"}}'
+    )
+
+# ─────────────────────────────────────────────────────────────────────
 # PROMPT ENHANCEMENT (Optional Pre-Phase)
 # ─────────────────────────────────────────────────────────────────────
 PROMPT_ENHANCEMENT_SYSTEM = "You are an analytical assistant. Rewrite the user's problem to make it clearer, more specific, and easier for an AI reasoning system to solve. Preserve the original intent, tone, and language. Output ONLY valid JSON."
@@ -153,10 +167,10 @@ Rules: Max 5 steps. Surface assumptions with rationale. VERIFIED assumptions MUS
 # PERSPECTIVE ANALYSIS (Multi-Perspective, Iterative)
 # TOKEN OPTIMIZATION: Compressed perspective systems (-35%)
 PERSPECTIVE_SYSTEMS = {
-    "constructive": "Build strongest solution. JSON only.",
-    "destructive": "Find every flaw in the proposed approach or subject matter. Focus exclusively on substantive weaknesses, risks, and incorrect assumptions. Do NOT criticize the prompt's language, grammar, formatting, or mixed languages. JSON only.",
-    "systemic": "Find 2nd/3rd-order effects. JSON only.",
-    "minimalist": "Apply Occam's Razor. Simplest 80% solution. JSON only.",
+    "constructive": "Respond in the same language as the user's problem. Build the strongest, most comprehensive solution. Analyze from first principles, cite historical precedents where relevant, and address 2nd-order consequences. Minimum 4 paragraphs. JSON only.",
+    "destructive": "Respond in the same language as the user's problem. Find every flaw in the proposed approach or subject matter. Focus exclusively on substantive weaknesses, risks, and incorrect assumptions. Do NOT criticize the prompt's language, grammar, formatting, or mixed languages. JSON only.",
+    "systemic": "Respond in the same language as the user's problem. Find 2nd/3rd-order effects. JSON only.",
+    "minimalist": "Respond in the same language as the user's problem. Apply Occam's Razor. Simplest 80% solution. JSON only.",
 }
 def perspective_prompt(state: PipelineState, perspective: str) -> str:
     # TOKEN OPTIMIZATION: Minimal context, compact format
@@ -167,7 +181,7 @@ def perspective_prompt(state: PipelineState, perspective: str) -> str:
         context["memory"] = state.reflexion_memory[:TRUNCATION.MEMORY]  # Top 2 only
     followup = _followup_context(state)
     
-    return f'{get_language_instruction(state)}\n\nContext: {json.dumps(context)}{followup}\n\nAnalyze from {perspective} perspective.\n\nJSON: {{"perspective": "{perspective}", "core_analysis": "<analysis>", "key_insights": ["<insight>"]}}'
+    return f'{get_language_instruction(state)}\n\nContext: {json.dumps(context)}{followup}\n\nAnalyze from {perspective} perspective.\n\nYou MUST return EXACTLY this JSON structure with no additional keys. Put all analysis inside "core_analysis" as a single string (3-6 paragraphs). Label factual claims inline with [VERIFIED], [HYPOTHESIS], or [UNKNOWN].\n\nJSON: {{"perspective": "{perspective}", "core_analysis": "<your detailed analysis with inline epistemic labels>", "key_insights": ["<insight 1>", "<insight 2>", "<insight 3>"]}}'
 
 # CRITIQUE (Multi-Perspective, Iterative)
 CRITIQUE_SYSTEM = "You are an analytical assistant. Score solutions honestly. Output ONLY valid JSON."
@@ -223,7 +237,12 @@ ACTION BLUEPRINT RULES:
 META AUDIT REQUIREMENTS:
 - Only include meta_audit if you have genuine audit data from a real review process
 - If no real audit data exists, set every meta_audit field to an empty string
-- Do NOT invent dates, scores, or review statuses"""
+- Do NOT invent dates, scores, or review statuses
+
+CIRCUIT BREAKER:
+- If you could not find reliable sources or the context is contaminated, say so explicitly.
+- Do NOT synthesize confident answers from UNVERIFIED or missing data.
+- Flag uncertainty honestly rather than hallucinating certainty."""
 
 def synthesis_prompt(state: PipelineState) -> str:
     # Generic prompt that works for all methods by summarizing their final state
@@ -263,8 +282,9 @@ def synthesis_prompt(state: PipelineState) -> str:
     # SECURITY: Use a generic synthesis instruction to avoid revealing the reasoning method
     method_hint = "Synthesize the best possible solution."
     followup = _followup_context(state)
+    quality_note = f"\nCONTEXT QUALITY: {state.context_quality}\n" if state.context_quality and state.context_quality != "unknown" else ""
 
-    return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
+    return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}{quality_note}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
 
 # ─────────────────────────────────────────────────────────────────────
 # METHOD: DEBATE
@@ -905,4 +925,470 @@ def delphi_dissent_prompt(state: "PipelineState") -> str:
         f'"evidence_for_dissent": ["<evidence>"], '
         f'"conditions_for_revision": "<what would change your mind>", '
         f'"minority_report": "<1-2 sentence professional dissent statement>"}}'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 NEW METHODS: Chain-of-Verification (CoVe)
+# ═══════════════════════════════════════════════════════════════════════
+
+COVE_DRAFT_SYSTEM = (
+    "You are a knowledgeable analyst. Draft a comprehensive initial answer to the problem. "
+    "Break your answer into explicit, verifiable claims. " + JSON_ONLY_FOOTER
+)
+
+
+def cove_draft_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Draft an initial answer. Break it into explicit claims that can be independently verified. '
+        f'For each claim, assign a confidence score (0.0-1.0).\n\n'
+        f'Output JSON: {{"draft_answer": "<full answer text>", '
+        f'"claims": [{{"claim": "<claim text>", "confidence": 0.8}}]}}'
+    )
+
+
+COVE_VERIFY_SYSTEM = (
+    "You are a skeptical fact-checker. Given a draft answer with claims, generate specific, "
+    "independent verification questions for EACH claim. Do not trust the original answer. " + JSON_ONLY_FOOTER
+)
+
+
+def cove_verify_prompt(state: PipelineState) -> str:
+    draft = state.cove_state.get("draft_answer", "")
+    claims = state.cove_state.get("claims", [])
+    claims_json = json.dumps(claims, indent=2) if claims else "[]"
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Draft Answer:\n{_wrap_external_content(draft)}\n\n'
+        f'Claims to verify:\n{claims_json}\n\n'
+        f'For EACH claim above, generate 1-2 specific verification questions that would '
+        f'independently test whether the claim is true. The questions must be answerable '
+        f'without referring to the draft answer.\n\n'
+        f'Output JSON: {{"verification_questions": [{{'
+        f'"question": "<verification question>", '
+        f'"target_claim": "<claim being tested>", '
+        f'"expected_evidence_type": "<fact|statistic|authority|logic>"'
+        f'}}]}}'
+    )
+
+
+COVE_ANSWER_SYSTEM = (
+    "You are an independent researcher. Answer the verification questions based on your own "
+    "knowledge. Do not refer to the draft answer. Be explicit about whether evidence supports "
+    "or contradicts each claim. " + JSON_ONLY_FOOTER
+)
+
+
+def cove_answer_prompt(state: PipelineState) -> str:
+    questions = state.cove_state.get("verification_questions", [])
+    questions_json = json.dumps(questions, indent=2) if questions else "[]"
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Answer these verification questions INDEPENDENTLY, using your own knowledge. '
+        f'Do not refer to any draft answer. For each question, explicitly state whether '
+        f'the evidence supports, contradicts, or is insufficient to evaluate the target claim.\n\n'
+        f'Questions:\n{questions_json}\n\n'
+        f'Output JSON: {{"answers": [{{'
+        f'"question": "<question text>", '
+        f'"answer": "<your independent answer>", '
+        f'"verdict": "<supports|contradicts|insufficient>", '
+        f'"confidence": 0.8, '
+        f'"reasoning": "<why>"'
+        f'}}]}}'
+    )
+
+
+COVE_REVISE_SYSTEM = (
+    "You are a careful editor. Given a draft answer and independent verification results, "
+    "revise the answer to correct errors, add caveats, and improve accuracy. " + JSON_ONLY_FOOTER
+)
+
+
+def cove_revise_prompt(state: PipelineState) -> str:
+    draft = state.cove_state.get("draft_answer", "")
+    answers = state.cove_state.get("verification_answers", [])
+    answers_json = json.dumps(answers, indent=2) if answers else "[]"
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Draft Answer:\n{_wrap_external_content(draft)}\n\n'
+        f'Independent Verification Results:\n{_wrap_external_content(answers_json)}\n\n'
+        f'Revise the draft answer based on the verification results. '
+        f'Correct any contradicted claims, add caveats for insufficient evidence, '
+        f'and strengthen supported claims. Document what changed and why.\n\n'
+        f'Output JSON: {{"revised_answer": "<revised full answer>", '
+        f'"changes_made": ["<change description>"], '
+        f'"remaining_uncertainties": ["<uncertainty>"], '
+        f'"upgraded_claims": ["<claim that was strengthened>"], '
+        f'"retracted_claims": ["<claim that was removed or corrected>"]}}'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 NEW METHODS: Skeleton-of-Thought (SoT)
+# ═══════════════════════════════════════════════════════════════════════
+
+SOT_SKELETON_SYSTEM = (
+    "You are an expert problem decomposer. Generate a skeleton outline of sub-problems "
+    "that collectively solve the main problem. Each sub-problem should be independent "
+    "and solvable in parallel. " + JSON_ONLY_FOOTER
+)
+
+
+def sot_skeleton_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Decompose this problem into 3-5 sub-problems that can be solved independently '
+        f'and in parallel. Each sub-problem should have a clear scope, inputs, and expected output. '
+        f'The sub-problems should collectively cover all aspects of the main problem.\n\n'
+        f'Output JSON: {{"sub_problems": [{{'
+        f'"id": "1", '
+        f'"description": "<sub-problem>", '
+        f'"inputs": ["<input>"], '
+        f'"expected_output": "<output description>", '
+        f'"rationale": "<why this decomposition>"'
+        f'}}]}}'
+    )
+
+
+SOT_SOLVE_SYSTEM = (
+    "You are a specialist solver. Solve the assigned sub-problem thoroughly and concisely. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def sot_solve_prompt(state: PipelineState, sub_problem: dict) -> str:
+    skeleton = state.sot_state.get("sub_problems", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Full Skeleton: {json.dumps(skeleton, indent=2)}\n\n'
+        f'YOUR ASSIGNED SUB-PROBLEM:\n'
+        f'ID: {sub_problem.get("id", "?")}\n'
+        f'Description: {sub_problem.get("description", "")}\n'
+        f'Inputs: {json.dumps(sub_problem.get("inputs", []))}\n'
+        f'Expected Output: {sub_problem.get("expected_output", "")}\n\n'
+        f'Solve this sub-problem thoroughly. Your solution will be combined with others '
+        f'to form the complete answer.\n\n'
+        f'Output JSON: {{"sub_problem_id": "{sub_problem.get("id", "")}", '
+        f'"solution": "<detailed solution>", '
+        f'"key_insights": ["<insight>"], '
+        f'"assumptions": ["<assumption>"]}}'
+    )
+
+
+SOT_ASSEMBLE_SYSTEM = (
+    "You are a master synthesizer. Combine multiple sub-problem solutions into a coherent, "
+    "unified answer. Ensure smooth transitions and resolve any contradictions. " + JSON_ONLY_FOOTER
+)
+
+
+def sot_assemble_prompt(state: PipelineState) -> str:
+    solutions = state.sot_state.get("solutions", [])
+    solutions_json = json.dumps(solutions, indent=2) if solutions else "[]"
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Sub-problem Solutions:\n{_wrap_external_content(solutions_json)}\n\n'
+        f'Assemble these sub-problem solutions into a single, coherent, comprehensive answer. '
+        f'Ensure smooth transitions between sections, resolve any contradictions, '
+        f'and maintain logical flow. The assembled answer should stand alone.\n\n'
+        f'Output JSON: {{"assembled_answer": "<full unified answer>", '
+        f'"transitions": ["<how sections connect>"], '
+        f'"resolved_conflicts": ["<conflict and resolution>"], '
+        f'"meta_observation": "<insight about the whole>"}}'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 NEW METHODS: Tree-of-Thoughts (ToT)
+# ═══════════════════════════════════════════════════════════════════════
+
+TOT_DECOMPOSE_SYSTEM = (
+    "You are a strategic planner. Decompose the problem into sequential decision points. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def tot_decompose_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Identify the key sequential decision points in this problem. '
+        f'Each decision point should have 2-3 possible candidate actions. '
+        f'Limit to at most 3 decision points to control token cost.\n\n'
+        f'Output JSON: {{"decision_points": [{{'
+        f'"id": "dp1", '
+        f'"description": "<what decision must be made>", '
+        f'"candidates": [{{"action": "<action>", "rationale": "<why>"}}]'
+        f'}}]}}'
+    )
+
+
+TOT_GENERATE_SYSTEM = (
+    "You are a creative strategist. Generate diverse candidate next-steps for the given decision point. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def tot_generate_prompt(state: PipelineState, decision_point: dict) -> str:
+    path_so_far = state.tot_state.get("current_path", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Decisions made so far: {json.dumps(path_so_far, indent=2)}\n\n'
+        f'Current Decision Point: {decision_point.get("description", "")}\n\n'
+        f'Generate 2-3 diverse, high-quality candidate actions for this decision point. '
+        f'Each candidate should represent a genuinely different strategic direction.\n\n'
+        f'Output JSON: {{"candidates": [{{'
+        f'"candidate_id": "c1", '
+        f'"action": "<action description>", '
+        f'"expected_outcome": "<what happens>", '
+        f'"risks": ["<risk>"], '
+        f'"prerequisites": ["<prerequisite>"]'
+        f'}}]}}'
+    )
+
+
+TOT_EVALUATE_SYSTEM = (
+    "You are a critical evaluator. Score each candidate action on multiple dimensions. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def tot_evaluate_prompt(state: PipelineState, candidates: list) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Candidate Actions:\n{json.dumps(candidates, indent=2)}\n\n'
+        f'Evaluate EACH candidate on a scale of 0-10 for: '
+        f'feasibility, expected_value, risk_level (lower is better), and alignment_with_goal. '
+        f'Recommend the best candidate and explain why.\n\n'
+        f'Output JSON: {{"evaluations": [{{'
+        f'"candidate_id": "c1", '
+        f'"feasibility": 8, '
+        f'"expected_value": 7, '
+        f'"risk_level": 4, '
+        f'"alignment_with_goal": 9, '
+        f'"score": 7.5, '
+        f'"verdict": "<proceed|reject|caution>"'
+        f'}}], '
+        f'"best_candidate": "<candidate_id>", '
+        f'"recommendation": "<explanation>"}}'
+    )
+
+
+TOT_BACKTRACK_SYSTEM = (
+    "You are a strategic analyst. Given evaluation results, decide whether to proceed, "
+    "backtrack, or terminate. " + JSON_ONLY_FOOTER
+)
+
+
+def tot_backtrack_prompt(state: PipelineState) -> str:
+    path = state.tot_state.get("current_path", [])
+    evaluations = state.tot_state.get("evaluations", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Current path: {json.dumps(path, indent=2)}\n\n'
+        f'Evaluations: {json.dumps(evaluations, indent=2)}\n\n'
+        f'Based on the evaluations, decide: (1) CONTINUE with the best candidate, '
+        f'(2) BACKTRACK to a previous decision point and try a different branch, or '
+        f'(3) TERMINATE with the current path as the final solution. '
+        f'Provide reasoning.\n\n'
+        f'Output JSON: {{"decision": "<continue|backtrack|terminate>", '
+        f'"target_decision_point": "<if backtracking, which dp>", '
+        f'"reasoning": "<why>", '
+        f'"final_path": ["<action>"], '
+        f'"confidence": 0.8}}'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 NEW METHODS: Program-of-Thoughts (PoT)
+# ═══════════════════════════════════════════════════════════════════════
+
+POT_GENERATE_SYSTEM = (
+    "You are an expert programmer. Generate Python code to solve the given quantitative problem. "
+    "The code should be self-contained, use only standard library, and include comments. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def pot_generate_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Write Python code to solve this problem computationally. '
+        f'The code must be self-contained, use only Python standard library, '
+        f'and handle edge cases. Include print statements for the final result. '
+        f'Also provide a brief explanation of the approach.\n\n'
+        f'Output JSON: {{"code": "<python code as string>", '
+        f'"explanation": "<approach explanation>", '
+        f'"expected_output_type": "<number|list|dict|boolean>"}}'
+    )
+
+
+POT_EXECUTE_SYSTEM = (
+    "You are a code execution engine. Simulate or describe the execution of the given Python code. "
+    "If actual execution is unavailable, trace through the code logically and produce the output. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def pot_execute_prompt(state: PipelineState) -> str:
+    code = state.pot_state.get("code", "")
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Execute the following Python code and return the exact output. '
+        f'If the code has errors, return the error message. '
+        f'Trace through the execution step by step if needed.\n\n'
+        f'Code:\n```python\n{code}\n```\n\n'
+        f'Output JSON: {{"output": "<execution output>", '
+        f'"success": true, '
+        f'"error": "<error message if any>", '
+        f'"intermediate_steps": ["<step result>"]}}'
+    )
+
+
+POT_INTERPRET_SYSTEM = (
+    "You are an analytical interpreter. Given code execution results, explain what they mean "
+    "in the context of the original problem. " + JSON_ONLY_FOOTER
+)
+
+
+def pot_interpret_prompt(state: PipelineState) -> str:
+    code = state.pot_state.get("code", "")
+    output = state.pot_state.get("execution_output", "")
+    error = state.pot_state.get("execution_error", "")
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Generated Code:\n```python\n{code}\n```\n\n'
+        f'Execution Output:\n{_wrap_external_content(output)}\n\n'
+        f'Error (if any): {_wrap_external_content(error)}\n\n'
+        f'Interpret the execution results in the context of the original problem. '
+        f'Explain what the output means, whether it fully answers the problem, '
+        f'and what limitations or caveats exist.\n\n'
+        f'Output JSON: {{"interpretation": "<explanation>", '
+        f'"answer": "<final answer to the problem>", '
+        f'"caveats": ["<caveat>"], '
+        f'"confidence": 0.9}}'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 NEW METHODS: Self-Discover
+# ═══════════════════════════════════════════════════════════════════════
+
+SD_SELECT_SYSTEM = (
+    "You are a meta-reasoning architect. Given a problem, select the reasoning modules "
+    "that are most appropriate from the available inventory. " + JSON_ONLY_FOOTER
+)
+
+
+def sd_select_prompt(state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Available reasoning modules:\n'
+        f'- decomposition: break problem into sub-problems\n'
+        f'- verification: fact-check claims\n'
+        f'- analogy: find cross-domain parallels\n'
+        f'- causal_analysis: identify cause-effect chains\n'
+        f'- counterfactual: explore what-if scenarios\n'
+        f'- abstraction: extract deep structure\n'
+        f'- constraint_satisfaction: respect hard limits\n'
+        f'- optimization: find best allocation\n\n'
+        f'Select 3-5 modules that are MOST relevant to this problem. '
+        f'Explain why each is needed and in what order they should be applied.\n\n'
+        f'Output JSON: {{"selected_modules": [{{'
+        f'"module": "<module_name>", '
+        f'"rationale": "<why needed>", '
+        f'"order": 1'
+        f'}}], '
+        f'"composition_strategy": "<how modules interact>"}}'
+    )
+
+
+SD_ADAPT_SYSTEM = (
+    "You are a prompt engineer. Adapt the selected reasoning modules into concrete prompts "
+    "and instructions for the current problem. " + JSON_ONLY_FOOTER
+)
+
+
+def sd_adapt_prompt(state: PipelineState) -> str:
+    modules = state.self_discover_state.get("selected_modules", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Selected Modules: {json.dumps(modules, indent=2)}\n\n'
+        f'Adapt each selected module into a concrete instruction or prompt '
+        f'specific to this problem. The adapted instructions should be actionable '
+        f'and clearly define inputs/outputs for each module.\n\n'
+        f'Output JSON: {{"adapted_modules": [{{'
+        f'"module": "<module_name>", '
+        f'"instruction": "<concrete instruction>", '
+        f'"input": "<what this module receives>", '
+        f'"output": "<what this module produces>"'
+        f'}}]}}'
+    )
+
+
+SD_IMPLEMENT_SYSTEM = (
+    "You are an execution engine. Execute the adapted reasoning modules in sequence "
+    "and synthesize their outputs into a final answer. " + JSON_ONLY_FOOTER
+)
+
+
+def sd_implement_prompt(state: PipelineState) -> str:
+    adapted = state.self_discover_state.get("adapted_modules", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Adapted Module Instructions: {json.dumps(adapted, indent=2)}\n\n'
+        f'Execute each module in sequence, passing outputs from one to the next. '
+        f'After all modules complete, synthesize their collective output into a '
+        f'coherent final answer. Document the contribution of each module.\n\n'
+        f'Output JSON: {{"module_outputs": [{{'
+        f'"module": "<name>", '
+        f'"output": "<result>"'
+        f'}}], '
+        f'"final_answer": "<synthesized answer>", '
+        f'"module_attribution": {{"<module>": "<contribution summary>"}}, '
+        f'"confidence": 0.85}}'
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 POST-SYNTHESIS ENHANCEMENT: Cross-Model Verification
+# ═══════════════════════════════════════════════════════════════════════
+
+POST_SYNTHESIS_VERIFY_SYSTEM = (
+    "You are an independent fact-checker. Given a synthesized answer, generate verification "
+    "questions and evaluate the answer's claims without referring to the original synthesis model. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def post_synthesis_verify_prompt(synthesis_text: str, state: PipelineState) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Synthesized Answer to Verify:\n{_wrap_external_content(synthesis_text)}\n\n'
+        f'Generate 3-5 verification questions for the key claims in this answer. '
+        f'Then evaluate each claim independently based on your own knowledge. '
+        f'Flag any claims that appear unsupported, contradictory, or overstated.\n\n'
+        f'Output JSON: {{"verification_questions": ["<question>"], '
+        f'"evaluation": [{{'
+        f'"claim": "<claim>", '
+        f'"verdict": "<verified|hypothesis|incorrect|uncertain>", '
+        f'"confidence": 0.8, '
+        f'"notes": "<evaluation notes>"'
+        f'}}], '
+        f'"recommendations": ["<suggested improvement>"]}}'
     )

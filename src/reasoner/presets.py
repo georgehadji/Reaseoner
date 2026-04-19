@@ -64,6 +64,17 @@ _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     "sd_implement",
     # Post-synthesis verification
     "post_synthesis_verify",
+    # PhaseSubAgent roles (v2.2 — per-subagent routing with fallbacks)
+    "subagent_synthesis_analysis",
+    "subagent_synthesis_writer",
+    "subagent_critique_logic",
+    "subagent_critique_evidence",
+    "subagent_critique_bias",
+    "subagent_critique_counter",
+    "subagent_enhancement",
+    "subagent_decomposition",
+    "subagent_search_query",
+    "subagent_search_eval",
 })
 
 
@@ -274,29 +285,29 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": "multi-perspective-premium",
         "name": "Multi-Perspective (Premium)",
-        "description": "Best available model per phase. Perplexity Sonar fact-checks candidates in Phase 3. GLM-5 and Claude Opus dual-check synthesis. Cross-ecosystem for maximum epistemic diversity.",
-        "primary_id": "claude-opus",
+        "description": "Best available model per phase. Perplexity Sonar fact-checks candidates in Phase 3. Qwen 3.6 Plus and GLM-5 dual-check synthesis. Cross-ecosystem for maximum epistemic diversity.",
+        "primary_id": "qwen3.6-plus",
         "routing": {
             "prompt_enhancement": "gemini-flash",
             "classification": "gemini-flash",
             "decomposition": "claude-sonnet",
             "constructive": "kimi-k2-5",
             "destructive": "deepseek-r1",
-            "systemic": "claude-opus",
+            "systemic": "qwen3.6-plus",
             "minimalist": "gemini-flash",
             "scoring": "sonar-pro",
-            "stress_testing": "claude-opus",
-            "synthesis": "claude-opus"
+            "stress_testing": "qwen3.6-plus",
+            "synthesis": "qwen3.6-plus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
             "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
-            "constructive": "claude-opus",
-            "destructive": "claude-opus",
+            "constructive": "qwen3-plus",
+            "destructive": "qwen3-plus",
             "systemic": "deepseek-r1",
             "minimalist": "deepseek-r1",
-            "scoring": "claude-opus",
+            "scoring": "qwen3-plus",
             "stress_testing": "deepseek-r1",
             "synthesis": "gpt-5"
         },
@@ -354,27 +365,27 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "gemini-flash",
             "decomposition": "claude-sonnet",
             "constructive": "gpt-5",
-            "destructive": "claude-opus",
+            "destructive": "qwen3.6-plus",
             "systemic": "deepseek-r1",
             "minimalist": "claude-sonnet",
             "scoring": "sonar-pro",
-            "stress_testing": "claude-opus",
+            "stress_testing": "qwen3.6-plus",
             "synthesis": "claude-sonnet"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
             "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
-            "constructive": "claude-opus",
+            "constructive": "qwen3-plus",
             "destructive": "deepseek-r1",
-            "systemic": "claude-opus",
+            "systemic": "qwen3-plus",
             "minimalist": "deepseek-r1",
-            "scoring": "claude-opus",
+            "scoring": "qwen3-plus",
             "stress_testing": "deepseek-r1",
-            "synthesis": "claude-opus"
+            "synthesis": "mimo-v2-pro"
         },
         "notes": [
-            "Model A (GPT-5), Model B (Claude Opus), systemic (DeepSeek) = 3 labs",
+            "Model A (GPT-5), Model B (Qwen 3.6 Plus), systemic (DeepSeek) = 3 labs",
             "Sonar Pro as independent judge with live web fact-checking",
         ],
     },
@@ -433,7 +444,7 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "claude-sonnet",
             "decomposition": "gemini-flash",
             "constructive": "claude-sonnet",
-            "destructive": "claude-opus",
+            "destructive": "qwen3-plus",
             "systemic": "claude-sonnet",
             "minimalist": "claude-sonnet",
             "scoring": "claude-sonnet",
@@ -559,7 +570,7 @@ _PRESET_CONFIGS: list[dict] = [
             "decomposition": "claude-sonnet",
             "constructive": "sonar-deep-research",
             "destructive": "deepseek-r1",
-            "systemic": "claude-opus",
+            "systemic": "qwen3.6-plus",
             "minimalist": "sonar",
             "scoring": "sonar-pro",
             "stress_testing": "grok-4",
@@ -570,7 +581,7 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "claude-sonnet",
             "decomposition": "gemini-flash",
             "constructive": "claude-sonnet",
-            "destructive": "claude-opus",
+            "destructive": "qwen3-plus",
             "systemic": "claude-sonnet",
             "minimalist": "claude-sonnet",
             "scoring": "claude-sonnet",
@@ -629,7 +640,7 @@ _PRESET_CONFIGS: list[dict] = [
             "decomposition": "claude-sonnet",
             "constructive": "kimi-k2-5",
             "destructive": "deepseek-r1",
-            "systemic": "claude-opus",
+            "systemic": "qwen3.6-plus",
             "minimalist": "mistral-large-3",
             "scoring": "sonar-pro",
             "stress_testing": "grok-4",
@@ -639,13 +650,13 @@ _PRESET_CONFIGS: list[dict] = [
             "prompt_enhancement": "claude-sonnet",
             "classification": "deepseek-r1",
             "decomposition": "gemini-flash",
-            "constructive": "claude-opus",
-            "destructive": "claude-opus",
+            "constructive": "qwen3-plus",
+            "destructive": "qwen3-plus",
             "systemic": "deepseek-r1",
-            "minimalist": "claude-opus",
-            "scoring": "claude-opus",
-            "stress_testing": "claude-opus",
-            "synthesis": "claude-opus"
+            "minimalist": "qwen3-plus",
+            "scoring": "qwen3-plus",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "mimo-v2-pro"
         },
         "notes": [
             "Phase 2: Moonshot + DeepSeek + Anthropic + Mistral — 4 different training lineages",
@@ -835,15 +846,15 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": "cove-premium",
         "name": "Chain-of-Verification (Premium)",
-        "description": "Structured fact-checking loop: draft → verify → answer → revise. Premium tier with Claude Opus draft, Sonar verification, and cross-lab revision.",
-        "primary_id": "claude-opus",
+        "description": "Structured fact-checking loop: draft → verify → answer → revise. Premium tier with Qwen 3.6 Plus draft, Sonar verification, and cross-lab revision.",
+        "primary_id": "qwen3.6-plus",
         "routing": {
             "prompt_enhancement": "gemini-flash",
-            "cove_draft": "claude-opus",
+            "cove_draft": "qwen3.6-plus",
             "cove_verify": "sonar-pro",
             "cove_answer": "deepseek-r1",
-            "cove_revise": "claude-opus",
-            "synthesis": "claude-opus"
+            "cove_revise": "qwen3.6-plus",
+            "synthesis": "qwen3.6-plus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet"
@@ -869,14 +880,14 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": "sot-premium",
         "name": "Skeleton-of-Thought (Premium)",
-        "description": "Parallel decomposition: skeleton → parallel sub-problem solving → assembly. Premium tier with Claude skeleton and 4-lab parallel solve.",
-        "primary_id": "claude-opus",
+        "description": "Parallel decomposition: skeleton → parallel sub-problem solving → assembly. Premium tier with Qwen 3.6 Plus skeleton and 4-lab parallel solve.",
+        "primary_id": "qwen3.6-plus",
         "routing": {
             "prompt_enhancement": "gemini-flash",
-            "sot_skeleton": "claude-opus",
+            "sot_skeleton": "qwen3.6-plus",
             "sot_solve": "kimi-k2-5",
-            "sot_assemble": "claude-opus",
-            "synthesis": "claude-opus"
+            "sot_assemble": "qwen3.6-plus",
+            "synthesis": "qwen3.6-plus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet"
@@ -903,15 +914,15 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": "tot-premium",
         "name": "Tree-of-Thoughts (Premium)",
-        "description": "Reasoning as tree search: generate candidates → evaluate → backtrack. Premium tier with Claude decomposition and cross-lab evaluation.",
-        "primary_id": "claude-opus",
+        "description": "Reasoning as tree search: generate candidates → evaluate → backtrack. Premium tier with Qwen 3.6 Plus decomposition and cross-lab evaluation.",
+        "primary_id": "qwen3.6-plus",
         "routing": {
             "prompt_enhancement": "gemini-flash",
-            "tot_decompose": "claude-opus",
+            "tot_decompose": "qwen3.6-plus",
             "tot_generate": "deepseek-r1",
             "tot_evaluate": "sonar-pro",
-            "tot_backtrack": "claude-opus",
-            "synthesis": "claude-opus"
+            "tot_backtrack": "qwen3.6-plus",
+            "synthesis": "qwen3.6-plus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet"
@@ -943,8 +954,8 @@ _PRESET_CONFIGS: list[dict] = [
             "prompt_enhancement": "gemini-flash",
             "pot_generate": "gpt-5",
             "pot_execute": "gpt-5",
-            "pot_interpret": "claude-opus",
-            "synthesis": "claude-opus"
+            "pot_interpret": "qwen3.6-plus",
+            "synthesis": "qwen3.6-plus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet"
@@ -970,18 +981,136 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": "self-discover-premium",
         "name": "Self-Discover (Premium)",
-        "description": "Dynamic reasoning module composition: the LLM selects and composes reasoning modules per problem. Premium tier with Claude selection and cross-lab implementation.",
-        "primary_id": "claude-opus",
+        "description": "Dynamic reasoning module composition: the LLM selects and composes reasoning modules per problem. Premium tier with Qwen 3.6 Plus selection and cross-lab implementation.",
+        "primary_id": "qwen3.6-plus",
         "routing": {
             "prompt_enhancement": "gemini-flash",
-            "sd_select": "claude-opus",
+            "sd_select": "qwen3.6-plus",
             "sd_adapt": "deepseek-r1",
-            "sd_implement": "claude-opus",
-            "synthesis": "claude-opus"
+            "sd_implement": "qwen3.6-plus",
+            "synthesis": "qwen3.6-plus"
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet"
         },
+    },
+    # ── PhaseSubAgent Mode Presets (v2.2) ────────────────────────────
+    {
+        "id": "subagent-budget",
+        "name": "SubAgent Mode (Budget)",
+        "description": "PhaseSubAgent mode with per-subagent routing and fallbacks. 10 subagent roles mapped to cheapest capable models. DeepSeek V3 dominates analysis; Qwen3-Max for synthesis writer. Zero-cost GLM-4-Air fallbacks everywhere.",
+        "primary_id": "deepseek-v3",
+        "routing": {
+            "prompt_enhancement": "gemma-4-26b",
+            "classification": "gemma-4-26b",
+            "decomposition": "deepseek-v3",
+            "constructive": "deepseek-v3",
+            "destructive": "deepseek-v3",
+            "systemic": "deepseek-v3",
+            "minimalist": "gemma-4-26b",
+            "scoring": "deepseek-v3",
+            "stress_testing": "deepseek-v3",
+            "synthesis": "qwen3-max",
+            # SubAgent-specific roles
+            "subagent_synthesis_analysis": "deepseek-v3",
+            "subagent_synthesis_writer": "qwen3-max",
+            "subagent_critique_logic": "deepseek-v3",
+            "subagent_critique_evidence": "deepseek-v3",
+            "subagent_critique_bias": "deepseek-v3",
+            "subagent_critique_counter": "deepseek-v3",
+            "subagent_enhancement": "gemma-4-26b",
+            "subagent_decomposition": "deepseek-v3",
+            "subagent_search_query": "gemma-4-26b",
+            "subagent_search_eval": "deepseek-v3",
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "glm-4-air",
+            "classification": "glm-4-air",
+            "decomposition": "qwen3-plus",
+            "constructive": "qwen3-plus",
+            "destructive": "qwen3-plus",
+            "systemic": "qwen3-plus",
+            "minimalist": "glm-4-air",
+            "scoring": "glm-4-air",
+            "stress_testing": "qwen3-plus",
+            "synthesis": "deepseek-v3",
+            # SubAgent fallbacks (cross-lab resilience)
+            "subagent_synthesis_analysis": "qwen3-plus",
+            "subagent_synthesis_writer": "deepseek-v3",
+            "subagent_critique_logic": "glm-4-air",
+            "subagent_critique_evidence": "glm-4-air",
+            "subagent_critique_bias": "glm-4-air",
+            "subagent_critique_counter": "glm-4-air",
+            "subagent_enhancement": "glm-4-air",
+            "subagent_decomposition": "glm-4-air",
+            "subagent_search_query": "glm-4-air",
+            "subagent_search_eval": "glm-4-air",
+        },
+        "notes": [
+            "SubAgent overhead: ~2.4 cents per run vs monolithic",
+            "All 10 subagent roles have dedicated fallbacks for cross-lab resilience",
+            "GLM-4-Air (free tier) as universal fallback keeps cost floor at zero",
+        ],
+    },
+    {
+        "id": "subagent-premium",
+        "name": "SubAgent Mode (Premium)",
+        "description": "PhaseSubAgent mode with per-subagent routing and fallbacks. NO Qwen 3.6 Plus — Sonnet for writer, Gemini Flash for parallel analysis, DeepSeek R1 for reasoning, Sonar Pro for fact-checking. Every subagent has a cross-lab fallback.",
+        "primary_id": "claude-sonnet",
+        "routing": {
+            "prompt_enhancement": "gemini-flash",
+            "classification": "gemini-flash",
+            "decomposition": "claude-sonnet",
+            "constructive": "kimi-k2-5",
+            "destructive": "deepseek-r1",
+            "systemic": "claude-sonnet",
+            "minimalist": "gemini-flash",
+            "scoring": "sonar-pro",
+            "stress_testing": "grok-4",
+            "synthesis": "claude-sonnet",
+            # SubAgent-specific roles (no opus anywhere)
+            "subagent_synthesis_analysis": "gemini-flash",
+            "subagent_synthesis_writer": "claude-sonnet",
+            "subagent_critique_logic": "deepseek-r1",
+            "subagent_critique_evidence": "sonar-pro",
+            "subagent_critique_bias": "claude-sonnet",
+            "subagent_critique_counter": "deepseek-r1",
+            "subagent_enhancement": "gemini-flash",
+            "subagent_decomposition": "claude-sonnet",
+            "subagent_search_query": "gemini-flash",
+            "subagent_search_eval": "sonar-pro",
+        },
+        "fallback_routing": {
+            "prompt_enhancement": "claude-sonnet",
+            "classification": "deepseek-r1",
+            "decomposition": "gemini-flash",
+            "constructive": "gpt-5",
+            "destructive": "claude-sonnet",
+            "systemic": "deepseek-r1",
+            "minimalist": "deepseek-r1",
+            "scoring": "claude-sonnet",
+            "stress_testing": "deepseek-r1",
+            "synthesis": "gpt-5",
+            # SubAgent fallbacks (cross-lab, different provider)
+            "subagent_synthesis_analysis": "deepseek-r1",
+            "subagent_synthesis_writer": "deepseek-r1",
+            "subagent_critique_logic": "claude-sonnet",
+            "subagent_critique_evidence": "claude-sonnet",
+            "subagent_critique_bias": "deepseek-r1",
+            "subagent_critique_counter": "claude-sonnet",
+            "subagent_enhancement": "gemini-pro",
+            "subagent_decomposition": "deepseek-r1",
+            "subagent_search_query": "gemini-pro",
+            "subagent_search_eval": "claude-sonnet",
+        },
+        "notes": [
+            "SubAgent overhead: ~11.5 cents per run vs monolithic",
+            "No Qwen 3.6 Plus — Sonnet handles writer tasks at 60% lower cost",
+            "Gemini Flash for all parallel analysis: fast, cheap, high throughput",
+            "DeepSeek R1 for reasoning tasks: 85K+ adversarial RL environments",
+            "Sonar Pro for evidence/source evaluation: live web fact-checking",
+            "Every subagent has cross-lab fallback (different provider)",
+        ],
     },
 ]
 

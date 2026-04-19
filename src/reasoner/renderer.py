@@ -5,7 +5,6 @@ Rich terminal display and JSON export, with method-specific layouts.
 Methods:
   MULTI_PERSPECTIVE — 4 perspectives: constructive, destructive, systemic, minimalist
   DEBATE            — adversarial competition: Proposition vs Opposition → Verdict
-  ITERATIVE         — generate → evaluate → select → refine (loop up to 5x)
   RESEARCH          — evidence report: quality matrix, claim verification, evidence gaps
   JURY              — 3 generators → 3 critics → verification → meta-evaluation → verdict
 """
@@ -49,7 +48,7 @@ def _get_attr(obj, key, default=None):
 class MethodType(Enum):
     MULTI_PERSPECTIVE = "multi-perspective"
     DEBATE            = "debate"
-    ITERATIVE         = "iterative"
+
     RESEARCH          = "research"
     JURY              = "jury"
     SCIENTIFIC        = "scientific"
@@ -59,36 +58,36 @@ class MethodType(Enum):
     DIALECTICAL       = "dialectical"
     ANALOGICAL        = "analogical"
     DELPHI            = "delphi"
+    COVE              = "cove"
+    SOT               = "sot"
+    TOT               = "tot"
+    POT               = "pot"
+    SELF_DISCOVER     = "self-discover"
 
 
-_DEBATE_PRESETS       = {"debate", "debate-budget", "debate-balanced", "debate-premium"}
-_ITERATIVE_PRESETS    = {
-    "iterative", "iterative-budget", "iterative-balanced", "iterative-premium",
-    "evolutionary", "evolutionary-budget", "evolutionary-balanced",
-}
-_RESEARCH_PRESETS     = {"research", "research-budget", "research-balanced", "research-premium", "research-local-budget"}
-_JURY_PRESETS         = {
-    "jury", "jury-budget", "jury-balanced", "jury-premium",
-    "orchestrated", "orchestrated-budget", "orchestrated-balanced",
-}
-_SCIENTIFIC_PRESETS   = {"scientific", "scientific-budget", "scientific-premium"}
-_SOCRATIC_PRESETS     = {"socratic", "socratic-budget", "socratic-premium"}
-_PRE_MORTEM_PRESETS   = {"pre-mortem", "pre-mortem-budget", "pre-mortem-premium"}
-_BAYESIAN_PRESETS     = {"bayesian", "bayesian-budget", "bayesian-premium"}
-_DIALECTICAL_PRESETS  = {"dialectical", "dialectical-budget", "dialectical-premium"}
-_ANALOGICAL_PRESETS   = {"analogical", "analogical-budget", "analogical-premium"}
-_DELPHI_PRESETS       = {"delphi", "delphi-budget", "delphi-premium"}
+_DEBATE_PRESETS       = {"debate-budget", "debate-premium"}
+_RESEARCH_PRESETS     = {"research-budget", "research-premium"}
+_JURY_PRESETS         = {"jury-budget", "jury-premium"}
+_SCIENTIFIC_PRESETS   = {"scientific-budget", "scientific-premium"}
+_SOCRATIC_PRESETS     = {"socratic-budget", "socratic-premium"}
+_PRE_MORTEM_PRESETS   = {"pre-mortem-budget", "pre-mortem-premium"}
+_BAYESIAN_PRESETS     = {"bayesian-budget", "bayesian-premium"}
+_DIALECTICAL_PRESETS  = {"dialectical-budget", "dialectical-premium"}
+_ANALOGICAL_PRESETS   = {"analogical-budget", "analogical-premium"}
+_DELPHI_PRESETS       = {"delphi-budget", "delphi-premium"}
+_COVE_PRESETS         = {"cove-budget", "cove-premium"}
+_SOT_PRESETS          = {"sot-budget", "sot-premium"}
+_TOT_PRESETS          = {"tot-budget", "tot-premium"}
+_POT_PRESETS          = {"pot-budget", "pot-premium"}
+_SELF_DISCOVER_PRESETS = {"self-discover-budget", "self-discover-premium"}
 # STANDARD presets (now called MULTI_PERSPECTIVE)
 _MULTI_PERSPECTIVE_PRESETS = {
-    "max-quality", "cost-efficient", "eu-sovereign", "epistemic-diversity",
-    "western-only", "claude-only", "deepseek-only", "basic-budget",
     "multi-perspective-budget", "multi-perspective-premium"
 }
 
 
 def _method_type(preset_name: str | None) -> MethodType:
     if preset_name in _DEBATE_PRESETS:       return MethodType.DEBATE
-    if preset_name in _ITERATIVE_PRESETS:    return MethodType.ITERATIVE
     if preset_name in _RESEARCH_PRESETS:     return MethodType.RESEARCH
     if preset_name in _JURY_PRESETS:         return MethodType.JURY
     if preset_name in _SCIENTIFIC_PRESETS:   return MethodType.SCIENTIFIC
@@ -98,6 +97,11 @@ def _method_type(preset_name: str | None) -> MethodType:
     if preset_name in _DIALECTICAL_PRESETS:  return MethodType.DIALECTICAL
     if preset_name in _ANALOGICAL_PRESETS:   return MethodType.ANALOGICAL
     if preset_name in _DELPHI_PRESETS:       return MethodType.DELPHI
+    if preset_name in _COVE_PRESETS:         return MethodType.COVE
+    if preset_name in _SOT_PRESETS:          return MethodType.SOT
+    if preset_name in _TOT_PRESETS:          return MethodType.TOT
+    if preset_name in _POT_PRESETS:          return MethodType.POT
+    if preset_name in _SELF_DISCOVER_PRESETS: return MethodType.SELF_DISCOVER
     if preset_name in _MULTI_PERSPECTIVE_PRESETS: return MethodType.MULTI_PERSPECTIVE
     return MethodType.MULTI_PERSPECTIVE  # default
 
@@ -431,108 +435,6 @@ def _render_debate(state: PipelineState) -> None:
                 f"[bold]Non-obvious insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
             )
             console.print(Panel(meta_text, title="[cyan]Judge's Reservations[/cyan]", box=box.ROUNDED))
-
-    _render_errors(state)
-
-
-# ─────────────────────────────────────────────────────────────────────
-# ITERATIVE RENDERER
-# ─────────────────────────────────────────────────────────────────────
-
-def _render_iterative(state: PipelineState) -> None:
-    duration = _duration(state)
-    console.rule(f"[bold yellow]ITERATIVE OPTIMIZATION  ({duration:.1f}s)[/bold yellow]")
-
-    score_map = {s.perspective: s for s in state.scores}
-
-    if state.candidates:
-        pop_table = Table(title="Generation 0 — Initial Population", box=box.SIMPLE_HEAVY)
-        pop_table.add_column("Perspective", style="cyan")
-        pop_table.add_column("Model", style="white")
-        pop_table.add_column("Key Strength", style="white")
-
-        survivors = {c.perspective for c in state.top_candidates}
-        for cand in state.candidates:
-            sc = score_map.get(cand.perspective)
-            fitness_str = f"fitness={sc.total:.1f}" if sc else "—"
-            strength = cand.key_insights[0] if cand.key_insights else "—"
-            is_survivor = cand.perspective in survivors
-            pop_table.add_row(
-                f"{cand.perspective.value}  [{fitness_str}]",
-                cand.model_used or "—",
-                strength[:80] + ("…" if len(strength) > 80 else ""),
-                style="bold green" if is_survivor else "",
-            )
-        console.print(pop_table)
-
-    if state.scores:
-        fit_table = Table(title="Fitness Evaluation", box=box.SIMPLE_HEAVY)
-        fit_table.add_column("Individual",  style="cyan")
-        fit_table.add_column("Logic",       justify="center")
-        fit_table.add_column("Evidence",    justify="center")
-        fit_table.add_column("Resilience",  justify="center")
-        fit_table.add_column("Feasibility", justify="center")
-        fit_table.add_column("Fitness",     justify="center", style="bold")
-        fit_table.add_column("Weaknesses")
-
-        survivors = {c.perspective for c in state.top_candidates}
-        for s in sorted(state.scores, key=lambda x: x.total, reverse=True):
-            is_survivor = s.perspective in survivors
-            tag = " [SURVIVOR]" if is_survivor else " [ELIMINATED]"
-            fit_table.add_row(
-                s.perspective.value + tag,
-                f"{s.logical_consistency:.1f}",
-                f"{s.evidence_support:.1f}",
-                f"{s.failure_resilience:.1f}",
-                f"{s.feasibility:.1f}",
-                f"[bold]{s.total:.1f}[/bold]",
-                ", ".join(s.bias_flags[:2]) if s.bias_flags else "—",
-                style="bold green" if is_survivor else "dim",
-            )
-        console.print(fit_table)
-
-        if state.top_candidates:
-            surv_text = Text()
-            for c in state.top_candidates:
-                sc = score_map.get(c.perspective)
-                fit = f"{sc.total:.1f}" if sc else "?"
-                surv_text.append(f"+ {c.perspective.value}  (fitness={fit})\n", style="bold green")
-            console.print(Panel(surv_text, title="[green]Selected Survivors[/green]", box=box.ROUNDED))
-
-    _render_stress(state, "Environmental Pressure Tests")
-
-    if state.final_solution:
-        fs = state.final_solution
-
-        console.print(Panel(
-            _get_attr(fs, 'core_solution', ''),
-            title="[bold green]OPTIMIZED SOLUTION[/bold green]",
-            box=box.DOUBLE,
-            border_style="green",
-        ))
-
-        if _get_attr(fs, 'critical_insights', []):
-            em_text = Text()
-            for i, insight in enumerate(_get_attr(fs, 'critical_insights', []), 1):
-                em_text.append(f"{i}. {insight}\n\n")
-            console.print(Panel(em_text, title="[yellow]Emergent Properties[/yellow]", box=box.ROUNDED))
-
-        _render_action_blueprint(state, title="Survival Strategy")
-
-        if _get_attr(fs, 'open_questions', []):
-            oq_text = "\n".join(f"• {q}" for q in _get_attr(fs, 'open_questions', []))
-            console.print(Panel(oq_text, title="[red]Open Hypotheses[/red]", box=box.ROUNDED))
-
-        meta = _get_attr(fs, 'meta_audit', {})
-        if any(_get_attr(meta, k) for k in ('most_dangerous_assumption', 'dominant_bias', 'remaining_uncertainty', 'assumption_failure_impact', 'non_obvious_insight')):
-            meta_text = (
-                f"[bold]Critical vulnerability:[/bold] {_get_attr(meta, 'most_dangerous_assumption', '')}\n"
-                f"[bold]Iterative pressure detected:[/bold] {_get_attr(meta, 'dominant_bias', '')}\n"
-                f"[bold]Remaining uncertainty:[/bold] {_get_attr(meta, 'remaining_uncertainty', '')}\n"
-                f"[bold]If vulnerability exploited:[/bold] {_get_attr(meta, 'assumption_failure_impact', '')}\n"
-                f"[bold]Emergent insight:[/bold] [italic]{_get_attr(meta, 'non_obvious_insight', '')}[/italic]"
-            )
-            console.print(Panel(meta_text, title="[cyan]Iterative Forces[/cyan]", box=box.ROUNDED))
 
     _render_errors(state)
 
@@ -1324,8 +1226,6 @@ def render_pipeline_result(state: PipelineState) -> None:
     method = _method_type(state.preset_name)
     if method == MethodType.DEBATE:
         _render_debate(state)
-    elif method == MethodType.ITERATIVE:
-        _render_iterative(state)
     elif method == MethodType.RESEARCH:
         _render_research(state)
     elif method == MethodType.JURY:
@@ -1344,6 +1244,16 @@ def render_pipeline_result(state: PipelineState) -> None:
         _render_analogical(state)
     elif method == MethodType.DELPHI:
         _render_delphi(state)
+    elif method == MethodType.COVE:
+        _render_cove(state)
+    elif method == MethodType.SOT:
+        _render_sot(state)
+    elif method == MethodType.TOT:
+        _render_tot(state)
+    elif method == MethodType.POT:
+        _render_pot(state)
+    elif method == MethodType.SELF_DISCOVER:
+        _render_self_discover(state)
     else:
         _render_multi_perspective(state)
     
@@ -1483,3 +1393,294 @@ def export_to_json(state: PipelineState, path: str) -> None:
     except Exception as e:
         logger.error(f"Unexpected error exporting to {path}: {e}")
         raise
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# v2.2 NEW METHOD RENDERERS
+# ═══════════════════════════════════════════════════════════════════════
+
+# ── CoVe RENDERER ────────────────────────────────────────────────────
+
+def _render_cove(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold cyan]CHAIN-OF-VERIFICATION  ({duration:.1f}s)[/bold cyan]")
+    render_routing_table(state)
+
+    draft = state.cove_state.get("draft_answer", "")
+    if draft:
+        console.print(Panel(draft, title="[yellow]Draft Answer[/yellow]", box=box.ROUNDED))
+
+    claims = state.cove_state.get("claims", [])
+    if claims:
+        tbl = Table(title="Claims to Verify", box=box.SIMPLE_HEAD)
+        tbl.add_column("#", width=3)
+        tbl.add_column("Claim")
+        tbl.add_column("Confidence", width=10)
+        for i, c in enumerate(claims, 1):
+            tbl.add_row(str(i), c.get("claim", ""), str(c.get("confidence", "")))
+        console.print(tbl)
+
+    questions = state.cove_state.get("verification_questions", [])
+    if questions:
+        q_text = Text()
+        for q in questions:
+            q_text.append(f"Q: {q.get('question', '')}\n", style="bold cyan")
+            q_text.append(f"  → Target: {q.get('target_claim', '')}\n\n", style="dim")
+        console.print(Panel(q_text, title="[cyan]Verification Questions[/cyan]", box=box.ROUNDED))
+
+    answers = state.cove_state.get("verification_answers", [])
+    if answers:
+        a_text = Text()
+        for a in answers:
+            verdict = a.get("verdict", "unknown")
+            color = "green" if verdict == "supports" else "red" if verdict == "contradicts" else "yellow"
+            a_text.append(f"Verdict: [{color}]{verdict}[/{color}]\n", style="bold")
+            a_text.append(f"  Answer: {a.get('answer', '')}\n", style="white")
+            a_text.append(f"  Reasoning: {a.get('reasoning', '')}\n\n", style="dim")
+        console.print(Panel(a_text, title="[cyan]Independent Verification[/cyan]", box=box.ROUNDED))
+
+    revised = state.cove_state.get("revised_answer", "")
+    if revised:
+        console.print(Panel(revised, title="[bold green]REVISED ANSWER[/bold green]", box=box.DOUBLE, border_style="green"))
+
+    changes = state.cove_state.get("changes_made", [])
+    if changes:
+        c_text = Text()
+        c_text.append("Changes Made:\n", style="bold")
+        for ch in changes:
+            c_text.append(f"  • {ch}\n", style="yellow")
+        console.print(Panel(c_text, title="[yellow]Revision Log[/yellow]", box=box.ROUNDED))
+
+    _render_errors(state)
+
+
+# ── SoT RENDERER ─────────────────────────────────────────────────────
+
+def _render_sot(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold blue]SKELETON-OF-THOUGHT  ({duration:.1f}s)[/bold blue]")
+    render_routing_table(state)
+
+    sub_problems = state.sot_state.get("sub_problems", [])
+    if sub_problems:
+        tbl = Table(title="Problem Skeleton", box=box.SIMPLE_HEAD)
+        tbl.add_column("ID", style="cyan", width=4)
+        tbl.add_column("Sub-Problem")
+        tbl.add_column("Expected Output", style="dim")
+        for sp in sub_problems:
+            tbl.add_row(sp.get("id", ""), sp.get("description", ""), sp.get("expected_output", ""))
+        console.print(tbl)
+
+    solutions = state.sot_state.get("solutions", [])
+    if solutions:
+        for sol in solutions:
+            sol_text = Text()
+            sol_text.append(f"Solution for {sol.get('sub_problem_id', '')}:\n", style="bold cyan")
+            sol_text.append(sol.get("solution", "") + "\n")
+            insights = sol.get("key_insights", [])
+            if insights:
+                sol_text.append("\nKey Insights:\n", style="bold")
+                for ins in insights:
+                    sol_text.append(f"  • {ins}\n", style="yellow")
+            console.print(Panel(sol_text, box=box.ROUNDED))
+
+    assembled = state.sot_state.get("assembled_answer", "")
+    if assembled:
+        console.print(Panel(assembled, title="[bold green]ASSEMBLED ANSWER[/bold green]", box=box.DOUBLE, border_style="green"))
+
+    transitions = state.sot_state.get("transitions", [])
+    if transitions:
+        t_text = Text()
+        t_text.append("Transitions:\n", style="bold")
+        for t in transitions:
+            t_text.append(f"  → {t}\n", style="dim")
+        console.print(Panel(t_text, title="[dim]Assembly Glue[/dim]", box=box.ROUNDED))
+
+    _render_errors(state)
+
+
+# ── ToT RENDERER ─────────────────────────────────────────────────────
+
+def _render_tot(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold magenta]TREE-OF-THOUGHTS  ({duration:.1f}s)[/bold magenta]")
+    render_routing_table(state)
+
+    dps = state.tot_state.get("decision_points", [])
+    if dps:
+        tbl = Table(title="Decision Points", box=box.SIMPLE_HEAD)
+        tbl.add_column("ID", style="cyan", width=4)
+        tbl.add_column("Description")
+        for dp in dps:
+            tbl.add_row(dp.get("id", ""), dp.get("description", ""))
+        console.print(tbl)
+
+    evaluations = state.tot_state.get("evaluations", [])
+    if evaluations:
+        tbl = Table(title="Candidate Evaluations", box=box.SIMPLE_HEAD)
+        tbl.add_column("Candidate", style="cyan")
+        tbl.add_column("Score", justify="center")
+        tbl.add_column("Verdict")
+        for ev in evaluations:
+            v = ev.get("verdict", "")
+            color = "green" if v == "proceed" else "red" if v == "reject" else "yellow"
+            tbl.add_row(ev.get("candidate_id", ""), str(ev.get("score", "")), f"[{color}]{v}[/{color}]")
+        console.print(tbl)
+
+    final_path = state.tot_state.get("final_path", [])
+    if final_path:
+        path_text = " → ".join(final_path)
+        console.print(Panel(
+            Text(path_text, style="bold green"),
+            title="[green]Optimal Path[/green]", box=box.DOUBLE,
+        ))
+
+    backtrack = state.tot_state.get("backtrack_decision", "")
+    if backtrack:
+        console.print(Panel(
+            f"Backtrack decision: {backtrack}",
+            title="[cyan]Search Strategy[/cyan]", box=box.ROUNDED,
+        ))
+
+    _render_errors(state)
+
+
+# ── PoT RENDERER ─────────────────────────────────────────────────────
+
+def _render_pot(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold green]PROGRAM-OF-THOUGHTS  ({duration:.1f}s)[/bold green]")
+    render_routing_table(state)
+
+    code = state.pot_state.get("code", "")
+    if code:
+        console.print(Panel(
+            f"```python\n{code}\n```",
+            title="[cyan]Generated Code[/cyan]", box=box.ROUNDED,
+        ))
+
+    explanation = state.pot_state.get("explanation", "")
+    if explanation:
+        console.print(Panel(explanation, title="[dim]Approach Explanation[/dim]", box=box.ROUNDED))
+
+    output = state.pot_state.get("execution_output", "")
+    error = state.pot_state.get("execution_error", "")
+    if output or error:
+        out_text = Text()
+        if output:
+            out_text.append(f"Output:\n{output}\n", style="green")
+        if error:
+            out_text.append(f"\nError:\n{error}\n", style="red")
+        console.print(Panel(out_text, title="[cyan]Execution Results[/cyan]", box=box.ROUNDED))
+
+    interpretation = state.pot_state.get("interpretation", "")
+    if interpretation:
+        console.print(Panel(interpretation, title="[yellow]Interpretation[/yellow]", box=box.ROUNDED))
+
+    computed = state.pot_state.get("computed_answer", "")
+    if computed:
+        console.print(Panel(computed, title="[bold green]COMPUTED ANSWER[/bold green]", box=box.DOUBLE, border_style="green"))
+
+    caveats = state.pot_state.get("caveats", [])
+    if caveats:
+        c_text = Text()
+        c_text.append("Caveats:\n", style="bold yellow")
+        for c in caveats:
+            c_text.append(f"  ! {c}\n", style="yellow")
+        console.print(Panel(c_text, title="[yellow]Caveats[/yellow]", box=box.ROUNDED))
+
+    _render_errors(state)
+
+
+# ── Self-Discover RENDERER ───────────────────────────────────────────
+
+def _render_self_discover(state: PipelineState) -> None:
+    duration = _duration(state)
+    console.rule(f"[bold yellow]SELF-DISCOVER  ({duration:.1f}s)[/bold yellow]")
+    render_routing_table(state)
+
+    modules = state.self_discover_state.get("selected_modules", [])
+    if modules:
+        tbl = Table(title="Selected Reasoning Modules", box=box.SIMPLE_HEAD)
+        tbl.add_column("Order", style="cyan", width=5)
+        tbl.add_column("Module")
+        tbl.add_column("Rationale", style="dim")
+        for m in modules:
+            tbl.add_row(str(m.get("order", "")), m.get("module", ""), m.get("rationale", ""))
+        console.print(tbl)
+
+    strategy = state.self_discover_state.get("composition_strategy", "")
+    if strategy:
+        console.print(Panel(strategy, title="[cyan]Composition Strategy[/cyan]", box=box.ROUNDED))
+
+    adapted = state.self_discover_state.get("adapted_modules", [])
+    if adapted:
+        for am in adapted:
+            am_text = Text()
+            am_text.append(f"Module: {am.get('module', '')}\n", style="bold cyan")
+            am_text.append(f"Instruction: {am.get('instruction', '')}\n", style="white")
+            am_text.append(f"Input: {am.get('input', '')}\n", style="dim")
+            am_text.append(f"Output: {am.get('output', '')}\n", style="dim")
+            console.print(Panel(am_text, box=box.ROUNDED))
+
+    outputs = state.self_discover_state.get("module_outputs", [])
+    if outputs:
+        out_text = Text()
+        out_text.append("Module Outputs:\n", style="bold")
+        for mo in outputs:
+            out_text.append(f"  {mo.get('module', '')}: {mo.get('output', '')[:200]}\n", style="white")
+        console.print(Panel(out_text, title="[cyan]Execution Trace[/cyan]", box=box.ROUNDED))
+
+    final = state.self_discover_state.get("final_answer", "")
+    if final:
+        console.print(Panel(final, title="[bold green]SELF-DISCOVERED ANSWER[/bold green]", box=box.DOUBLE, border_style="green"))
+
+    attribution = state.self_discover_state.get("module_attribution", {})
+    if attribution:
+        attr_text = Text()
+        attr_text.append("Module Attribution:\n", style="bold")
+        for mod, contrib in attribution.items():
+            attr_text.append(f"  {mod}: {contrib}\n", style="dim")
+        console.print(Panel(attr_text, title="[dim]Attribution[/dim]", box=box.ROUNDED))
+
+    _render_errors(state)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# PERSPECTIVE CONTENT RENDERER
+# ─────────────────────────────────────────────────────────────────────
+
+def render_perspective_content(content: str) -> str:
+    """Convert non-standard perspective JSON to human-readable markdown.
+
+    If the content is a JSON string with nested objects (e.g., from a
+    destructive perspective that ignored the schema), flatten it to
+    markdown bullet points. Otherwise return as-is.
+    """
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, TypeError):
+        return content  # Not JSON — return raw
+
+    if not isinstance(data, dict):
+        return content  # JSON array/primitive — return raw
+
+    if "core_analysis" in data:
+        return content  # Standard schema — return raw
+
+    # Non-standard nested dict — flatten to markdown
+    lines = []
+    for category, items in data.items():
+        lines.append(f"**{category.replace('_', ' ').title()}**")
+        if isinstance(items, dict):
+            for sub_key, sub_val in items.items():
+                title = sub_key.replace('_', ' ').title()
+                if isinstance(sub_val, dict):
+                    val_text = sub_val.get('risk', sub_val.get('incorrect_assumption', str(sub_val)))
+                else:
+                    val_text = str(sub_val)
+                lines.append(f"- **{title}**: {val_text}")
+        else:
+            lines.append(str(items))
+        lines.append("")
+    return "\n".join(lines)

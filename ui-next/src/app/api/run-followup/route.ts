@@ -6,9 +6,14 @@ import {
   sanitizeResponseHeaders,
   readJsonBody,
   rateLimit,
+  SECURITY_SERVER_HASH,
 } from '@/lib/security-server';
 
+// Touch SECURITY_SERVER_HASH so Turbopack recompiles this route when it changes.
+void SECURITY_SERVER_HASH;
+
 export async function POST(req: NextRequest) {
+  let upstreamUrl: string | undefined;
   try {
     const limit = rateLimit(req, 'run');
     if (!limit.allowed) {
@@ -19,10 +24,11 @@ export async function POST(req: NextRequest) {
     }
 
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
+    upstreamUrl = `${apiBase}/api/run-followup`;
     const body = await readJsonBody(req);
 
     const headers = sanitizeRequestHeaders(req.headers);
-    const upstream = await fetch(`${apiBase}/api/run-followup`, {
+    const upstream = await fetch(upstreamUrl, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -41,6 +47,27 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Proxy error';
+    const errName = err instanceof Error ? err.constructor.name : 'Unknown';
+
+    // Log connection details for debugging
+    // eslint-disable-next-line no-console
+    console.error(`Proxy error [${errName}] upstream=${upstreamUrl || 'N/A'}:`, msg);
+
+    // Connection-level errors (network, DNS, timeout) → 504 Gateway Timeout
+    const isConnectionError =
+      err instanceof TypeError ||
+      msg.toLowerCase().includes('fetch failed') ||
+      msg.toLowerCase().includes('network') ||
+      msg.toLowerCase().includes('econnrefused') ||
+      msg.toLowerCase().includes('etimedout');
+
+    if (isConnectionError) {
+      return NextResponse.json(
+        { error: 'Backend unreachable', detail: msg },
+        { status: 504 }
+      );
+    }
+
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 }

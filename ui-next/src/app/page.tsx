@@ -107,11 +107,12 @@ export default function Home() {
       const searchStart = performance.now();
       try {
         const data = await searchWeb(problem, 'general', 10, isSmartSearch);
-        const hasGroups = data.results.some((r) => r.group);
+        const results = data?.results ?? [];
+        const hasGroups = results.some((r) => r.group);
         let md = '';
         if (hasGroups) {
-          const byGroup: Record<string, typeof data.results> = {};
-          data.results.forEach((r) => {
+          const byGroup: Record<string, typeof results> = {};
+          results.forEach((r) => {
             const g = r.group || 'Results';
             byGroup[g] = byGroup[g] || [];
             byGroup[g].push(r);
@@ -130,7 +131,7 @@ export default function Home() {
             })
             .join('\n\n---\n\n');
         } else {
-          md = data.results
+          md = results
             .map((r, i) => {
               const title = r.title || 'Source';
               const url = r.url || '';
@@ -220,6 +221,46 @@ export default function Home() {
           }
           return next;
         });
+      } else if (ev.type === 'agent_start' && ev.agent) {
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            const current = next[idx].activeAgents || [];
+            if (!current.find((a) => a.name === ev.agent)) {
+              next[idx] = {
+                ...next[idx],
+                activeAgents: [...current, { name: ev.agent!, task: ev.task || ev.agent! }],
+              };
+            }
+          }
+          return next;
+        });
+      } else if (ev.type === 'agent_complete' && ev.agent) {
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            next[idx] = {
+              ...next[idx],
+              activeAgents: (next[idx].activeAgents || []).filter((a) => a.name !== ev.agent),
+            };
+          }
+          return next;
+        });
+      } else if (ev.type === 'text_chunk' && typeof ev.text === 'string') {
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            const current = next[idx].streamingContent || '';
+            next[idx] = {
+              ...next[idx],
+              streamingContent: current + ev.text,
+            };
+          }
+          return next;
+        });
       } else if (ev.type === 'phase_complete' && typeof ev.phase === 'number') {
         const methodPhases = getMethodPhases(runMethod);
         const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
@@ -251,6 +292,8 @@ export default function Home() {
               content: buildMarkdownFromPhases(phases),
               phases: [...phases],
               currentPhaseName: undefined,
+              // Clear streaming content when synthesis phase completes (structured card takes over)
+              streamingContent: displayName === 'Synthesis' ? undefined : next[idx].streamingContent,
             };
           }
           return next;
@@ -292,6 +335,7 @@ export default function Home() {
               isStreaming: false,
               currentPhaseName: undefined,
               tokens: finalTokens,
+              streamingContent: undefined,
             };
           }
           if (finalErrors.length > 0) {

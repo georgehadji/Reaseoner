@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Copy, Check, Sparkles } from 'lucide-react';
+import { Copy, Check, Sparkles, Clock } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
@@ -26,6 +26,8 @@ export interface ChatFeedMessage {
   tokens?: TokenCount;
   duration?: number;
   meta?: { original?: string; enhanced?: string };
+  activeAgents?: { name: string; task: string }[];
+  streamingContent?: string;
 }
 
 interface ChatFeedProps {
@@ -34,30 +36,53 @@ interface ChatFeedProps {
   showNewContentIndicator?: boolean;
 }
 
-function PhaseIndicator({ name }: { name?: string }) {
+function PhaseIndicator({ name, agents }: { name?: string; agents?: { name: string; task: string }[] }) {
   return (
-    <div className="mb-3 flex items-center gap-2">
-      <div className="flex items-center gap-1">
-        <span
-          className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
-          style={{ animationDelay: '0ms' }}
-        />
-        <span
-          className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
-          style={{ animationDelay: '150ms' }}
-        />
-        <span
-          className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
-          style={{ animationDelay: '300ms' }}
-        />
+    <div className="mb-3 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          <span
+            className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
+            style={{ animationDelay: '0ms' }}
+          />
+          <span
+            className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
+            style={{ animationDelay: '150ms' }}
+          />
+          <span
+            className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
+            style={{ animationDelay: '300ms' }}
+          />
+        </div>
+        {name ? (
+          <span className="text-xs font-medium text-[var(--text-muted)]">
+            Running {name}…
+          </span>
+        ) : null}
       </div>
-      {name ? (
-        <span className="text-xs font-medium text-[var(--text-muted)]">
-          Running {name}…
-        </span>
-      ) : null}
+      {agents && agents.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 pl-6">
+          {agents.map((a) => (
+            <span
+              key={a.name}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-subtle)]"
+              title={a.task}
+            >
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+              {a.name}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+function formatDuration(seconds: number): string {
+  if (seconds < 60) return `${seconds.toFixed(1)}s`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}m ${secs.toString().padStart(2, '0')}s`;
 }
 
 function MessageActions({ content, tokens, duration }: { content: string; tokens?: TokenCount; duration?: number }) {
@@ -92,7 +117,10 @@ function MessageActions({ content, tokens, duration }: { content: string; tokens
         )}
       </button>
       {duration !== undefined && duration > 0 ? (
-        <span className="text-xs text-[var(--text-subtle)]">{duration.toFixed(1)}s</span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+          <Clock className="h-3 w-3" />
+          {formatDuration(duration)}
+        </span>
       ) : null}
       {showTokens ? (
         <span className="text-xs text-[var(--text-subtle)]">
@@ -156,8 +184,13 @@ export function ChatFeed({
         return (
           <div key={msg.id} className="flex w-full flex-col items-center">
             <ChatMessage role="assistant">
-              {msg.isStreaming && <PhaseIndicator name={msg.currentPhaseName} />}
-              {msg.phases && msg.phases.length > 0 ? (
+              {msg.isStreaming && <PhaseIndicator name={msg.currentPhaseName} agents={msg.activeAgents} />}
+              {msg.streamingContent ? (
+                <div className="w-full max-w-3xl whitespace-pre-wrap text-[18px] leading-relaxed text-[var(--text)]">
+                  {msg.streamingContent}
+                  <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle" />
+                </div>
+              ) : msg.phases && msg.phases.length > 0 ? (
                 <div className="w-full">
                   {msg.phases.map((phase) => (
                     <PhaseRenderer key={`${msg.id}-${phase.phase}`} phase={phase} />

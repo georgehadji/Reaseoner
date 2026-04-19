@@ -179,13 +179,13 @@ class ConfigurationError(ARAError):
 def is_retryable(error: Exception) -> bool:
     """
     Check if an error is retryable.
-    
+
     Args:
         error: Exception to check
-        
+
     Returns:
         bool: True if the error should be retried
-        
+
     Examples:
         >>> is_retryable(AuthenticationError("Invalid key"))
         False
@@ -196,6 +196,21 @@ def is_retryable(error: Exception) -> bool:
     """
     if isinstance(error, ARAError):
         return error.retryable
+
+    # OpenAI SDK / HTTP client errors with transient status codes
+    status_code = getattr(error, 'status_code', None)
+    if isinstance(status_code, int):
+        # 429 = rate limit, 500/502/503/504 = server-side transient
+        if status_code in (429, 500, 502, 503, 504):
+            return True
+        # 401/403/404 are not retryable
+        return False
+
+    # Network-level errors (e.g. "fetch failed", connection reset, etc.)
+    msg = str(getattr(error, 'message', '')) or str(error)
+    if 'fetch failed' in msg.lower():
+        return True
+
     # Unknown errors are not retryable by default
     return False
 

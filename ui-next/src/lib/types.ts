@@ -19,7 +19,7 @@ export interface TokenCount {
 }
 
 export interface PhaseEvent {
-  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done';
+  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk';
   phase?: number;
   name?: string;
   data?: Record<string, unknown>;
@@ -32,6 +32,14 @@ export interface PhaseEvent {
   enhanced?: string;
   /** Populated on `type === 'start'` when the backend auto-selected a method. */
   auto_selected_method?: string;
+  /** Agent activity tracking */
+  agent?: string;
+  role?: string;
+  task?: string;
+  model?: string;
+  error?: string | null;
+  /** Streaming text chunk */
+  text?: string;
 }
 
 export interface ConversationTurn {

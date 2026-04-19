@@ -145,11 +145,19 @@ class BaseSubAgent(ABC):
 
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:
-        """Extract the first JSON object from raw LLM text."""
-        fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
+        """Extract the first valid JSON object from raw LLM text."""
+        # Strip fenced code blocks first, then fall through to raw scan.
+        fence = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text)
         if fence:
             return json.loads(fence.group(1))
-        bare = re.search(r"(\{.*?\})", text, re.DOTALL)
-        if bare:
-            return json.loads(bare.group(1))
+        # Use raw_decode to find the first syntactically complete JSON object,
+        # correctly handling nested braces that non-greedy regex would truncate.
+        decoder = json.JSONDecoder()
+        for i, ch in enumerate(text):
+            if ch == "{":
+                try:
+                    obj, _ = decoder.raw_decode(text, i)
+                    return obj  # type: ignore[return-value]
+                except json.JSONDecodeError:
+                    continue
         raise ValueError(f"No JSON found in: {text[:200]!r}")

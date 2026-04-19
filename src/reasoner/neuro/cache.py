@@ -137,6 +137,9 @@ class L2Index:
         self.entries.append({"id": entry_id, "content": content, "source": source,
                             "embedding": embedding, "metadata": metadata or {},
                             "created_at": time.time()})
+        # Evict oldest entries if size exceeds limit
+        while len(self.entries) > self.config.l2_max_entries:
+            self.entries.pop(0)
         self._save()
         return entry_id
 

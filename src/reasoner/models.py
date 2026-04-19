@@ -221,6 +221,8 @@ class FinalSolution:
     # ORCHESTRATED method fields
     generator_attribution: dict[str, str] = field(default_factory=dict)  # generator_id → contribution summary
     critic_weighting: dict[str, float] = field(default_factory=dict)  # critic_id → weight based on reliability
+    # Post-synthesis cross-model verification audit
+    verification_audit: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -250,6 +252,8 @@ class PipelineState:
     phase_results: list["PhaseResult"] = field(default_factory=list)
     # Which preset was used — drives method-specific rendering
     preset_name: str | None = None
+    # Context quality assessment for synthesis circuit breaker
+    context_quality: str = "unknown"  # "good" | "partial" | "contaminated" | "missing"
     # ORCHESTRATED method fields (populated only when preset is orchestrated)
     generation_candidates: list["GenerationCandidate"] = field(default_factory=list)
     critic_scores: list["CriticScore"] = field(default_factory=list)
@@ -259,8 +263,6 @@ class PipelineState:
     # ─────────────────────────────────────────────────────────────────────
     # NEW: Advanced Method States (v2.1)
     # ─────────────────────────────────────────────────────────────────────
-    # Iterative Method: Stores previous failure analysis to guide next loop
-    reflexion_memory: deque[str] = field(default_factory=lambda: deque(maxlen=50))
     # Jury Method: Constitution/Principles defined in Phase 1 for objective scoring
     jury_guidelines: list[str] = field(default_factory=list)
     # Debate Method: Structured rounds (opening, rebuttal, cross-exam)
@@ -281,6 +283,26 @@ class PipelineState:
     analogical_state: dict[str, Any] = field(default_factory=dict)
     # Delphi Method: Expert consensus with convergence tracking (B5)
     delphi_state: dict[str, Any] = field(default_factory=dict)
+    # Chain-of-Verification (CoVe): Draft → verify → revise
+    cove_state: dict[str, Any] = field(default_factory=dict)
+    # Skeleton-of-Thought (SoT): Skeleton → parallel solve → assemble
+    sot_state: dict[str, Any] = field(default_factory=dict)
+    # Tree-of-Thoughts (ToT): Decompose → generate candidates → evaluate → backtrack
+    tot_state: dict[str, Any] = field(default_factory=dict)
+    # Program-of-Thoughts (PoT): Generate code → execute → return results
+    pot_state: dict[str, Any] = field(default_factory=dict)
+    # Self-Discover: Dynamic reasoning module composition
+    self_discover_state: dict[str, Any] = field(default_factory=dict)
+    # PhaseSubAgent outputs (for transparency / resume / debugging)
+    synthesis_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
+    critique_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
+    decomposition_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
+    enhancement_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
+    search_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
+    # Real-time agent activity events (subagent start/complete) — drained by SSE stream
+    pending_events: list[dict[str, Any]] = field(default_factory=list)
+    # Reflexion memory: accumulated self-correction insights across turns
+    reflexion_memory: list[str] = field(default_factory=list)
     # Web Discovery: Results from SearXNG search
     web_discovery_results: list[dict[str, Any]] = field(default_factory=list)
     # Vetted Context: Flags from context vetting phase
@@ -355,8 +377,7 @@ class PipelineState:
             return obj.value if hasattr(obj, "value") else obj
 
         # Balanced compression (default) - progressive truncation
-        context.update({
-            "reflexion_memory": list(self.reflexion_memory),
+        method_states = {
             "jury_guidelines": self.jury_guidelines,
             "debate_rounds": self.debate_rounds,
             "scientific_state": self.scientific_state,
@@ -367,7 +388,19 @@ class PipelineState:
             "dialectical_state": self.dialectical_state,
             "analogical_state": self.analogical_state,
             "delphi_state": self.delphi_state,
-            "web_discovery_results": self.web_discovery_results,
+            "cove_state": self.cove_state,
+            "sot_state": self.sot_state,
+            "tot_state": self.tot_state,
+            "pot_state": self.pot_state,
+            "self_discover_state": self.self_discover_state,
+            # Compress web results to "Title: Snippet" strings to reduce token waste in synthesis
+            "web_discovery_results": [
+                f"{r.get('title', 'Unknown')}: {r.get('snippet', '')[:TRUNCATION.SNIPPET]}"
+                for r in (self.web_discovery_results or [])
+            ] or None,
+        }
+        context.update({k: v for k, v in method_states.items() if v})
+        context.update({
             "sub_problems": [
                 {
                     "id": _get_attr(sp, "id"),
@@ -799,8 +832,16 @@ class PipelineState:
         data.setdefault('dialectical_state', {})
         data.setdefault('analogical_state', {})
         data.setdefault('delphi_state', {})
-
-        # Restore bounded deque for reflexion_memory
-        data['reflexion_memory'] = deque(data.get('reflexion_memory', []), maxlen=50)
+        data.setdefault('cove_state', {})
+        data.setdefault('sot_state', {})
+        data.setdefault('tot_state', {})
+        data.setdefault('pot_state', {})
+        data.setdefault('self_discover_state', {})
+        data.setdefault('reflexion_memory', [])
+        data.setdefault('synthesis_subagent_outputs', [])
+        data.setdefault('critique_subagent_outputs', [])
+        data.setdefault('decomposition_subagent_outputs', [])
+        data.setdefault('enhancement_subagent_outputs', [])
+        data.setdefault('search_subagent_outputs', [])
 
         return cls(**data)

@@ -38,6 +38,7 @@ MAX_CIRCUIT_BREAKER_REGISTRY_SIZE: int = 1000
 MAX_RATE_LIMIT_BUCKETS: int = 10000
 SNAPSHOT_LIST_LIMIT: int = 1000
 DEFAULT_SANITIZER_MAX_LENGTH: int = 10000
+DEFAULT_API_PORT: int = 8001
 SSE_FLUSH_INTERVAL: float = 0.02
 VALIDATION_TEST_MAX_TOKENS: int = 1
 
@@ -80,7 +81,7 @@ PHASE_TOKEN_BUDGETS: dict[str, int] = {
     # Phase 2: Perspective analysis - moderate detail
     "perspective": 1536,
     "constructive": 1536,
-    "destructive": 1536,
+    "destructive": 2560,
     "systemic": 1536,
     "minimalist": 1536,
     # Phase 3: Critique - scores + brief rationale
@@ -89,7 +90,7 @@ PHASE_TOKEN_BUDGETS: dict[str, int] = {
     # Phase 4: Stress testing - scenario results
     "stress_testing": 1024,
     # Phase 5: Synthesis - comprehensive final output
-    "synthesis": 2048,
+    "synthesis": 12288,
     # Method-specific phases
     "debate_opening": 1024,
     "debate_rebuttal": 1024,
@@ -133,6 +134,19 @@ MODEL_CLAUDE_SONNET: str = "claude-sonnet"
 MODEL_GEMINI_FLASH: str = "gemini-flash"
 MODEL_GEMINI_PRO: str = "gemini-pro"
 MODEL_GPT4O_MINI: str = "gpt-4o-mini"
+
+# Qwen (temperature-supporting, non-OpenAI)
+MODEL_QWEN35_FLASH: str = "qwen3.5-flash"
+MODEL_QWEN35_9B: str = "qwen3.5-9b"
+MODEL_QWEN36_PLUS: str = "qwen3.6-plus"
+
+# MiniMax (temperature-supporting, non-OpenAI, cross-lab diversity)
+MODEL_MINIMAX_M25_FREE: str = "minimax-m2.5-free"
+MODEL_MINIMAX_M27: str = "minimax-m2.7"
+
+# Xiaomi (temperature-supporting, non-OpenAI, cross-lab diversity)
+MODEL_MIMO_V2_PRO: str = "mimo-v2-pro"
+MODEL_MIMO_V2_FLASH: str = "mimo-v2-flash"
 
 # ═════════════════════════════════════════════════════════════════════
 # GROUPED LIMITS (Value Object Pattern via frozen dataclasses)

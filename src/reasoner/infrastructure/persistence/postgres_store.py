@@ -13,12 +13,22 @@ from __future__ import annotations
 
 import json
 import asyncio
+import logging
 from pathlib import Path
 from typing import Any, Optional
 from dataclasses import asdict
 
+try:
+    import asyncpg
+    _AsyncpgError: type[Exception] = asyncpg.PostgresError
+except ImportError:
+    asyncpg = None  # type: ignore[assignment]
+    _AsyncpgError = Exception  # fallback so except clauses compile
+
 from reasoner.core.events.domain_events import DomainEvent, EventType
 from reasoner.core.constants import DEFAULT_DB_COMMAND_TIMEOUT
+
+logger = logging.getLogger(__name__)
 
 
 class PostgreSQLEventStore:
@@ -63,12 +73,22 @@ class PostgreSQLEventStore:
         
         # Read replica pool (optional)
         if self.use_read_replica and self.read_replica_url:
-            self._read_pool = await asyncpg.create_pool(
-                dsn=self.read_replica_url,
-                min_size=2,
-                max_size=self.pool_size,
-                command_timeout=DEFAULT_DB_COMMAND_TIMEOUT,
-            )
+            try:
+                self._read_pool = await asyncpg.create_pool(
+                    dsn=self.read_replica_url,
+                    min_size=2,
+                    max_size=self.pool_size,
+                    command_timeout=DEFAULT_DB_COMMAND_TIMEOUT,
+                )
+            except Exception as exc:
+                # If read-replica setup fails, close the primary pool to avoid
+                # leaking connections, then re-raise so callers can retry.
+                try:
+                    await self._pool.close()
+                except Exception:
+                    pass  # Best-effort cleanup; preserve original exception
+                self._pool = None
+                raise exc
         
         # Initialize schema
         await self._init_schema()
@@ -76,7 +96,7 @@ class PostgreSQLEventStore:
     async def _init_schema(self) -> None:
         """Initialize database schema."""
         async with self._pool.acquire() as conn:
-            await conn.executescript("""
+            await conn.execute("""
                 -- Enable UUID extension
                 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
                 
@@ -222,7 +242,7 @@ class PostgreSQLEventStore:
 
                             # Update aggregate
                             await self._update_aggregate(conn, event, aggregate_type)
-            except asyncpg.Error as e:
+            except _AsyncpgError as e:
                 logger.error(f"PostgreSQL error saving events: {e}")
                 raise
             except json.JSONDecodeError as e:
@@ -348,17 +368,19 @@ class PostgreSQLEventStore:
         
         async with pool.acquire() as conn:
             query = """
-                SELECT * FROM aggregates 
+                SELECT * FROM aggregates
                 WHERE aggregate_type = 'pipeline'
             """
             params = []
-            
+
             if status:
-                query += " AND status = $1"
                 params.append(status)
-            
-            query += " ORDER BY created_at DESC LIMIT $2 OFFSET $3"
-            params.extend([limit, offset])
+                query += f" AND status = ${len(params)}"
+
+            params.append(limit)
+            query += f" ORDER BY created_at DESC LIMIT ${len(params)}"
+            params.append(offset)
+            query += f" OFFSET ${len(params)}"
             
             rows = await conn.fetch(query, *params)
             
@@ -438,10 +460,9 @@ class PostgreSQLEventStore:
                         VALUES ($1, $2, $3, $4, NOW())
                         ON CONFLICT (aggregate_id) DO UPDATE SET
                             version = EXCLUDED.version,
-                            state = EXCLUDED.state,
-                            updated_at = NOW()
+                            state = EXCLUDED.state
                     """, aggregate_id, version, json.dumps(state), snapshot_type)
-            except asyncpg.Error as e:
+            except _AsyncpgError as e:
                 logger.error(f"PostgreSQL error saving snapshot for {aggregate_id}: {e}")
                 raise
             except (TypeError, ValueError) as e:
@@ -504,7 +525,7 @@ class PostgreSQLEventStore:
                         version = EXCLUDED.version,
                         updated_at = NOW()
                 """, model_name, model_key, json.dumps(data), version)
-        except asyncpg.Error as e:
+        except _AsyncpgError as e:
             logger.error(f"PostgreSQL error saving read model {model_name}/{model_key}: {e}")
             raise
         except (TypeError, ValueError) as e:
@@ -597,7 +618,7 @@ class PostgreSQLEventStore:
                             DELETE FROM read_models WHERE model_key = $1
                         """, aggregate_id)
                 logger.info(f"Aggregate {aggregate_id} and all related data deleted")
-            except asyncpg.Error as e:
+            except _AsyncpgError as e:
                 logger.error(f"PostgreSQL error deleting aggregate {aggregate_id}: {e}")
                 raise
             except Exception as e:
@@ -639,5 +660,11 @@ async def initialize_postgres_store(
 ) -> PostgreSQLEventStore:
     """Initialize PostgreSQL event store."""
     store = get_postgres_store(connection_string, pool_size)
-    await store.initialize()
+    try:
+        await store.initialize()
+    except Exception:
+        # Reset singleton so the next call creates a fresh instance
+        global _postgres_store
+        _postgres_store = None
+        raise
     return store

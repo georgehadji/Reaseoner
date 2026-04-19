@@ -19,9 +19,6 @@ def _is_scientific(preset: str) -> bool:
 def _is_socratic(preset: str) -> bool:
     return "socratic" in preset
 
-def _is_iterative(preset: str) -> bool:
-    return "iterative" in preset
-
 def _get_v(obj, key, default=None):
     if obj is None: return default
     if isinstance(obj, dict):

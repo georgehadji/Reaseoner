@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef, useEffect } from 'react';
 import { RenderedPhase } from '@/components/chat/ChatFeed';
 import { TypewriterMarkdown } from '@/components/chat/TypewriterMarkdown';
 import { PhaseCard } from './PhaseCard';
@@ -14,6 +15,8 @@ function isSynthesisPhase(name: string): boolean {
 
 interface PhaseRendererProps {
   phase: RenderedPhase;
+  onComplete?: () => void;
+  animationKey?: string;
 }
 
 function getTokens(data: unknown): { input?: number; output?: number } | null {
@@ -58,7 +61,7 @@ function getDuration(data: unknown): number | undefined {
   return typeof duration === 'number' ? duration : undefined;
 }
 
-export function PhaseRenderer({ phase }: PhaseRendererProps) {
+export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
@@ -69,7 +72,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   if (name === 'Direct Response' || name === 'Web Search') {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <TypewriterMarkdown text={md} wordsPerSecond={10} />
+      <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
     );
   }
 
@@ -83,6 +86,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
         <ClassificationCard data={data} />
+        {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
     );
   }
@@ -99,6 +103,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
         <CritiqueCard data={data} />
+        {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
     );
   }
@@ -112,7 +117,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-        <TypewriterMarkdown text={md} wordsPerSecond={10} />
+        <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
       </PhaseCard>
     );
   }
@@ -126,7 +131,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-        <TypewriterMarkdown text={md} wordsPerSecond={10} />
+        <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
       </PhaseCard>
     );
   }
@@ -141,7 +146,7 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
       <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-        <TypewriterMarkdown text={md} wordsPerSecond={10} />
+        <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
       </SynthesisCard>
     );
   }
@@ -150,7 +155,19 @@ export function PhaseRenderer({ phase }: PhaseRendererProps) {
   const md = buildMarkdownFromPhase(index, phaseNum, name, data);
   return (
     <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-      <TypewriterMarkdown text={md} wordsPerSecond={10} />
+      <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
     </PhaseCard>
   );
+}
+
+/** Helper that fires onComplete once after mount (for non-typewriter cards). */
+function CompletionTrigger({ onComplete }: { onComplete: () => void }) {
+  const fired = useRef(false);
+  useEffect(() => {
+    if (!fired.current) {
+      fired.current = true;
+      onComplete();
+    }
+  }, [onComplete]);
+  return null;
 }

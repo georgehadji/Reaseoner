@@ -11,10 +11,12 @@ import json
 import logging
 import sqlite3
 import asyncio
+import threading
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Callable
 from datetime import datetime
 from dataclasses import asdict
+from concurrent.futures import ThreadPoolExecutor
 
 from reasoner.core.events.domain_events import DomainEvent, EventType
 
@@ -35,14 +37,22 @@ class EventStore:
     def __init__(self, db_path: str | Path | None = None):
         if db_path is None:
             db_path = Path(__file__).parent.parent / "events.db"
-        
+
         self.db_path = Path(db_path)
         self._connection: sqlite3.Connection | None = None
-        self._lock = asyncio.Lock()
-        
+        # Use threading.Lock for process-safe synchronization (works across workers)
+        self._lock = threading.Lock()
+        self._executor: ThreadPoolExecutor | None = None
+
         # Initialize database
         self._init_db()
     
+    def _get_executor(self) -> ThreadPoolExecutor:
+        """Get or create thread pool executor."""
+        if self._executor is None:
+            self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="event_store")
+        return self._executor
+
     def _get_connection(self) -> sqlite3.Connection:
         """Get or create database connection."""
         if self._connection is None:
@@ -52,6 +62,17 @@ class EventStore:
             )
             self._connection.row_factory = sqlite3.Row
         return self._connection
+
+    async def _run_in_executor(self, func: Callable, *args) -> Any:
+        """Run sync function in thread pool with locking."""
+        loop = asyncio.get_event_loop()
+        executor = self._get_executor()
+
+        def locked_func():
+            with self._lock:
+                return func(*args)
+
+        return await loop.run_in_executor(executor, locked_func)
     
     def _init_db(self) -> None:
         """Initialize database schema."""
@@ -117,13 +138,13 @@ class EventStore:
         Save events to the event store.
 
         Events are persisted atomically within a transaction.
-        
+
         Raises:
             sqlite3.Error: If database operation fails
             json.JSONDecodeError: If event payload cannot be serialized
             OSError: If database file is inaccessible
         """
-        async with self._lock:
+        def _save_events_sync():
             try:
                 conn = self._get_connection()
 
@@ -170,6 +191,8 @@ class EventStore:
                 conn.rollback()
                 logger.error(f"Unexpected error saving events: {e}")
                 raise
+
+        await self._run_in_executor(_save_events_sync)
     
     def _get_aggregate_type(self, event_type: EventType) -> str:
         """Determine aggregate type from event type."""
@@ -440,17 +463,17 @@ class EventStore:
     ) -> None:
         """
         Save aggregate state snapshot for faster reconstruction.
-        
+
         Args:
             aggregate_id: ID of the aggregate
             version: Version number
             state: State dictionary to save
-            
+
         Raises:
             sqlite3.Error: If database operation fails
             json.JSONDecodeError: If state cannot be serialized
         """
-        async with self._lock:
+        def _save_snapshot_sync():
             try:
                 conn = self._get_connection()
 
@@ -477,6 +500,8 @@ class EventStore:
                 conn.rollback()
                 logger.error(f"Unexpected error saving snapshot for {aggregate_id}: {e}")
                 raise
+
+        await self._run_in_executor(_save_snapshot_sync)
     
     async def get_snapshot(
         self,
@@ -561,14 +586,14 @@ class EventStore:
     async def delete_aggregate(self, aggregate_id: str) -> None:
         """
         Delete aggregate and all its events (for GDPR compliance).
-        
+
         Args:
             aggregate_id: ID of the aggregate to delete
-            
+
         Raises:
             sqlite3.Error: If database operation fails
         """
-        async with self._lock:
+        def _delete_aggregate_sync():
             try:
                 conn = self._get_connection()
 
@@ -594,6 +619,8 @@ class EventStore:
                 conn.rollback()
                 logger.error(f"Unexpected error deleting aggregate {aggregate_id}: {e}")
                 raise
+
+        await self._run_in_executor(_delete_aggregate_sync)
     
     async def get_stats(self) -> dict[str, Any]:
         """
@@ -645,10 +672,13 @@ class EventStore:
             raise
     
     def close(self) -> None:
-        """Close database connection."""
+        """Close database connection and thread pool."""
         if self._connection:
             self._connection.close()
             self._connection = None
+        if self._executor:
+            self._executor.shutdown(wait=True)
+            self._executor = None
 
 
 # ─────────────────────────────────────────────────────────────────────

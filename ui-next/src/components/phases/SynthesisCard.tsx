@@ -76,11 +76,6 @@ export function SynthesisCard({
                 <span className="ml-2">· {duration.toFixed(1)}s</span>
               ) : null}
             </span>
-            {models && models.length > 0 ? (
-              <span className="max-w-[200px] truncate text-xs text-[var(--text-subtle)]" title={models.join(', ')}>
-                {models.length === 1 ? formatModelLabel(models[0]) : `${formatModelLabel(models[0])} +${models.length - 1}`}
-              </span>
-            ) : null}
             {subagents && subagents.length > 0 ? (
               <span
                 className="inline-flex items-center gap-1 rounded-md bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-subtle)]"
@@ -98,41 +93,39 @@ export function SynthesisCard({
             )}
           />
         </button>
-        {open && (
-          <div className="px-4 pb-4 pt-1">
-            {subagents && subagents.length > 0 && (
-              <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>
-                <div className="flex flex-wrap gap-2">
-                  {subagents.map((s) => (
-                    <div
-                      key={s.name}
-                      className={cn(
-                        'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
-                        s.error
-                          ? 'bg-red-500/10 text-red-400'
-                          : 'bg-[var(--surface-2)] text-[var(--text-subtle)]'
-                      )}
-                      title={s.error || undefined}
-                    >
-                      <Bot className="h-3 w-3 shrink-0" />
-                      <span className="font-medium">{s.name}</span>
-                      <span className="text-[var(--text-muted)]">→</span>
-                      <span>{formatModelLabel(s.model)}</span>
-                      <span className="text-[var(--text-muted)]">
-                        {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
-                      </span>
-                      <span className="text-[var(--text-muted)]">
-                        · {formatDurationMs(s.duration_ms ?? 0)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+        <div className="px-4 pb-4 pt-1" style={{ display: open ? 'block' : 'none' }}>
+          {subagents && subagents.length > 0 && (
+            <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>
+              <div className="flex flex-wrap gap-2">
+                {subagents.map((s) => (
+                  <div
+                    key={s.name}
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
+                      s.error
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-[var(--surface-2)] text-[var(--text-subtle)]'
+                    )}
+                    title={s.error || undefined}
+                  >
+                    <Bot className="h-3 w-3 shrink-0" />
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-[var(--text-muted)]">→</span>
+                    <span>{formatModelLabel(s.model)}</span>
+                    <span className="text-[var(--text-muted)]">
+                      {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
+                    </span>
+                    <span className="text-[var(--text-muted)]">
+                      · {formatDurationMs(s.duration_ms ?? 0)}
+                    </span>
+                  </div>
+                ))}
               </div>
-            )}
-            {children}
-          </div>
-        )}
+            </div>
+          )}
+          {children}
+        </div>
       </div>
     </div>
   );

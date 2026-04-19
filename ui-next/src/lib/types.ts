@@ -37,6 +37,7 @@ export interface PhaseEvent {
   role?: string;
   task?: string;
   model?: string;
+  models?: string[];
   error?: string | null;
   /** Streaming text chunk */
   text?: string;

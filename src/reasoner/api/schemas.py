@@ -1,0 +1,203 @@
+"""Pydantic request/response schemas for the ARA API."""
+
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from pydantic import BaseModel, field_validator
+
+from reasoner.core.constants import (
+    DEFAULT_PRESET,
+    DEFAULT_SANITIZER_MAX_LENGTH,
+    DEFAULT_SEARCH_RESULTS,
+    DEFAULT_SEQUENTIAL,
+    DEFAULT_SOURCE_TYPE,
+    DEFAULT_TOP_K,
+    TRUNCATION,
+)
+from reasoner.presets import is_valid_preset_name, resolve_preset_name
+
+
+class SearchRequest(BaseModel):
+    query: str
+    source_type: str = DEFAULT_SOURCE_TYPE
+    num_results: int = DEFAULT_SEARCH_RESULTS
+    smart: bool = False
+
+    @field_validator("query")
+    @classmethod
+    def validate_query(cls, v: str) -> str:
+        if not v or len(v.strip()) == 0:
+            raise ValueError("Query cannot be empty")
+        if len(v) > TRUNCATION.PROBLEM:
+            raise ValueError(f"Query too long (max {TRUNCATION.PROBLEM} characters)")
+        return v.strip()
+
+    @field_validator("num_results")
+    @classmethod
+    def validate_num_results(cls, v: int) -> int:
+        return max(1, min(v, 20))
+
+    model_config = {"extra": "forbid"}
+
+
+class RunRequest(BaseModel):
+    problem: str
+    preset: str = DEFAULT_PRESET
+    routing: dict[str, str] | None = None
+    top_k: int = DEFAULT_TOP_K
+    sequential: bool = DEFAULT_SEQUENTIAL
+    no_cache: bool = False
+    force_pipeline: bool = False
+    enhance_prompt: bool = False
+    source_type: str = DEFAULT_SOURCE_TYPE
+    domain: str | None = None
+
+    @field_validator("problem")
+    @classmethod
+    def validate_problem(cls, v: str) -> str:
+        if not v or len(v.strip()) == 0:
+            raise ValueError("Problem cannot be empty")
+        if len(v) > DEFAULT_SANITIZER_MAX_LENGTH:
+            raise ValueError(f"Problem too long (max {DEFAULT_SANITIZER_MAX_LENGTH} characters)")
+
+        # SECURITY: Comprehensive input sanitization
+        v = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", v)
+        if "\x00" in v:
+            raise ValueError("Invalid characters in problem")
+
+        v = re.sub(r"<script[^>]*>.*?</script>", "", v, flags=re.IGNORECASE | re.DOTALL)
+        v = re.sub(r"<[^>]+>", "", v)
+
+        try:
+            import unicodedata
+
+            v = unicodedata.normalize("NFKC", v)
+        except ImportError:
+            pass
+
+        dangerous_patterns = [
+            r"\{\{.*\}\}",
+            r"<%.*%>",
+            r"\$\{.*\}",
+            r"eval\s*\(",
+            r"exec\s*\(",
+            r"__import__",
+            r"subprocess",
+            r"os\.system",
+        ]
+        for pattern in dangerous_patterns:
+            if re.search(pattern, v, re.IGNORECASE):
+                raise ValueError("Problem contains disallowed content")
+
+        if re.search(r"[^\w\s]{100,}", v):
+            raise ValueError("Problem contains too many special characters")
+
+        # SECURITY: Prompt-injection defense (layer 1)
+        from reasoner.sanitization import sanitize_for_prompt
+
+        v, _ = sanitize_for_prompt(v)
+        v = v.strip()
+        if not v:
+            raise ValueError("Problem cannot be empty after sanitization")
+        return v
+
+    @field_validator("preset")
+    @classmethod
+    def validate_preset(cls, v: str) -> str:
+        if v.startswith("auto-") and v.split("-", 1)[1] in ("budget", "premium"):
+            return v
+        if not is_valid_preset_name(v):
+            raise ValueError(f"Invalid preset: {v}")
+        return resolve_preset_name(v)
+
+    @field_validator("source_type")
+    @classmethod
+    def validate_source_type(cls, v: str) -> str:
+        allowed = {"general", "academic", "social", "news", "code"}
+        if v not in allowed:
+            raise ValueError(f"Invalid source_type: {v}. Allowed: {allowed}")
+        return v
+
+    @field_validator("domain")
+    @classmethod
+    def validate_domain(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        if not re.match(r"^[a-zA-Z0-9][a-zA-Z0-9\-.]*[a-zA-Z0-9]$", v):
+            raise ValueError(f"Invalid domain format: {v}")
+        if len(v) > 253:
+            raise ValueError("Domain too long")
+        return v.lower()
+
+
+class FollowupRequest(BaseModel):
+    question: str
+    preset: str = DEFAULT_PRESET
+    top_k: int = DEFAULT_TOP_K
+    sequential: bool = DEFAULT_SEQUENTIAL
+    enhance_prompt: bool = False
+    conversation_id: str
+    history: list[dict[str, str]]
+    previous_synthesis: str
+    agent_model: str | None = None
+
+    @field_validator("question")
+    @classmethod
+    def validate_question(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Question cannot be empty")
+        from reasoner.sanitization import sanitize_for_prompt
+
+        v, _ = sanitize_for_prompt(v)
+        return v
+
+
+class ContextAnalysisRequest(BaseModel):
+    """Request model for running pipeline with external context."""
+
+    problem: str
+    context: list[dict[str, Any]]
+    method: str = "jury"
+    preset: str = "jury-premium"
+    top_k: int = 2
+    domain: str | None = None
+
+    @field_validator("problem")
+    @classmethod
+    def validate_problem(cls, v: str) -> str:
+        if not v or len(v.strip()) == 0:
+            raise ValueError("Problem cannot be empty")
+        return v
+
+    @field_validator("method")
+    @classmethod
+    def validate_method(cls, v: str) -> str:
+        if v not in ("jury", "multi-perspective"):
+            raise ValueError('Method must be "jury" or "multi-perspective"')
+        return v
+
+
+class SuggestionRequestModel(BaseModel):
+    query: str
+    chat_history: list[list[str]] | None = None
+    max_suggestions: int = 5
+
+
+class WeatherRequest(BaseModel):
+    location: str
+
+
+class StockRequest(BaseModel):
+    symbol: str
+
+
+class CalculationRequest(BaseModel):
+    expression: str
+
+
+class DiscoverRequest(BaseModel):
+    topic: str = "tech"
+    mode: str = "normal"

@@ -242,6 +242,14 @@ async def track_pipeline_metrics(event: DomainEvent) -> None:
         )
 
 
-# Auto-register example subscribers
-get_event_bus().subscribe_all(log_all_events)
-get_event_bus().subscribe_all(track_pipeline_metrics)
+def init_default_subscribers(bus: EventBus | None = None) -> None:
+    """
+    Register default subscribers.
+
+    Call this once on application startup, not at module import.
+    Tests should call reset_event_bus() in teardown to clean up.
+    """
+    if bus is None:
+        bus = get_event_bus()
+    bus.subscribe_all(log_all_events)
+    bus.subscribe_all(track_pipeline_metrics)

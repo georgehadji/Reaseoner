@@ -181,11 +181,11 @@ class StopPipelineCommandHandler:
     
     async def handle(self, command: StopPipelineCommand) -> dict[str, Any]:
         """Stop running pipeline."""
-        # Mark the specific pipeline as cancelled using the per-run dict
-        # that api.py checks inside run_stream.
+        # Signal cancellation via the per-run RunStateStore that api.py
+        # checks inside run_stream.
         import reasoner.api as api
-        api._cancelled_runs[command.pipeline_id] = True
-        
+        await api._run_store.request_cancel(command.pipeline_id)
+
         # Record stop event (if we have event store)
         if self.event_store:
             event = make_event(
@@ -196,7 +196,7 @@ class StopPipelineCommandHandler:
                 error=f"Stopped by user: {command.reason}",
             )
             await self.event_store.save_events([event])
-        
+
         return {"status": "stopped", "pipeline_id": command.pipeline_id}
 
 

@@ -99,11 +99,6 @@ def _ser_2(state: PipelineState) -> dict:
             } for gc in gen_candidates
         ]
 
-    # Add other states safely
-    for field in ['scientific_state', 'socratic_state', 'debate_rounds', 'web_discovery_results']:
-        val = _get_v(state, field)
-        if val: result[field] = val
-
     return result
 
 def _ser_3(state: PipelineState) -> dict:
@@ -127,23 +122,6 @@ def _ser_3(state: PipelineState) -> dict:
         ],
         "tokens": state.phase_tokens.get("Phase 3: Critique & Pruning", {"input": 0, "output": 0}),
     }
-
-    # Fallback for debate rebuttals when scores are empty
-    if not result["scores"]:
-        debate_rounds = _get_v(state, 'debate_rounds', [])
-        rebuttals = [r for r in debate_rounds if isinstance(r, dict) and r.get('type') == 'rebuttal']
-        if rebuttals:
-            result["debate_rebuttals"] = rebuttals
-
-        # Fallback for scientific falsification tests
-        scientific_state = _get_v(state, 'scientific_state')
-        if scientific_state and isinstance(scientific_state, dict):
-            result["scientific_state"] = scientific_state
-
-        # Fallback for socratic dialectic answers
-        socratic_state = _get_v(state, 'socratic_state')
-        if socratic_state and isinstance(socratic_state, dict):
-            result["socratic_state"] = socratic_state
 
     return result
 
@@ -185,16 +163,6 @@ def _ser_4(state: PipelineState) -> dict:
             "least_reliable_critic": _get_v(meta, 'least_reliable_critic', ''),
             "meta_insight": _get_v(meta, 'meta_insight', ''),
         }
-
-    # Fallback for debate judge / jury verification when primary fields are empty
-    if not stress and not verif and scores:
-        result["scores"] = [
-            {
-                "perspective": (lambda x: x.value if hasattr(x, 'value') else str(x))(_get_v(s, 'perspective', '')),
-                "total": round(_get_v(s, 'total', 0), 2),
-                "steel_man": _get_v(s, 'steel_man', ''),
-            } for s in sorted(scores, key=lambda x: _get_v(x, 'total', 0), reverse=True)
-        ]
 
     return result
 

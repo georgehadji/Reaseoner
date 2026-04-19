@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Copy, Check, Sparkles, Clock } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
@@ -28,6 +28,7 @@ export interface ChatFeedMessage {
   meta?: { original?: string; enhanced?: string };
   activeAgents?: { name: string; task: string }[];
   streamingContent?: string;
+  phaseModels?: string[];
 }
 
 interface ChatFeedProps {
@@ -36,7 +37,15 @@ interface ChatFeedProps {
   showNewContentIndicator?: boolean;
 }
 
-function PhaseIndicator({ name, agents }: { name?: string; agents?: { name: string; task: string }[] }) {
+function PhaseIndicator({
+  name,
+  agents,
+  models,
+}: {
+  name?: string;
+  agents?: { name: string; task: string }[];
+  models?: string[];
+}) {
   return (
     <div className="mb-3 flex flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -60,6 +69,19 @@ function PhaseIndicator({ name, agents }: { name?: string; agents?: { name: stri
           </span>
         ) : null}
       </div>
+      {models && models.length > 0 && (
+        <div className="flex flex-wrap gap-1 pl-6">
+          {models.map((m) => (
+            <span
+              key={m}
+              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-subtle)]"
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              {m.split('/').pop() || m}
+            </span>
+          ))}
+        </div>
+      )}
       {agents && agents.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pl-6">
           {agents.map((a) => (
@@ -136,6 +158,21 @@ export function ChatFeed({
   onScrollToBottom,
   showNewContentIndicator,
 }: ChatFeedProps) {
+  // Track how many phases are allowed to render for each assistant message.
+  // Key: message id, Value: number of visible phases (default 1 so first phase shows immediately)
+  const [visiblePhaseCounts, setVisiblePhaseCounts] = useState<Record<string, number>>({});
+
+  const handlePhaseComplete = useCallback((msgId: string, phaseIndex: number) => {
+    setVisiblePhaseCounts((prev) => {
+      const current = prev[msgId] ?? 1;
+      // Only advance if this is the currently visible phase
+      if (phaseIndex === current - 1) {
+        return { ...prev, [msgId]: current + 1 };
+      }
+      return prev;
+    });
+  }, []);
+
   return (
     <div className="relative flex flex-col gap-5 px-4 py-6 sm:px-6 lg:px-8">
       {messages.map((msg) => {
@@ -181,19 +218,35 @@ export function ChatFeed({
             </div>
           );
         }
+
+        const visibleCount = visiblePhaseCounts[msg.id] ?? 1;
+        const phases = msg.phases || [];
+        const visiblePhases = phases.slice(0, visibleCount);
+
         return (
           <div key={msg.id} className="flex w-full flex-col items-center">
             <ChatMessage role="assistant">
-              {msg.isStreaming && <PhaseIndicator name={msg.currentPhaseName} agents={msg.activeAgents} />}
+              {msg.isStreaming && (
+                <PhaseIndicator
+                  name={msg.currentPhaseName}
+                  agents={msg.activeAgents}
+                  models={msg.phaseModels}
+                />
+              )}
               {msg.streamingContent ? (
                 <div className="w-full max-w-3xl whitespace-pre-wrap text-[18px] leading-relaxed text-[var(--text)]">
                   {msg.streamingContent}
                   <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle" />
                 </div>
-              ) : msg.phases && msg.phases.length > 0 ? (
+              ) : phases.length > 0 ? (
                 <div className="w-full">
-                  {msg.phases.map((phase) => (
-                    <PhaseRenderer key={`${msg.id}-${phase.phase}`} phase={phase} />
+                  {visiblePhases.map((phase, idx) => (
+                    <PhaseRenderer
+                      key={`${msg.id}-${phase.phase}`}
+                      phase={phase}
+                      onComplete={() => handlePhaseComplete(msg.id, idx)}
+                      animationKey={`${msg.id}-${phase.index}`}
+                    />
                   ))}
                 </div>
               ) : (

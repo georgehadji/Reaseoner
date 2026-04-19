@@ -211,13 +211,14 @@ export default function Home() {
       } else if (ev.type === 'phase_start' && typeof ev.phase === 'number') {
         const methodPhases = getMethodPhases(runMethod);
         const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
+        const startModels = Array.isArray(ev.models) ? (ev.models as string[]) : undefined;
         phaseStartTimesRef.current[ev.phase] = performance.now();
         setCurrentPhase(ev.phase);
         setMessages((prev) => {
           const next = [...prev];
           const idx = next.findIndex((m) => m.id === assistantId);
           if (idx !== -1) {
-            next[idx] = { ...next[idx], currentPhaseName: displayName };
+            next[idx] = { ...next[idx], currentPhaseName: displayName, phaseModels: startModels ?? next[idx].phaseModels };
           }
           return next;
         });
@@ -283,6 +284,8 @@ export default function Home() {
         setCompletedPhases((prev) => (prev.includes(phaseNum) ? prev : [...prev, phaseNum]));
         setCurrentPhase(undefined);
 
+        const phaseModels = (phaseData as Record<string, unknown>).models as string[] | undefined;
+
         setMessages((prev) => {
           const next = [...prev];
           const idx = next.findIndex((m) => m.id === assistantId);
@@ -294,6 +297,7 @@ export default function Home() {
               currentPhaseName: undefined,
               // Clear streaming content when synthesis phase completes (structured card takes over)
               streamingContent: displayName === 'Synthesis' ? undefined : next[idx].streamingContent,
+              phaseModels: phaseModels ?? next[idx].phaseModels,
             };
           }
           return next;

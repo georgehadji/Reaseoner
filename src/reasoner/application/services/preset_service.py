@@ -1,0 +1,110 @@
+"""Preset resolution, routing validation, and router construction."""
+
+from __future__ import annotations
+
+import logging
+import os
+from typing import Any
+
+from reasoner.llm import ProviderRouter, _REGISTRY
+from reasoner.presets import build_auto_preset, build_custom_router, get_preset
+
+logger = logging.getLogger(__name__)
+
+
+class PresetService:
+    """Encapsulates all preset-related logic: resolution, filtering, router building."""
+
+    def resolve(self, raw_preset: str) -> tuple[str, bool, str]:
+        """
+        Resolve a raw preset string into gate preset parameters.
+
+        Returns:
+            (gate_preset_name, is_auto, auto_tier)
+        """
+        is_auto = raw_preset.startswith("auto")
+        auto_tier = raw_preset.split("-", 1)[1] if is_auto and "-" in raw_preset else "budget"
+        gate_preset_name = f"multi-perspective-{auto_tier}" if is_auto else raw_preset
+        return gate_preset_name, is_auto, auto_tier
+
+    def filter_routing(self, routing: dict[str, str], primary_id: str) -> dict[str, str]:
+        """Drop routing entries whose API key env var is missing; fall back to primary."""
+        filtered: dict[str, str] = {}
+        for role, model_id in routing.items():
+            entry = _REGISTRY.get(model_id, {})
+            env = entry.get("env")
+            if env and not os.environ.get(env):
+                continue
+            filtered[role] = model_id
+        return filtered
+
+    def build_router(
+        self,
+        preset_name: str,
+        custom_routing: dict[str, str] | None = None,
+        agent_model: str | None = None,
+    ) -> tuple[str, ProviderRouter]:
+        """
+        Build a ProviderRouter from a preset or custom routing.
+
+        Args:
+            preset_name: The preset identifier (e.g. 'multi-perspective-budget').
+            custom_routing: Optional explicit routing dict (bypasses preset).
+            agent_model: Optional override for synthesis/classification/decomposition.
+
+        Returns:
+            (effective_preset_name, router)
+        """
+        if custom_routing:
+            filtered = self.filter_routing(custom_routing, "claude-sonnet")
+            router = build_custom_router(filtered)
+            return preset_name, router
+
+        preset = get_preset(preset_name)
+        filtered_routing = self.filter_routing(preset.routing, preset.primary_id)
+
+        if agent_model:
+            for role in ("synthesis", "classification", "decomposition"):
+                filtered_routing[role] = agent_model
+            logger.info(
+                "Follow-up agent override: using %s for roles %s",
+                agent_model,
+                ["synthesis", "classification", "decomposition"],
+            )
+
+        router = ProviderRouter.from_model_ids(
+            primary_id=preset.primary_id,
+            routing=filtered_routing,
+        )
+        return preset_name, router
+
+    def build_auto_router(
+        self,
+        method: str,
+        tier: str,
+        agent_model: str | None = None,
+    ) -> tuple[str, ProviderRouter]:
+        """
+        Build a router for an auto-selected method.
+
+        Returns:
+            (effective_preset_name, router)
+        """
+        effective_preset_name = build_auto_preset(method, tier)
+        preset = get_preset(effective_preset_name)
+        filtered_routing = self.filter_routing(preset.routing, preset.primary_id)
+
+        if agent_model:
+            for role in ("synthesis", "classification", "decomposition"):
+                filtered_routing[role] = agent_model
+
+        router = ProviderRouter.from_model_ids(
+            primary_id=preset.primary_id,
+            routing=filtered_routing,
+        )
+        logger.info(
+            "Auto-method: gate selected '%s' → preset '%s'",
+            method,
+            effective_preset_name,
+        )
+        return effective_preset_name, router

@@ -1,19 +1,38 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { isAnimationComplete, markAnimationComplete } from '@/lib/animation-cache';
 
 interface TypewriterMarkdownProps {
   text: string;
   wordsPerSecond?: number;
+  onComplete?: () => void;
+  animationKey?: string;
 }
 
-export function TypewriterMarkdown({ text, wordsPerSecond = 10 }: TypewriterMarkdownProps) {
+export function TypewriterMarkdown({ text, wordsPerSecond = 10, onComplete, animationKey }: TypewriterMarkdownProps) {
   const [displayedText, setDisplayedText] = useState('');
+  const onCompleteRef = useRef(onComplete);
+  const completedRef = useRef(false);
+
+  // Keep callback ref up to date without re-triggering effect
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (!text) {
       setDisplayedText('');
+      completedRef.current = false;
+      return;
+    }
+
+    // If already completed (in this instance or globally), show full text immediately
+    if (completedRef.current || (animationKey && isAnimationComplete(animationKey))) {
+      setDisplayedText(text);
+      completedRef.current = true;
+      if (animationKey) markAnimationComplete(animationKey);
       return;
     }
 
@@ -28,6 +47,9 @@ export function TypewriterMarkdown({ text, wordsPerSecond = 10 }: TypewriterMark
     const timer = setInterval(() => {
       if (currentIndex >= tokens.length) {
         clearInterval(timer);
+        completedRef.current = true;
+        if (animationKey) markAnimationComplete(animationKey);
+        onCompleteRef.current?.();
         return;
       }
       currentIndex += 1;
@@ -35,7 +57,7 @@ export function TypewriterMarkdown({ text, wordsPerSecond = 10 }: TypewriterMark
     }, intervalMs);
 
     return () => clearInterval(timer);
-  }, [text, wordsPerSecond]);
+  }, [text, wordsPerSecond, animationKey]);
 
   return (
     <div className="markdown-body text-[17px] leading-relaxed">

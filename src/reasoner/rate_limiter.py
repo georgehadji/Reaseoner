@@ -171,6 +171,10 @@ class RateLimiter:
 
 
 # Global rate limiter instance
+# NOTE: This is a per-process singleton. For horizontal scaling
+# (multi-worker/multi-process), each worker maintains its own token bucket.
+# A client can bypass limits by hitting different workers. Replace with a
+# Redis-backed sliding window or external rate-limiting service.
 _rate_limiter: Optional[RateLimiter] = None
 
 

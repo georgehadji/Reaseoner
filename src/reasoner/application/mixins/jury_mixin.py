@@ -9,14 +9,15 @@ from reasoner.models import PipelineState, GenerationCandidate, CriticScore, Ver
 from reasoner.parsing import ParseError, extract_json
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class JuryMixin:
+class JuryMixin(PipelineMixinProtocol):
     """Mixin providing jury phase methods."""
 
-    async def _phase_jury_generate(self, state: PipelineState):
+    async def _phase_jury_generate(self, state: PipelineState) -> None:
         self._log("JURY", "Generating independent solutions...", state)
         
         async def _get_generator(gen_id: str):
@@ -43,7 +44,7 @@ class JuryMixin:
             else:
                 state.generation_candidates.append(r)
 
-    async def _phase_jury_critique(self, state: PipelineState):
+    async def _phase_jury_critique(self, state: PipelineState) -> None:
         self._log("JURY_CRITIQUE", "Jury critiquing candidates...", state)
         
         async def _get_jury_critique(critic_id: str):
@@ -81,7 +82,7 @@ class JuryMixin:
                         self._log("JURY_CRITIQUE", f"High penalty for Jury candidate {gen_id}. Triggering recovery path.", state)
                         await self._run_recovery_path(state, candidate_to_check)
 
-    async def _phase_jury_verify_and_meta_eval(self, state: PipelineState):
+    async def _phase_jury_verify_and_meta_eval(self, state: PipelineState) -> None:
         self._log("JURY", "Verifying claims and meta-evaluating critics...", state)
 
         def _parse_verification_results(raw_list: list[dict]) -> list[VerificationResult]:
@@ -138,7 +139,7 @@ class JuryMixin:
         m_data = extract_json(raw_m)
         state.meta_evaluation = _parse_meta_evaluation(m_data)
 
-    async def _phase_jury_weighted_ranking(self, state: PipelineState):
+    async def _phase_jury_weighted_ranking(self, state: PipelineState) -> None:
         """A3: Rerank generators by critic reliability weights."""
         self._log("JURY", "Computing reliability-weighted ranking...", state)
         reliability: dict[str, float] = {}

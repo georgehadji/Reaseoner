@@ -3,6 +3,11 @@ Per-run cancellation state management for the ARA API.
 
 Encapsulates the _run_cancel_events dict and _active_runs set,
 using an asyncio.Lock for async-context safety.
+
+.. note::
+    RunStateStore is an in-process singleton. For horizontal scaling
+    (multi-worker/multi-process), replace with a Redis-backed store
+    or external pub/sub system.
 """
 
 from __future__ import annotations
@@ -83,3 +88,8 @@ class RunStateStore:
                 event.set()
             self._cancel_events.clear()
             self._active_runs.clear()
+
+
+# Module-level singleton — shared across the API layer.
+# For horizontal scaling, replace this with a Redis-backed store.
+_run_store = RunStateStore()

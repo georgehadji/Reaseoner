@@ -28,9 +28,9 @@ from reasoner.presets import (
     get_preset_tier,
 )
 
-from .cache import CACHE_DIR, _MEMORY_CACHE, _cache_key, _load_cache, _save_cache
+from .cache import CACHE_DIR, _cache_key, _load_cache, _save_cache
 from .history import HISTORY_DIR, HistoryEntry, _save_history_entry
-from .run_state import RunStateStore
+from .run_state import _run_store
 from .schemas import FollowupRequest, RunRequest
 from .serializers import (
     _event,
@@ -41,8 +41,6 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
-
-_run_store = RunStateStore()
 _preset_service = PresetService()
 
 

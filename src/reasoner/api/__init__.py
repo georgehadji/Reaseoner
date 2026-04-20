@@ -139,9 +139,7 @@ def _filter_routing(routing: dict[str, str], primary_id: str) -> dict[str, str]:
 
 # Per-run cancellation tracking.
 # Encapsulated in RunStateStore for testability and safe async locking.
-from .run_state import RunStateStore
-
-_run_store = RunStateStore()
+from .run_state import _run_store
 
 # ─────────────────────────────────────────────────────────────────────
 # CACHE
@@ -151,6 +149,7 @@ from .cache import (
     CACHE_DIR,
     _MEMORY_CACHE,
     _cache_key,
+    clear_memory_cache,
     _load_cache,
     _save_cache,
 )
@@ -190,7 +189,6 @@ from .serializers import (
 
 
 from reasoner.api.streaming import (
-    _run_store,
     run_followup_stream,
     run_stream,
     run_stream_cached,
@@ -295,7 +293,7 @@ async def clear_cache():
             cleared += 1
         except OSError:
             pass
-    _MEMORY_CACHE.clear()
+    clear_memory_cache()
     return {"cleared": cleared}
 
 

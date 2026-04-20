@@ -277,6 +277,10 @@ class AuthManager:
 
 
 # Global auth manager
+# NOTE: This is a per-process singleton. For horizontal scaling
+# (multi-worker/multi-process), keys created on one worker are invisible to
+# others. Replace with a persistent store (PostgreSQL, Redis) with a local
+# TTL cache for reads.
 _auth_manager: Optional[AuthManager] = None
 
 

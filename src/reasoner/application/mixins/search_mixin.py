@@ -19,11 +19,12 @@ from reasoner.parsing import ParseError, extract_json, safe_list
 from reasoner.sanitization import sanitize_for_prompt
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class SearchMixin:
+class SearchMixin(PipelineMixinProtocol):
     """Mixin providing search, vetting, and deep-read phase methods."""
 
     # ── Shared helpers ───────────────────────────────────────────────────

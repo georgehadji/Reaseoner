@@ -6,6 +6,7 @@ Provides fault tolerance for LLM provider calls.
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -256,30 +257,37 @@ class CircuitOpenError(Exception):
 
 
 # Global circuit breaker registry
+# NOTE: This is a per-process registry. For horizontal scaling, circuit state
+# should be externalized (e.g., Redis) or per-worker degradation accepted.
 _circuit_breakers: dict[str, CircuitBreaker] = {}
 from reasoner.core.constants import MAX_CIRCUIT_BREAKER_REGISTRY_SIZE
 _MAX_REGISTRY_SIZE: int = MAX_CIRCUIT_BREAKER_REGISTRY_SIZE
+_circuit_breaker_lock = threading.Lock()
 
 
 def get_circuit_breaker(name: str) -> CircuitBreaker:
     """Get or create a circuit breaker by name."""
-    if name not in _circuit_breakers:
-        if len(_circuit_breakers) >= _MAX_REGISTRY_SIZE:
-            # Evict oldest entry to prevent unbounded growth
-            oldest = next(iter(_circuit_breakers))
-            del _circuit_breakers[oldest]
-        _circuit_breakers[name] = CircuitBreaker(name)
-    return _circuit_breakers[name]
+    with _circuit_breaker_lock:
+        if name not in _circuit_breakers:
+            if len(_circuit_breakers) >= _MAX_REGISTRY_SIZE:
+                # Evict oldest entry to prevent unbounded growth
+                oldest = next(iter(_circuit_breakers))
+                del _circuit_breakers[oldest]
+            _circuit_breakers[name] = CircuitBreaker(name)
+        return _circuit_breakers[name]
 
 
 def get_all_circuit_breakers() -> dict[str, dict[str, Any]]:
     """Get status of all circuit breakers."""
-    return {name: cb.get_health_status() for name, cb in _circuit_breakers.items()}
+    with _circuit_breaker_lock:
+        return {name: cb.get_health_status() for name, cb in _circuit_breakers.items()}
 
 
 async def reset_all_circuits() -> None:
     """Reset all circuit breakers."""
-    for cb in _circuit_breakers.values():
+    with _circuit_breaker_lock:
+        cbs = list(_circuit_breakers.values())
+    for cb in cbs:
         await cb.reset()
 
 

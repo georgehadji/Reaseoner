@@ -9,14 +9,15 @@ from reasoner.models import PipelineState
 from reasoner.parsing import ParseError, extract_json
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class DelphiMixin:
+class DelphiMixin(PipelineMixinProtocol):
     """Mixin providing Delphi method phases."""
 
-    async def _phase_delphi_round1(self, state: PipelineState):
+    async def _phase_delphi_round1(self, state: PipelineState) -> None:
         self._log("DELPHI", "Round 1: Independent expert estimates...", state)
         tasks = [
             self._call_llm_cached(
@@ -44,7 +45,7 @@ class DelphiMixin:
             estimates.append(data)
         state.delphi_state["round_1_estimates"] = estimates
 
-    async def _phase_delphi_aggregation(self, state: PipelineState):
+    async def _phase_delphi_aggregation(self, state: PipelineState) -> None:
         """Aggregate round 1 estimates: compute median, IQR, identify outlier."""
         self._log("DELPHI", "Aggregating expert estimates...", state)
         estimates = state.delphi_state.get("round_1_estimates", [])
@@ -93,7 +94,7 @@ class DelphiMixin:
             data = extract_json(raw)
             state.delphi_state["aggregated_stats"] = data
 
-    async def _phase_delphi_round2(self, state: PipelineState):
+    async def _phase_delphi_round2(self, state: PipelineState) -> None:
         self._log("DELPHI", "Round 2: Experts revise with anonymous aggregate...", state)
         estimates = state.delphi_state.get("round_1_estimates", [])
         # Iterate actual expert IDs to handle any R1 failures correctly
@@ -124,7 +125,7 @@ class DelphiMixin:
             revised.append(data)
         state.delphi_state["round_2_estimates"] = revised
 
-    async def _phase_delphi_convergence(self, state: PipelineState):
+    async def _phase_delphi_convergence(self, state: PipelineState) -> None:
         self._log("DELPHI", "Checking convergence...", state)
         estimates = state.delphi_state.get("round_2_estimates", [])
         values = [e.get("revised_estimate") for e in estimates if isinstance(e.get("revised_estimate"), (int, float))]
@@ -154,7 +155,7 @@ class DelphiMixin:
             state.delphi_state["converged"] = data.get("converged", False)
             state.delphi_state["consensus"] = data
 
-    async def _phase_delphi_dissent(self, state: PipelineState):
+    async def _phase_delphi_dissent(self, state: PipelineState) -> None:
         self._log("DELPHI", "Capturing minority dissent...", state)
         stats = state.delphi_state.get("aggregated_stats", {})
         outlier = stats.get("outlier_expert", "expert_1")

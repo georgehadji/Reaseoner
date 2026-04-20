@@ -9,14 +9,15 @@ from reasoner.models import PipelineState, SolutionCandidate, PerspectiveType
 from reasoner.parsing import extract_json
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class CognitiveMixin:
+class CognitiveMixin(PipelineMixinProtocol):
     """Mixin providing CoVE, SoT, ToT, PoT, and Self-Discover phases."""
 
-    async def _phase_cove_draft(self, state: PipelineState):
+    async def _phase_cove_draft(self, state: PipelineState) -> None:
         self._log("COVE", "Drafting initial answer...", state)
         raw, _ = await self._call_llm_cached(
             role="cove_draft",
@@ -26,7 +27,7 @@ class CognitiveMixin:
         state.cove_state["draft_answer"] = data.get("draft_answer", "")
         state.cove_state["claims"] = data.get("claims", [])
 
-    async def _phase_cove_verify(self, state: PipelineState):
+    async def _phase_cove_verify(self, state: PipelineState) -> None:
         self._log("COVE", "Generating verification questions...", state)
         raw, _ = await self._call_llm_cached(
             role="cove_verify",
@@ -35,7 +36,7 @@ class CognitiveMixin:
         data = extract_json(raw)
         state.cove_state["verification_questions"] = data.get("verification_questions", [])
 
-    async def _phase_cove_answer(self, state: PipelineState):
+    async def _phase_cove_answer(self, state: PipelineState) -> None:
         self._log("COVE", "Answering verification questions independently...", state)
         raw, _ = await self._call_llm_cached(
             role="cove_answer",
@@ -44,7 +45,7 @@ class CognitiveMixin:
         data = extract_json(raw)
         state.cove_state["verification_answers"] = data.get("answers", [])
 
-    async def _phase_cove_revise(self, state: PipelineState):
+    async def _phase_cove_revise(self, state: PipelineState) -> None:
         self._log("COVE", "Revising answer based on verification...", state)
         raw, _ = await self._call_llm_cached(
             role="cove_revise",
@@ -62,7 +63,7 @@ class CognitiveMixin:
             model_used=state.phase_models.get("cove_revise", "unknown"),
         ))
 
-    async def _phase_sot_skeleton(self, state: PipelineState):
+    async def _phase_sot_skeleton(self, state: PipelineState) -> None:
         self._log("SoT", "Generating problem skeleton...", state)
         raw, _ = await self._call_llm_cached(
             role="sot_skeleton",
@@ -71,7 +72,7 @@ class CognitiveMixin:
         data = extract_json(raw)
         state.sot_state["sub_problems"] = data.get("sub_problems", [])
 
-    async def _phase_sot_solve(self, state: PipelineState):
+    async def _phase_sot_solve(self, state: PipelineState) -> None:
         self._log("SoT", "Solving sub-problems in parallel...", state)
         sub_problems = state.sot_state.get("sub_problems", [])
         if not sub_problems:
@@ -102,7 +103,7 @@ class CognitiveMixin:
             solutions.append(result)
         state.sot_state["solutions"] = solutions
 
-    async def _phase_sot_assemble(self, state: PipelineState):
+    async def _phase_sot_assemble(self, state: PipelineState) -> None:
         self._log("SoT", "Assembling sub-problem solutions...", state)
         raw, _ = await self._call_llm_cached(
             role="sot_assemble",
@@ -120,7 +121,7 @@ class CognitiveMixin:
             model_used=state.phase_models.get("sot_assemble", "unknown"),
         ))
 
-    async def _phase_tot_decompose(self, state: PipelineState):
+    async def _phase_tot_decompose(self, state: PipelineState) -> None:
         self._log("ToT", "Decomposing into decision points...", state)
         raw, _ = await self._call_llm_cached(
             role="tot_decompose",
@@ -130,7 +131,7 @@ class CognitiveMixin:
         state.tot_state["decision_points"] = data.get("decision_points", [])
         state.tot_state["current_path"] = []
 
-    async def _phase_tot_generate(self, state: PipelineState):
+    async def _phase_tot_generate(self, state: PipelineState) -> None:
         self._log("ToT", "Generating candidate actions...", state)
         dps = state.tot_state.get("decision_points", [])
         if not dps:
@@ -144,7 +145,7 @@ class CognitiveMixin:
         data = extract_json(raw)
         state.tot_state["current_candidates"] = data.get("candidates", [])
 
-    async def _phase_tot_evaluate(self, state: PipelineState):
+    async def _phase_tot_evaluate(self, state: PipelineState) -> None:
         self._log("ToT", "Evaluating candidates...", state)
         candidates = state.tot_state.get("current_candidates", [])
         if not candidates:
@@ -162,7 +163,7 @@ class CognitiveMixin:
         if best:
             state.tot_state["current_path"].append(best)
 
-    async def _phase_tot_backtrack(self, state: PipelineState):
+    async def _phase_tot_backtrack(self, state: PipelineState) -> None:
         self._log("ToT", "Backtracking / finalizing path...", state)
         raw, _ = await self._call_llm_cached(
             role="tot_backtrack",
@@ -181,7 +182,7 @@ class CognitiveMixin:
             model_used=state.phase_models.get("tot_backtrack", "unknown"),
         ))
 
-    async def _phase_pot_generate(self, state: PipelineState):
+    async def _phase_pot_generate(self, state: PipelineState) -> None:
         self._log("PoT", "Generating executable code...", state)
         raw, _ = await self._call_llm_cached(
             role="pot_generate",
@@ -192,7 +193,7 @@ class CognitiveMixin:
         state.pot_state["explanation"] = data.get("explanation", "")
         state.pot_state["expected_output_type"] = data.get("expected_output_type", "")
 
-    async def _phase_pot_execute(self, state: PipelineState):
+    async def _phase_pot_execute(self, state: PipelineState) -> None:
         self._log("PoT", "Executing generated code...", state)
         code = state.pot_state.get("code", "")
         if not code:
@@ -209,7 +210,7 @@ class CognitiveMixin:
         state.pot_state["execution_error"] = data.get("error", "")
         state.pot_state["intermediate_steps"] = data.get("intermediate_steps", [])
 
-    async def _phase_pot_interpret(self, state: PipelineState):
+    async def _phase_pot_interpret(self, state: PipelineState) -> None:
         self._log("PoT", "Interpreting execution results...", state)
         raw, _ = await self._call_llm_cached(
             role="pot_interpret",
@@ -227,7 +228,7 @@ class CognitiveMixin:
             model_used=state.phase_models.get("pot_interpret", "unknown"),
         ))
 
-    async def _phase_sd_select(self, state: PipelineState):
+    async def _phase_sd_select(self, state: PipelineState) -> None:
         self._log("SELF-DISCOVER", "Selecting reasoning modules...", state)
         raw, _ = await self._call_llm_cached(
             role="sd_select",
@@ -237,7 +238,7 @@ class CognitiveMixin:
         state.self_discover_state["selected_modules"] = data.get("selected_modules", [])
         state.self_discover_state["composition_strategy"] = data.get("composition_strategy", "")
 
-    async def _phase_sd_adapt(self, state: PipelineState):
+    async def _phase_sd_adapt(self, state: PipelineState) -> None:
         self._log("SELF-DISCOVER", "Adapting modules to problem...", state)
         raw, _ = await self._call_llm_cached(
             role="sd_adapt",
@@ -246,7 +247,7 @@ class CognitiveMixin:
         data = extract_json(raw)
         state.self_discover_state["adapted_modules"] = data.get("adapted_modules", [])
 
-    async def _phase_sd_implement(self, state: PipelineState):
+    async def _phase_sd_implement(self, state: PipelineState) -> None:
         self._log("SELF-DISCOVER", "Implementing adapted reasoning pipeline...", state)
         raw, _ = await self._call_llm_cached(
             role="sd_implement",

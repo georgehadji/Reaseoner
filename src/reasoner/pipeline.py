@@ -7,13 +7,35 @@ for improved performance and token-cost efficiency.
 
 from __future__ import annotations
 import asyncio
+import functools
 import json
 import logging
 import os
 import re
 import time
 from dataclasses import asdict
-from typing import Any
+from typing import Any, Callable, TypeVar
+
+T = TypeVar("T")
+
+
+def timed(func: Callable[..., T]) -> Callable[..., T]:
+    """Decorator that records phase duration in ``state.phase_durations``."""
+    @functools.wraps(func)
+    async def async_wrapper(self, *args, **kwargs):
+        start = time.monotonic()
+        try:
+            return await func(self, *args, **kwargs)
+        finally:
+            elapsed = time.monotonic() - start
+            state = args[0] if args else None
+            if state is not None and hasattr(state, "phase_durations"):
+                state.phase_durations[func.__name__] = elapsed
+            # Only log if we have a valid state object
+            if state is not None and hasattr(state, "log"):
+                self._log("TIMING", f"{func.__name__} completed in {elapsed*1000:.1f}ms", state)
+
+    return async_wrapper  # type: ignore[return-value]
 from reasoner.models import (PipelineState, SolutionCandidate, CritiqueScore, StressTestResult,
                 ScenarioType, GenerationCandidate, CriticScore, VerificationResult,
                 MetaEvaluation, ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit, TaskType)
@@ -337,6 +359,7 @@ class ARAPipeline(
         
         return state
 
+    @timed
     async def _phase_enhance_prompt(self, state: PipelineState):
         """Optional pre-phase: rewrite the user's problem for clarity and specificity."""
         if state.enhanced_problem:
@@ -385,6 +408,7 @@ class ARAPipeline(
             state.enhanced_problem = state.problem
             self._log("PROMPT-ENHANCE", f"Enhancement failed ({exc}); using original prompt.", state)
 
+    @timed
     async def _phase_0_classify(self, state: PipelineState):
         self._log("PHASE-0", "Classifying task...", state)
         from reasoner.phases import detect_language
@@ -405,6 +429,7 @@ class ARAPipeline(
             detected_lang = lang
         state.language = detected_lang
 
+    @timed
     async def _phase_1_decompose(self, state: PipelineState):
         self._log("PHASE-1", "Decomposing problem...", state)
 
@@ -442,6 +467,7 @@ class ARAPipeline(
         data = extract_json(raw)
         state.decomposition = data # Simplified
 
+    @timed
     async def _phase_synthesis(self, state: PipelineState):
         self._log("SYNTHESIS", "Synthesizing final solution...", state)
 
@@ -573,6 +599,7 @@ class ARAPipeline(
             sources=_coerce_sources(json_data.get("sources", []))
         )
 
+    @timed
     async def _phase_post_synthesis_verify(self, state: PipelineState) -> None:
         """Optional cross-model verification of the final synthesis."""
         if not state.final_solution:

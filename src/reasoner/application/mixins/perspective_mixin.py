@@ -12,14 +12,15 @@ from reasoner.parsing import ParseError, extract_json
 
 import reasoner.phases as phases
 from reasoner.parsing import _parse_critique_scores
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class PerspectiveMixin:
+class PerspectiveMixin(PipelineMixinProtocol):
     """Mixin providing multi-perspective, critique, and stress-test phases."""
 
-    async def _phase_2_perspectives(self, state: PipelineState):
+    async def _phase_2_perspectives(self, state: PipelineState) -> None:
         self._log("PHASE-2", "Running multi-perspective analysis...", state)
 
         _PERSPECTIVE_HALLUCINATION_KEYWORDS = {"greek text", "greek characters", "parsing errors", "encoding issues", "unicode problems"}
@@ -93,7 +94,7 @@ class PerspectiveMixin:
                 else:
                     state.candidates.append(r)
 
-    async def _phase_3_critique(self, state: PipelineState):
+    async def _phase_3_critique(self, state: PipelineState) -> None:
         from reasoner.pipeline import TOKEN_OPTIMIZATION, USE_PHASE_SUBAGENTS
         self._log("PHASE-3", "Critiquing candidates...", state)
         if not state.candidates:
@@ -143,7 +144,7 @@ class PerspectiveMixin:
         top_p = sorted(scored_perspectives, key=scored_perspectives.get, reverse=True)[:self.top_k]
         state.top_candidates = [c for c in state.candidates if c.perspective in top_p]
 
-    async def _phase_4_stress_test(self, state: PipelineState):
+    async def _phase_4_stress_test(self, state: PipelineState) -> None:
         self._log("PHASE-4", "Running stress tests...", state)
         # TOKEN OPTIMIZATION: Use stress_testing-specific token budget + caching
         from reasoner.pipeline import TOKEN_OPTIMIZATION

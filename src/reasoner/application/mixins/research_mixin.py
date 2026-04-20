@@ -11,14 +11,15 @@ from reasoner.models import PipelineState
 from reasoner.parsing import ParseError, extract_json
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class ResearchMixin:
+class ResearchMixin(PipelineMixinProtocol):
     """Mixin providing research phase methods."""
 
-    async def _phase_research_web_search(self, state: PipelineState):
+    async def _phase_research_web_search(self, state: PipelineState) -> None:
         self._log("RESEARCH", "Starting deep iterative research...", state)
         max_iterations = 3
         current_knowledge = []

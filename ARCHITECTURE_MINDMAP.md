@@ -628,7 +628,25 @@ PhaseEvent objects → React state → DOM
 
 6. **Environment Variable Sprawl** — `core/settings.py` reads `.env` once at import time. Any code that imports `settings` before `load_dotenv` completes may see empty values. This is an implicit ordering contract.
 
-### 4.7 Implicit Contracts
+### 4.7 Scaling Boundaries
+
+The following components use **in-process mutable state** and therefore cannot span multiple workers or processes without data splitting:
+
+| Component | State Location | Lock Protection | Scaling Path |
+|-----------|---------------|-----------------|--------------|
+| `RunStateStore` | `api/run_state.py:_run_store` | `asyncio.Lock` ✅ | Redis pub/sub or external task queue |
+| `_MEMORY_CACHE` | `api/cache.py:_MEMORY_CACHE` | `threading.Lock` ✅ | Redis / memcached |
+| `AuthManager` | `auth.py:_auth_manager` | `asyncio.Lock` ✅ | PostgreSQL + local TTL cache |
+| `RateLimiter` | `rate_limiter.py:_rate_limiter` | `asyncio.Lock` ✅ | Redis sliding window |
+| `CircuitBreaker` registry | `circuit_breaker.py:_circuit_breakers` | `threading.Lock` ✅ | Per-worker degradation acceptable |
+
+**Fixes applied (2026-04-19):**
+- `_run_store` unified to a single module-level singleton (was duplicated in `api/__init__.py` and `api/streaming.py`).
+- `_MEMORY_CACHE` wrapped in `threading.Lock` for read/write safety.
+- `_circuit_breakers` registry wrapped in `threading.Lock`.
+- Scaling-limitation docstrings added to `RunStateStore`, `AuthManager`, `RateLimiter`, `CircuitBreaker`.
+
+### 4.8 Implicit Contracts
 
 | Contract | Parties | Enforcement | Risk if Broken |
 |----------|---------|-------------|----------------|

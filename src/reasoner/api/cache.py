@@ -3,15 +3,32 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 from pathlib import Path
 
 CACHE_DIR = Path(__file__).parent.parent / "cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
-# In-memory hot-cache layer to avoid disk I/O on repeated identical requests
+# In-memory hot-cache layer to avoid disk I/O on repeated identical requests.
+# NOTE: This is a per-process cache. For horizontal scaling, use Redis or
+# a shared external cache.
 _MEMORY_CACHE: dict[str, list[dict]] = {}
 _MEMORY_CACHE_MAX_SIZE = 256
+_memory_cache_lock = threading.Lock()
+_cache_hits: int = 0
+_cache_misses: int = 0
+
+
+def get_cache_stats() -> dict[str, int | float]:
+    """Return memory cache telemetry."""
+    total = _cache_hits + _cache_misses
+    return {
+        "hits": _cache_hits,
+        "misses": _cache_misses,
+        "total": total,
+        "hit_rate": (_cache_hits / total) if total > 0 else 0.0,
+    }
 
 
 def _prune_memory_cache() -> None:
@@ -27,6 +44,12 @@ def _prune_memory_cache() -> None:
     if excess > 0:
         for _ in range(excess):
             _MEMORY_CACHE.pop(next(iter(_MEMORY_CACHE)), None)
+
+
+def clear_memory_cache() -> None:
+    """Clear the in-memory cache (thread-safe)."""
+    with _memory_cache_lock:
+        _MEMORY_CACHE.clear()
 
 
 def _cache_key(req: "RunRequest") -> str:
@@ -47,17 +70,21 @@ def _cache_key(req: "RunRequest") -> str:
 
 
 def _load_cache(key: str) -> list[dict] | None:
-    # 1. Check in-memory hot cache first
-    if key in _MEMORY_CACHE:
-        return _MEMORY_CACHE[key]
+    global _cache_hits, _cache_misses
+    # 1. Check in-memory hot cache first (under lock for consistency)
+    with _memory_cache_lock:
+        if key in _MEMORY_CACHE:
+            _cache_hits += 1
+            return _MEMORY_CACHE[key]
 
     # 2. Fall back to disk
     path = CACHE_DIR / f"{key}.json"
     if path.exists():
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-            _MEMORY_CACHE[key] = data
-            _prune_memory_cache()
+            with _memory_cache_lock:
+                _MEMORY_CACHE[key] = data
+                _prune_memory_cache()
             return data
         except (json.JSONDecodeError, OSError):
             # Treat a corrupt or unreadable cache file as a cache miss and
@@ -66,6 +93,7 @@ def _load_cache(key: str) -> list[dict] | None:
                 path.unlink(missing_ok=True)
             except OSError:
                 pass
+    _cache_misses += 1
     return None
 
 
@@ -84,9 +112,10 @@ def _prune_disk_cache() -> None:
 
 
 def _save_cache(key: str, events: list[dict]) -> None:
-    # Update in-memory hot cache immediately
-    _MEMORY_CACHE[key] = events.copy()
-    _prune_memory_cache()
+    # Update in-memory hot cache immediately (under lock)
+    with _memory_cache_lock:
+        _MEMORY_CACHE[key] = events.copy()
+        _prune_memory_cache()
 
     # Write to a sibling temp file then rename so that a crash during the
     # write never leaves a corrupt (partial) JSON file at the target path.

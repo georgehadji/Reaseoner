@@ -10,11 +10,12 @@ from reasoner.models import PipelineState, SolutionCandidate, GenerationCandidat
 from reasoner.parsing import ParseError, extract_json
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class RecoveryMixin:
+class RecoveryMixin(PipelineMixinProtocol):
     """Mixin providing recovery path execution."""
 
     async def _run_recovery_path(self, state: PipelineState, candidate_to_verify: SolutionCandidate | GenerationCandidate) -> None:

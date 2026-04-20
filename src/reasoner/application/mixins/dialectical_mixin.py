@@ -8,14 +8,15 @@ from reasoner.models import PipelineState
 from reasoner.parsing import extract_json
 
 import reasoner.phases as phases
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class DialecticalMixin:
+class DialecticalMixin(PipelineMixinProtocol):
     """Mixin providing dialectical, scientific, socratic, pre-mortem, bayesian, and analogical phases."""
 
-    async def _phase_scientific_hypothesize(self, state: PipelineState):
+    async def _phase_scientific_hypothesize(self, state: PipelineState) -> None:
         self._log("SCIENTIFIC", "Generating hypotheses...", state)
         raw, _ = await self._call_llm_cached(
             role="primary",
@@ -24,7 +25,7 @@ class DialecticalMixin:
         data = extract_json(raw)
         state.scientific_state["hypotheses"] = data.get("hypotheses", [])
 
-    async def _phase_scientific_test(self, state: PipelineState):
+    async def _phase_scientific_test(self, state: PipelineState) -> None:
         self._log("SCIENTIFIC", "Running falsification tests...", state)
         raw, _ = await self._call_llm_cached(
             role="scoring",
@@ -42,7 +43,7 @@ class DialecticalMixin:
             hyp["posterior_probability"] = round(supported / max(len(tests), 1), 2)
         state.scientific_state["hypotheses"] = hypotheses
 
-    async def _phase_socratic_question(self, state: PipelineState):
+    async def _phase_socratic_question(self, state: PipelineState) -> None:
         self._log("SOCRATIC", "Generating Socratic questions...", state)
         raw, _ = await self._call_llm_cached(
             role="destructive",  # A4: questioner uses destructive role for genuine challenge
@@ -51,7 +52,7 @@ class DialecticalMixin:
         data = extract_json(raw)
         state.socratic_state["questions"] = data.get("questions", [])
 
-    async def _phase_socratic_answer(self, state: PipelineState):
+    async def _phase_socratic_answer(self, state: PipelineState) -> None:
         self._log("SOCRATIC", "Attempting Dialectic answers...", state)
         raw, _ = await self._call_llm_cached(
             role="constructive",  # A4: answerer uses constructive role — genuinely different model
@@ -60,7 +61,7 @@ class DialecticalMixin:
         data = extract_json(raw)
         state.socratic_state["answers"] = data.get("answers", [])
 
-    async def _phase_pre_mortem_failure(self, state: PipelineState):
+    async def _phase_pre_mortem_failure(self, state: PipelineState) -> None:
         self._log("PRE-MORTEM", "Constructing failure narrative...", state)
         raw, _ = await self._call_llm_cached(
             role="destructive",
@@ -69,7 +70,7 @@ class DialecticalMixin:
         data = extract_json(raw)
         state.pre_mortem_state["failure_narrative"] = data
 
-    async def _phase_pre_mortem_backtrack(self, state: PipelineState):
+    async def _phase_pre_mortem_backtrack(self, state: PipelineState) -> None:
         self._log("PRE-MORTEM", "Identifying root cause pivot point...", state)
         raw, _ = await self._call_llm_cached(
             role="scoring",
@@ -78,7 +79,7 @@ class DialecticalMixin:
         data = extract_json(raw)
         state.pre_mortem_state["root_cause"] = data
 
-    async def _phase_pre_mortem_signals(self, state: PipelineState):
+    async def _phase_pre_mortem_signals(self, state: PipelineState) -> None:
         self._log("PRE-MORTEM", "Identifying early warning signals...", state)
         raw, _ = await self._call_llm_cached(
             role="scoring",
@@ -88,7 +89,7 @@ class DialecticalMixin:
         state.pre_mortem_state["early_signals"] = data.get("early_signals", [])
         state.pre_mortem_state["monitoring_cadence"] = data.get("monitoring_cadence", "")
 
-    async def _phase_pre_mortem_redesign(self, state: PipelineState):
+    async def _phase_pre_mortem_redesign(self, state: PipelineState) -> None:
         self._log("PRE-MORTEM", "Generating hardened redesign...", state)
         raw, _ = await self._call_llm_cached(
             role="synthesis",
@@ -100,7 +101,7 @@ class DialecticalMixin:
         state.pre_mortem_state["checkpoints"] = data.get("checkpoints", [])
         state.pre_mortem_state["rollback_plan"] = data.get("rollback_plan", "")
 
-    async def _phase_bayesian_priors(self, state: PipelineState):
+    async def _phase_bayesian_priors(self, state: PipelineState) -> None:
         self._log("BAYESIAN", "Eliciting prior distributions...", state)
         raw, _ = await self._call_llm_cached(
             role="constructive",
@@ -109,7 +110,7 @@ class DialecticalMixin:
         data = extract_json(raw)
         state.bayesian_state["hypotheses_with_priors"] = data.get("hypotheses", [])
 
-    async def _phase_bayesian_likelihood(self, state: PipelineState):
+    async def _phase_bayesian_likelihood(self, state: PipelineState) -> None:
         self._log("BAYESIAN", "Assessing likelihoods...", state)
         raw, _ = await self._call_llm_cached(
             role="destructive",
@@ -119,7 +120,7 @@ class DialecticalMixin:
         state.bayesian_state["evidence_likelihoods"] = data.get("likelihoods", [])
         state.bayesian_state["observations"] = data.get("observations", [])
 
-    async def _phase_bayesian_posterior(self, state: PipelineState):
+    async def _phase_bayesian_posterior(self, state: PipelineState) -> None:
         self._log("BAYESIAN", "Computing posteriors...", state)
         raw, _ = await self._call_llm_cached(
             role="scoring",
@@ -129,7 +130,7 @@ class DialecticalMixin:
         state.bayesian_state["posteriors"] = data.get("posteriors", [])
         state.bayesian_state["most_probable"] = data.get("most_probable", "")
 
-    async def _phase_bayesian_sensitivity(self, state: PipelineState):
+    async def _phase_bayesian_sensitivity(self, state: PipelineState) -> None:
         self._log("BAYESIAN", "Running sensitivity analysis...", state)
         raw, _ = await self._call_llm_cached(
             role="synthesis",
@@ -139,7 +140,7 @@ class DialecticalMixin:
         state.bayesian_state["sensitivity_results"] = data.get("sensitivity_analysis", [])
         state.bayesian_state["most_sensitive_assumption"] = data.get("most_sensitive_assumption", "")
 
-    async def _phase_dialectical_thesis(self, state: PipelineState):
+    async def _phase_dialectical_thesis(self, state: PipelineState) -> None:
         self._log("DIALECTICAL", "Formulating thesis...", state)
         raw, _ = await self._call_llm_cached(
             role="constructive",
@@ -150,7 +151,7 @@ class DialecticalMixin:
         state.dialectical_state["key_commitments"] = data.get("key_commitments", [])
         state.dialectical_state["thesis_assumptions"] = data.get("assumptions", [])
 
-    async def _phase_dialectical_antithesis(self, state: PipelineState):
+    async def _phase_dialectical_antithesis(self, state: PipelineState) -> None:
         self._log("DIALECTICAL", "Formulating antithesis...", state)
         raw, _ = await self._call_llm_cached(
             role="destructive",
@@ -161,7 +162,7 @@ class DialecticalMixin:
         state.dialectical_state["contradictions_exposed"] = data.get("contradictions_exposed", [])
         state.dialectical_state["negated_commitments"] = data.get("negated_commitments", [])
 
-    async def _phase_dialectical_contradictions(self, state: PipelineState):
+    async def _phase_dialectical_contradictions(self, state: PipelineState) -> None:
         self._log("DIALECTICAL", "Analyzing contradictions...", state)
         raw, _ = await self._call_llm_cached(
             role="scoring",
@@ -172,7 +173,7 @@ class DialecticalMixin:
         state.dialectical_state["compatible"] = data.get("compatible", [])
         state.dialectical_state["synthesis_candidates"] = data.get("synthesis_candidates", [])
 
-    async def _phase_dialectical_aufhebung(self, state: PipelineState):
+    async def _phase_dialectical_aufhebung(self, state: PipelineState) -> None:
         self._log("DIALECTICAL", "Formulating Aufhebung...", state)
         raw, _ = await self._call_llm_cached(
             role="synthesis",
@@ -185,7 +186,7 @@ class DialecticalMixin:
         state.dialectical_state["transcended"] = data.get("transcended", "")
         state.dialectical_state["new_insights"] = data.get("new_insights", [])
 
-    async def _phase_analogical_abstraction(self, state: PipelineState):
+    async def _phase_analogical_abstraction(self, state: PipelineState) -> None:
         self._log("ANALOGICAL", "Extracting abstract problem structure...", state)
         raw, _ = await self._call_llm_cached(
             role="systemic",
@@ -199,7 +200,7 @@ class DialecticalMixin:
         state.analogical_state["core_dynamics"] = data.get("core_dynamics", [])
         state.analogical_state["structural_type"] = data.get("structural_type", "") or ""
 
-    async def _phase_analogical_domain_search(self, state: PipelineState):
+    async def _phase_analogical_domain_search(self, state: PipelineState) -> None:
         self._log("ANALOGICAL", "Searching for isomorphic source domains...", state)
         raw, _ = await self._call_llm_cached(
             role="systemic",
@@ -209,7 +210,7 @@ class DialecticalMixin:
         _raw_domains = data.get("source_domains", [])
         state.analogical_state["source_domains"] = _raw_domains if isinstance(_raw_domains, list) else []
 
-    async def _phase_analogical_mapping(self, state: PipelineState):
+    async def _phase_analogical_mapping(self, state: PipelineState) -> None:
         if not state.analogical_state.get("source_domains"):
             return
         self._log("ANALOGICAL", "Mapping source domain elements to target problem...", state)
@@ -223,7 +224,7 @@ class DialecticalMixin:
         state.analogical_state["unmapped_elements"] = data.get("unmapped_elements", [])
         state.analogical_state["mapping_quality"] = data.get("mapping_quality", "") or ""
 
-    async def _phase_analogical_transfer(self, state: PipelineState):
+    async def _phase_analogical_transfer(self, state: PipelineState) -> None:
         if not state.analogical_state.get("source_domains"):
             return
         self._log("ANALOGICAL", "Transferring and adapting solution from source domain...", state)

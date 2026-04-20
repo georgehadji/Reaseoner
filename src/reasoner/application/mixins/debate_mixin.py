@@ -11,14 +11,15 @@ from reasoner.parsing import extract_json
 
 import reasoner.phases as phases
 from reasoner.parsing import _parse_critique_scores
+from reasoner.application.mixins._protocol import PipelineMixinProtocol
 
 logger = logging.getLogger(__name__)
 
 
-class DebateMixin:
+class DebateMixin(PipelineMixinProtocol):
     """Mixin providing debate phase methods."""
 
-    async def _phase_debate_opening(self, state: PipelineState):
+    async def _phase_debate_opening(self, state: PipelineState) -> None:
         self._log("DEBATE", "Round 1: Opening Statements", state)
         async def _get_opening(side: str):
             raw, _ = await self._call_llm_cached(role="constructive" if side=="A" else "destructive", system_prompt=phases.DEBATE_OPENING_SYSTEM, user_prompt=phases.debate_opening_prompt(state, side), state=state)
@@ -35,7 +36,7 @@ class DebateMixin:
                 statements.append(r)
         state.debate_rounds.append({"round": 1, "type": "opening", "statements": statements})
 
-    async def _phase_debate_rebuttal(self, state: PipelineState):
+    async def _phase_debate_rebuttal(self, state: PipelineState) -> None:
         self._log("DEBATE", "Round 2: Rebuttals", state)
         # Guard: opening phase may have produced fewer than 2 statements if one side failed.
         # Abort the rebuttal round rather than crash with IndexError.
@@ -62,14 +63,14 @@ class DebateMixin:
                 rebuttals.append(r)
         state.debate_rounds.append({"round": 2, "type": "rebuttal", "rebuttals": rebuttals})
 
-    async def _phase_debate_judge(self, state: PipelineState):
+    async def _phase_debate_judge(self, state: PipelineState) -> None:
         self._log("DEBATE", "Round 3: Judging", state)
         raw, _ = await self._call_llm_cached(role="systemic", system_prompt=phases.DEBATE_JUDGE_SYSTEM, user_prompt=phases.debate_judge_prompt(state), state=state)
         data = extract_json(raw)
         state.scores = _parse_critique_scores(data.get("scores", []))  # Store judge's scores
         # This data can then be used by the final synthesis step
 
-    async def _phase_debate_cross_examine(self, state: PipelineState):
+    async def _phase_debate_cross_examine(self, state: PipelineState) -> None:
         """A5: Cross-examination — each side challenges the other's specific claims."""
         self._log("DEBATE", "Running cross-examination...", state)
         side_a_claims = []

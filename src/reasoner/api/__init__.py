@@ -120,7 +120,6 @@ def get_architecture_components():
             
             primary_provider = DummyProvider(model="dummy")
         
-        from reasoner.infrastructure.llm.new_pipeline import NewARAPipeline
         _handler_registry = get_handler_registry(primary_provider, _event_store)
     
     return _event_store, _handler_registry

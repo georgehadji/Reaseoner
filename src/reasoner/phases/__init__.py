@@ -1,4 +1,3 @@
-# Backward-compatible shim — all content moved to reasoner.phases package
 from reasoner.phases._shared import (
     detect_language,
     get_language_instruction,

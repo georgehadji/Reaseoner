@@ -1,0 +1,164 @@
+"""Model registry and provider factory."""
+
+from __future__ import annotations
+
+import os
+from typing import Any
+
+from reasoner.core.constants import (
+    DEFAULT_OLLAMA_URL,
+    MODEL_CLAUDE_SONNET,
+    MODEL_GEMINI_FLASH,
+    MODEL_GEMINI_PRO,
+    MODEL_GPT4O_MINI,
+)
+from reasoner.infrastructure.llm.providers.openai_compat import (
+    OpenAICompatibleProvider,
+    OpenRouterProvider,
+)
+
+
+# Whitelist of supported models.  Everything except Ollama routes through OpenRouter.
+_MODEL_WHITELIST: dict[str, dict[str, Any]] = {
+    # Anthropic
+    "claude-opus":      {"model": "qwen/qwen3.6-plus"},
+    MODEL_CLAUDE_SONNET: {"model": "anthropic/claude-sonnet-4.6"},
+    "claude-haiku":     {"model": "anthropic/claude-haiku-4.5"},
+    # OpenAI
+    "gpt-5":            {"model": "openai/gpt-5.4"},
+    "gpt-5-mini":       {"model": "openai/gpt-5.4-mini"},
+    "gpt-4o":           {"model": "openai/gpt-4o"},
+    MODEL_GPT4O_MINI:   {"model": "openai/gpt-4o-mini"},
+    "o3":               {"model": "openai/o3"},
+    "o3-mini":          {"model": "openai/o3-mini"},
+    # Google
+    MODEL_GEMINI_PRO:   {"model": "google/gemini-2.5-pro"},
+    MODEL_GEMINI_FLASH: {"model": "google/gemini-2.5-flash"},
+    "gemma-4-26b":      {"model": "google/gemma-4-26b-a4b-it"},
+    "gemma-4-31b":      {"model": "google/gemma-4-31b-it"},
+    # xAI
+    "grok-4.20":        {"model": "x-ai/grok-4.20"},
+    "grok-4":           {"model": "x-ai/grok-4"},
+    "grok-3":           {"model": "x-ai/grok-3"},
+    "grok-3-mini":      {"model": "x-ai/grok-3-mini"},
+    # Perplexity
+    "sonar-pro":        {"model": "perplexity/sonar-pro",      "extra_body": {"web_search_options": {"search_context_size": "medium"}}},
+    "sonar":            {"model": "perplexity/sonar",          "extra_body": {"web_search_options": {"search_context_size": "low"}}},
+    "sonar-reasoning-pro": {"model": "perplexity/sonar-reasoning-pro", "extra_body": {"web_search_options": {"search_context_size": "medium"}}},
+    "sonar-deep-research": {"model": "perplexity/sonar-deep-research", "extra_body": {"reasoning_effort": "low"}},
+    # Mistral
+    "mistral-large-3":  {"model": "mistralai/mistral-large-2512"},
+    "mistral-medium":   {"model": "mistralai/mistral-medium-3.1"},
+    "codestral":        {"model": "mistralai/codestral-2501"},
+    "ministral-8b":     {"model": "mistralai/ministral-8b"},
+    "ministral-3b":     {"model": "mistralai/ministral-3b"},
+    # DeepSeek
+    "deepseek-v3":      {"model": "deepseek/deepseek-v3.2"},
+    "deepseek-r1":      {"model": "deepseek/deepseek-r1-0528"},
+    # Qwen
+    "qwen3-max":        {"model": "qwen/qwen3.6-plus"},
+    "qwen3.6-plus":     {"model": "qwen/qwen3.6-plus"},
+    "qwen3-plus":       {"model": "qwen/qwen3.5-plus-02-15"},
+    "qwen3-turbo":      {"model": "qwen/qwen-turbo"},
+    "qwen3-coder":      {"model": "qwen/qwen3-coder-plus"},
+    "qwen3.5-flash":    {"model": "qwen/qwen3.5-flash-02-23"},
+    "qwen3.5-9b":       {"model": "qwen/qwen3.5-9b"},
+    # Kimi
+    "kimi-k2":          {"model": "moonshotai/kimi-k2"},
+    "kimi-k2-5":        {"model": "moonshotai/kimi-k2.5"},
+    "kimi-k2-thinking": {"model": "moonshotai/kimi-k2-thinking"},
+    # GLM
+    "glm-5":            {"model": "z-ai/glm-5"},
+    "glm-4-plus":       {"model": "z-ai/glm-4.5"},
+    "glm-4-air":        {"model": "z-ai/glm-4.5-air"},
+    "glm-4-airx":       {"model": "z-ai/glm-4.6"},
+    "glm-4-long":       {"model": "z-ai/glm-4-32b"},
+    "glm-5.1":          {"model": "z-ai/glm-5.1"},
+    # Elephant
+    "elephant-alpha":   {"model": "openrouter/elephant-alpha"},
+    # Arcee AI
+    "arcee-trinity-large-thinking": {"model": "arcee-ai/trinity-large-thinking"},
+    "arcee-virtuoso-large":         {"model": "arcee-ai/virtuoso-large"},
+    "arcee-maestro-reasoning":      {"model": "arcee-ai/maestro-reasoning"},
+    "arcee-coder-large":            {"model": "arcee-ai/coder-large"},
+    # Xiaomi
+    "mimo-v2-pro":    {"model": "xiaomi/mimo-v2-pro"},
+    "mimo-v2-omni":   {"model": "xiaomi/mimo-v2-omni"},
+    "mimo-v2-flash":  {"model": "xiaomi/mimo-v2-flash"},
+    # MiniMax
+    "minimax-m2":       {"model": "minimax/minimax-01"},
+    "minimax-m2.5":     {"model": "minimax/minimax-m2.5"},
+    "minimax-m2.5-free": {"model": "minimax/minimax-m2.5:free"},
+    "minimax-m2.7":     {"model": "minimax/minimax-m2.7"},
+    # Ollama (local)
+    "ollama-llama3":    {"cls": "compat", "model": "llama3",    "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-llama3.1":  {"cls": "compat", "model": "llama3.1",  "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-llama3.2":  {"cls": "compat", "model": "llama3.2",  "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-mistral":   {"cls": "compat", "model": "mistral",   "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-codellama": {"cls": "compat", "model": "codellama", "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-qwen2":     {"cls": "compat", "model": "qwen2",     "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-gemma2":    {"cls": "compat", "model": "gemma2",    "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+    "ollama-phi3":      {"cls": "compat", "model": "phi3",      "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
+}
+
+# Build _REGISTRY from whitelist so every non-local model routes through OpenRouter.
+_REGISTRY: dict[str, dict[str, Any]] = {}
+for _mid, _cfg in _MODEL_WHITELIST.items():
+    _entry: dict[str, Any] = dict(_cfg)
+    if not _entry.get("is_local"):
+        _entry["cls"] = "openrouter"
+        _entry["env"] = "OPENROUTER_API_KEY"
+    _REGISTRY[_mid] = _entry
+
+
+def build_provider(model_id: str, api_key: str | None = None) -> "BaseLLMProvider":
+    """Build a provider instance from a model ID string."""
+    from reasoner.infrastructure.llm.base import BaseLLMProvider
+
+    if model_id not in _REGISTRY:
+        available = "\n  ".join(sorted(_REGISTRY.keys()))
+        raise ValueError(
+            f"Unknown model ID: {model_id!r}\n"
+            f"Available models:\n  {available}"
+        )
+    cfg = _REGISTRY[model_id]
+    key = api_key or os.environ.get(cfg["env"], "")
+    if not key and not cfg.get("is_local"):
+        raise ValueError(
+            f"API key for '{model_id}' is not set. "
+            f"Set the {cfg['env']} environment variable."
+        )
+
+    match cfg["cls"]:
+        case "openrouter":
+            return OpenRouterProvider(
+                model=cfg["model"],
+                api_key=key,
+                extra_body=cfg.get("extra_body"),
+            )
+        case "compat":
+            # Handle Ollama base URL from environment
+            base_url = cfg.get("base")
+            if cfg.get("is_local") and os.environ.get("OLLAMA_BASE_URL"):
+                base_url = os.environ.get("OLLAMA_BASE_URL")
+            # For Ollama, api_key is optional (can be any dummy value)
+            ollama_key = key if key else "ollama"
+            return OpenAICompatibleProvider(
+                model=cfg["model"],
+                api_key=ollama_key,
+                base_url=base_url,
+                extra_body=cfg.get("extra_body"),
+            )
+        case _:
+            raise ValueError(f"Unknown cls: {cfg['cls']!r}")
+
+
+def list_models() -> dict[str, list[str]]:
+    """Return all model IDs grouped by ecosystem."""
+    groups: dict[str, list[str]] = {"openrouter": [], "ollama": []}
+    for mid in sorted(_REGISTRY):
+        if _REGISTRY[mid].get("is_local"):
+            groups["ollama"].append(mid)
+        else:
+            groups["openrouter"].append(mid)
+    return groups

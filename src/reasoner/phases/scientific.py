@@ -1,0 +1,14 @@
+from __future__ import annotations
+import json
+from reasoner.models import PipelineState
+from reasoner.phases._shared import get_language_instruction, _wrap_user_input
+
+SCIENTIFIC_HYPOTHESIS_SYSTEM = "You are an analytical assistant. Generate falsifiable hypotheses from observations. Output ONLY valid JSON."
+
+def scientific_hypothesis_prompt(state: PipelineState) -> str:
+    return f'{get_language_instruction(state)}\n\nObservations: {_wrap_user_input(state.problem)}\n\nGenerate 3 competing hypotheses.\n\nOutput JSON: {{"hypotheses": [{{"id": "H1", "statement": "...", "falsifiability": "..."}}]}}'
+
+SCIENTIFIC_TEST_SYSTEM = "You are an analytical assistant. Design mental experiments to falsify hypotheses. Output ONLY valid JSON."
+
+def scientific_test_prompt(state: PipelineState) -> str:
+    return f'{get_language_instruction(state)}\n\nHypotheses:\n{json.dumps(state.scientific_state["hypotheses"], indent=2)}\n\nFor each, describe a test and predict the result (SUPPORTED, WEAKENED, FALSIFIED).\n\nOutput JSON: {{"test_results": [{{"hypothesis_id": "H1", "experiment": "...", "result": "..."}}]}}'

@@ -9,6 +9,8 @@ import json
 import re
 from typing import Any
 
+from reasoner.models import CritiqueScore, PerspectiveType
+
 
 class ParseError(Exception):
     """Raised when LLM response cannot be parsed into expected structure."""
@@ -252,3 +254,30 @@ def safe_list(value: Any) -> list[str]:
             # Handle edge cases like circular references or unconvertible values
             return []
     return []
+
+
+def _parse_critique_scores(raw_scores: list[dict]) -> list[CritiqueScore]:
+    """Safely build CritiqueScore objects from raw LLM output.
+
+    CritiqueScore has six required fields with no defaults.  LLMs occasionally
+    omit one; passing the dict directly via **s raises TypeError and empties
+    state.scores for the entire run.  Additionally, `perspective` arrives as a
+    plain string and must be coerced to the PerspectiveType enum.
+    """
+    out: list[CritiqueScore] = []
+    for s in raw_scores:
+        try:
+            out.append(CritiqueScore(
+                perspective=PerspectiveType(s["perspective"]),
+                logical_consistency=float(s.get("logical_consistency") or 0),
+                evidence_support=float(s.get("evidence_support") or 0),
+                failure_resilience=float(s.get("failure_resilience") or 0),
+                feasibility=float(s.get("feasibility") or 0),
+                bias_flags=s.get("bias_flags") or [],
+                steel_man=s.get("steel_man") or "",
+                confidence_vs_accuracy_penalty=float(s.get("confidence_vs_accuracy_penalty") or 0),
+            ))
+        except (KeyError, ValueError, TypeError) as exc:
+            import logging
+            logging.getLogger(__name__).warning("Skipping malformed CritiqueScore entry: %s", exc)
+    return out

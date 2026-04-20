@@ -75,24 +75,22 @@ class RunPipelineCommandHandler:
         await self.event_bus.publish(start_event)
         
         # Execute pipeline phases
-        from reasoner.infrastructure.llm.new_pipeline import NewARAPipeline
+        from reasoner.pipeline import ARAPipeline
+        from reasoner.llm import ProviderRouter
         
-        pipeline = NewARAPipeline(
-            router=self.llm_router,
+        router = ProviderRouter(primary=self.llm_router)
+        pipeline = ARAPipeline(
+            router=router,
             preset_name=command.preset,
             top_k=command.top_k,
             source_type=command.source_type,
             domain=command.domain,
-            parallel=command.parallel,
+            parallel_perspectives=command.parallel,
         )
         
         try:
-            # Run pipeline with aggregate for event recording
-            state = await pipeline.run_with_aggregate(
-                problem=command.problem,
-                aggregate=aggregate,
-                event_store=self.event_store,
-            )
+            # Run pipeline
+            state = await pipeline.run(problem=command.problem)
             
             # Record completion event
             completion_event = make_event(
@@ -155,21 +153,11 @@ class ResumePipelineCommandHandler:
         if not aggregate.can_resume():
             raise ValueError(f"Pipeline {command.pipeline_id} cannot be resumed")
         
-        # Resume from last phase
-        from reasoner.infrastructure.llm.new_pipeline import NewARAPipeline
-        
-        pipeline = NewARAPipeline(
-            router=self.llm_router,
-            preset_name=aggregate.state_data.preset,
+        # Resume from last phase — not supported by legacy pipeline
+        raise NotImplementedError(
+            "ResumePipelineCommand is not supported. "
+            "The new pipeline architecture has been removed."
         )
-        
-        state = await pipeline.resume_from_phase(
-            aggregate=aggregate,
-            from_phase=command.from_phase,
-            event_store=self.event_store,
-        )
-        
-        return aggregate
 
 
 class StopPipelineCommandHandler:

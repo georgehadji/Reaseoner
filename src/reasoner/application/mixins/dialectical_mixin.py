@@ -127,7 +127,14 @@ class DialecticalMixin(PipelineMixinProtocol):
             system_prompt=phases.BAYESIAN_POSTERIOR_SYSTEM,
             user_prompt=phases.bayesian_posterior_prompt(state), state=state)
         data = extract_json(raw)
-        state.bayesian_state["posteriors"] = data.get("posteriors", [])
+        posteriors = data.get("posteriors", [])
+        # Normalize so posteriors sum to 1.0, correcting LLM rounding drift.
+        total = sum(p.get("posterior_probability", 0.0) for p in posteriors if isinstance(p, dict))
+        if total > 0 and abs(total - 1.0) > 0.01:
+            for p in posteriors:
+                if isinstance(p, dict) and "posterior_probability" in p:
+                    p["posterior_probability"] = round(p["posterior_probability"] / total, 4)
+        state.bayesian_state["posteriors"] = posteriors
         state.bayesian_state["most_probable"] = data.get("most_probable", "")
 
     async def _phase_bayesian_sensitivity(self, state: PipelineState) -> None:

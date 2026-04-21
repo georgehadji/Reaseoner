@@ -52,9 +52,14 @@ class ResearchMixin(PipelineMixinProtocol):
             if action == "done" or i == max_iterations:
                 break
                 
-            # Same guard as context-vetting: LLM may return a string, not a list.
+            # LLM may return a string instead of a list — wrap it rather than drop it.
             _raw_q = data.get("queries", [])
-            queries = _raw_q[:TRUNCATION.KEY_INSIGHTS] if isinstance(_raw_q, list) else []
+            if isinstance(_raw_q, list):
+                queries = _raw_q[:TRUNCATION.KEY_INSIGHTS]
+            elif isinstance(_raw_q, str) and _raw_q.strip():
+                queries = [_raw_q.strip()]
+            else:
+                queries = []
             if not queries:
                 break
                 

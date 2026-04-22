@@ -4,9 +4,13 @@ Pluggable backends with circuit-breaker fallback chains.
 """
 
 import time
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from typing import Optional
+
+import httpx
+
 from reasoner.core.temperatures import NON_PHASE_TEMPERATURES
 from reasoner.core.constants import (
     DEFAULT_MAX_TOKENS,
@@ -28,6 +32,16 @@ log = logging.getLogger("neuro.providers")
 class ReasoningProvider(ABC):
     def __init__(self, config: ProviderConfig):
         self.config = config
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=self.config.timeout)
+        return self._client
+
+    async def aclose(self):
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
 
     @abstractmethod
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
@@ -45,6 +59,16 @@ class ReasoningProvider(ABC):
 class EmbeddingProvider(ABC):
     def __init__(self, config: ProviderConfig):
         self.config = config
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING)
+        return self._client
+
+    async def aclose(self):
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
 
     @abstractmethod
     async def embed(self, text: str) -> list[float]:
@@ -72,16 +96,19 @@ class CircuitBreaker:
         self.failure_count = 0
         self.last_failure_time = 0.0
         self.is_open = False
+        self._lock = asyncio.Lock()
 
-    def record_success(self):
-        self.failure_count = 0
-        self.is_open = False
+    async def record_success(self):
+        async with self._lock:
+            self.failure_count = 0
+            self.is_open = False
 
-    def record_failure(self):
-        self.failure_count += 1
-        self.last_failure_time = time.time()
-        if self.failure_count >= self.threshold:
-            self.is_open = True
+    async def record_failure(self):
+        async with self._lock:
+            self.failure_count += 1
+            self.last_failure_time = time.time()
+            if self.failure_count >= self.threshold:
+                self.is_open = True
 
     def should_skip(self) -> bool:
         if not self.is_open:
@@ -121,12 +148,12 @@ class ResilientReasoning:
         if not self.breaker.should_skip():
             try:
                 result = await self.primary.generate(prompt, system, max_tokens)
-                self.breaker.record_success()
+                await self.breaker.record_success()
                 self.active_label = self.primary.label
                 self.failed_over = False
                 return result
             except Exception as e:
-                self.breaker.record_failure()
+                await self.breaker.record_failure()
                 log.warning(f"Primary reasoning failed ({self.primary.label}): {e}")
         else:
             log.info(f"Primary reasoning skipped (circuit open, retry in {self.breaker.retry_in:.0f}s)")
@@ -174,12 +201,12 @@ class ResilientEmbedding:
         if not self.breaker.should_skip():
             try:
                 result = await self.primary.embed(text)
-                self.breaker.record_success()
+                await self.breaker.record_success()
                 self.active_label = self.primary.label
                 self.failed_over = False
                 return result
             except Exception as e:
-                self.breaker.record_failure()
+                await self.breaker.record_failure()
                 log.warning(f"Primary embedding failed ({self.primary.label}): {e}")
         else:
             log.info(f"Primary embedding skipped (circuit open, retry in {self.breaker.retry_in:.0f}s)")
@@ -217,18 +244,15 @@ class ResilientEmbedding:
 
 class OllamaReasoning(ReasoningProvider):
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-        import httpx
         payload = {"model": self.config.model, "prompt": prompt, "stream": False,
                    "options": {"temperature": NON_PHASE_TEMPERATURES["neuro_memory"], "num_predict": max_tokens}}
         if system:
             payload["system"] = system
-        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            resp = await client.post(f"{self.config.api_base}/api/generate", json=payload)
-            resp.raise_for_status()
-            return resp.json().get("response", "")
+        resp = await self._get_client().post(f"{self.config.api_base}/api/generate", json=payload)
+        resp.raise_for_status()
+        return resp.json().get("response", "")
 
     async def health_check(self) -> bool:
-        import httpx
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.HEALTH_CHECK) as client:
                 return (await client.get(f"{self.config.api_base}/api/tags")).status_code == 200
@@ -238,16 +262,13 @@ class OllamaReasoning(ReasoningProvider):
 
 class OllamaEmbedding(EmbeddingProvider):
     async def embed(self, text: str) -> list[float]:
-        import httpx
-        async with httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING) as client:
-            resp = await client.post(f"{self.config.api_base}/api/embed",
-                                     json={"model": self.config.model, "input": text})
-            resp.raise_for_status()
-            embeddings = resp.json().get("embeddings", [[]])
-            return embeddings[0] if embeddings else []
+        resp = await self._get_client().post(f"{self.config.api_base}/api/embed",
+                                             json={"model": self.config.model, "input": text})
+        resp.raise_for_status()
+        embeddings = resp.json().get("embeddings", [[]])
+        return embeddings[0] if embeddings else []
 
     async def health_check(self) -> bool:
-        import httpx
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.HEALTH_CHECK) as client:
                 return (await client.get(f"{self.config.api_base}/api/tags")).status_code == 200
@@ -260,21 +281,19 @@ class OpenAIReasoning(ReasoningProvider):
         return self.config.api_base or OPENAI_BASE_URL
 
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-        import httpx
         headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
-        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            resp = await client.post(f"{self._url()}/chat/completions", headers=headers,
-                                     json={"model": self.config.model, "messages": messages,
-                                           "max_tokens": max_tokens, "temperature": NON_PHASE_TEMPERATURES["neuro_memory"]})
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+        resp = await self._get_client().post(f"{self._url()}/chat/completions", headers=headers,
+                                             json={"model": self.config.model, "messages": messages,
+                                                   "max_tokens": max_tokens,
+                                                   "temperature": NON_PHASE_TEMPERATURES["neuro_memory"]})
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
 
     async def health_check(self) -> bool:
-        import httpx
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.HEALTH_CHECK) as client:
                 return (await client.get(f"{self._url()}/models",
@@ -288,16 +307,13 @@ class OpenAIEmbedding(EmbeddingProvider):
         return self.config.api_base or OPENAI_BASE_URL
 
     async def embed(self, text: str) -> list[float]:
-        import httpx
         headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}
-        async with httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING) as client:
-            resp = await client.post(f"{self._url()}/embeddings", headers=headers,
-                                     json={"model": self.config.model, "input": text})
-            resp.raise_for_status()
-            return resp.json()["data"][0]["embedding"]
+        resp = await self._get_client().post(f"{self._url()}/embeddings", headers=headers,
+                                             json={"model": self.config.model, "input": text})
+        resp.raise_for_status()
+        return resp.json()["data"][0]["embedding"]
 
     async def health_check(self) -> bool:
-        import httpx
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.HEALTH_CHECK) as client:
                 return (await client.get(f"{self._url()}/models",
@@ -308,7 +324,6 @@ class OpenAIEmbedding(EmbeddingProvider):
 
 class AnthropicReasoning(ReasoningProvider):
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-        import httpx
         headers = {"x-api-key": self.config.api_key, "anthropic-version": "2023-06-01",
                    "Content-Type": "application/json"}
         payload = {"model": self.config.model, "max_tokens": max_tokens,
@@ -316,11 +331,10 @@ class AnthropicReasoning(ReasoningProvider):
         if system:
             payload["system"] = system
         base = self.config.api_base or ANTHROPIC_BASE_URL
-        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            resp = await client.post(f"{base}/messages", json=payload, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["content"][0]["text"] if data.get("content") else ""
+        resp = await self._get_client().post(f"{base}/messages", json=payload, headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+        return data["content"][0]["text"] if data.get("content") else ""
 
     async def health_check(self) -> bool:
         return bool(self.config.api_key)
@@ -328,7 +342,6 @@ class AnthropicReasoning(ReasoningProvider):
 
 class OpenRouterReasoning(ReasoningProvider):
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-        import httpx
         headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json",
                    "HTTP-Referer": "https://github.com/Reasoner", "X-Title": "Neuro Layer"}
         messages = []
@@ -336,12 +349,12 @@ class OpenRouterReasoning(ReasoningProvider):
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
         base = self.config.api_base or _OPENROUTER_BASE_URL
-        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            resp = await client.post(f"{base}/chat/completions", headers=headers,
-                                     json={"model": self.config.model, "messages": messages,
-                                           "max_tokens": max_tokens, "temperature": NON_PHASE_TEMPERATURES["neuro_memory"]})
-            resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"]
+        resp = await self._get_client().post(f"{base}/chat/completions", headers=headers,
+                                             json={"model": self.config.model, "messages": messages,
+                                                   "max_tokens": max_tokens,
+                                                   "temperature": NON_PHASE_TEMPERATURES["neuro_memory"]})
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
 
     async def health_check(self) -> bool:
         return bool(self.config.api_key)
@@ -349,14 +362,12 @@ class OpenRouterReasoning(ReasoningProvider):
 
 class OpenRouterEmbedding(EmbeddingProvider):
     async def embed(self, text: str) -> list[float]:
-        import httpx
         headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json"}
         base = self.config.api_base or _OPENROUTER_BASE_URL
-        async with httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING) as client:
-            resp = await client.post(f"{base}/embeddings", headers=headers,
-                                     json={"model": self.config.model, "input": text})
-            resp.raise_for_status()
-            return resp.json()["data"][0]["embedding"]
+        resp = await self._get_client().post(f"{base}/embeddings", headers=headers,
+                                             json={"model": self.config.model, "input": text})
+        resp.raise_for_status()
+        return resp.json()["data"][0]["embedding"]
 
     async def health_check(self) -> bool:
         return bool(self.config.api_key)
@@ -364,20 +375,18 @@ class OpenRouterEmbedding(EmbeddingProvider):
 
 class GoogleReasoning(ReasoningProvider):
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-        import httpx
         base = self.config.api_base or _GOOGLE_BASE_URL
         url = f"{base}/models/{self.config.model}:generateContent?key={self.config.api_key}"
         payload = {"contents": [{"parts": [{"text": prompt}]}]}
         if system:
             payload["systemInstruction"] = {"parts": [{"text": system}]}
-        async with httpx.AsyncClient(timeout=self.config.timeout) as client:
-            resp = await client.post(url, json=payload)
-            resp.raise_for_status()
-            candidates = resp.json().get("candidates", [])
-            if candidates:
-                parts = candidates[0].get("content", {}).get("parts", [])
-                return parts[0].get("text", "") if parts else ""
-            return ""
+        resp = await self._get_client().post(url, json=payload)
+        resp.raise_for_status()
+        candidates = resp.json().get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            return parts[0].get("text", "") if parts else ""
+        return ""
 
     async def health_check(self) -> bool:
         return bool(self.config.api_key)
@@ -385,13 +394,11 @@ class GoogleReasoning(ReasoningProvider):
 
 class GoogleEmbedding(EmbeddingProvider):
     async def embed(self, text: str) -> list[float]:
-        import httpx
         base = self.config.api_base or _GOOGLE_BASE_URL
         url = f"{base}/models/{self.config.model}:embedContent?key={self.config.api_key}"
-        async with httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING) as client:
-            resp = await client.post(url, json={"content": {"parts": [{"text": text}]}})
-            resp.raise_for_status()
-            return resp.json().get("embedding", {}).get("values", [])
+        resp = await self._get_client().post(url, json={"content": {"parts": [{"text": text}]}})
+        resp.raise_for_status()
+        return resp.json().get("embedding", {}).get("values", [])
 
     async def health_check(self) -> bool:
         return bool(self.config.api_key)
@@ -399,20 +406,17 @@ class GoogleEmbedding(EmbeddingProvider):
 
 class HuggingFaceEmbedding(EmbeddingProvider):
     async def embed(self, text: str) -> list[float]:
-        import httpx
         if self.config.api_base:
-            async with httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING) as client:
-                resp = await client.post(f"{self.config.api_base}/embed", json={"inputs": text})
-                resp.raise_for_status()
-                return resp.json()[0]
+            resp = await self._get_client().post(f"{self.config.api_base}/embed", json={"inputs": text})
+            resp.raise_for_status()
+            return resp.json()[0]
         else:
             headers = {"Authorization": f"Bearer {self.config.api_key}"}
             url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.config.model}"
-            async with httpx.AsyncClient(timeout=TIMEOUTS.EMBEDDING) as client:
-                resp = await client.post(url, json={"inputs": text}, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
-                return data[0] if isinstance(data[0], list) else data
+            resp = await self._get_client().post(url, json={"inputs": text}, headers=headers)
+            resp.raise_for_status()
+            data = resp.json()
+            return data[0] if isinstance(data[0], list) else data
 
     async def health_check(self) -> bool:
         return True

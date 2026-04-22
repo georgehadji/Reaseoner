@@ -25,6 +25,22 @@ from reasoner.neuro.compression import smart_compress
 
 log = logging.getLogger("neuro.api")
 
+# Compression cache: (content_hash, level) → compressed string
+_compression_cache: dict[str, str] = {}
+_COMPRESSION_CACHE_MAX = 512
+
+
+def _cached_compress(content: str, ext: str, level: str) -> str:
+    key = hashlib.sha256(f"{content}\x00{ext}\x00{level}".encode()).hexdigest()[:20]
+    if key not in _compression_cache:
+        if len(_compression_cache) >= _COMPRESSION_CACHE_MAX:
+            # Evict oldest quarter by removing arbitrary keys (dict is insertion-ordered)
+            evict = list(_compression_cache)[:_COMPRESSION_CACHE_MAX // 4]
+            for k in evict:
+                del _compression_cache[k]
+        _compression_cache[key] = smart_compress(content, ext=ext, level=level)
+    return _compression_cache[key]
+
 
 # ─────────────────────────────────────────────
 #  Request/Response Models
@@ -105,29 +121,31 @@ class TenantManager:
     def __init__(self, config: NeuroConfig):
         self.config = config
         self._tenants: dict[str, dict] = {}
+        self._lock = asyncio.Lock()
 
-    def get(self, agent_id: Optional[str] = None) -> dict:
+    async def get(self, agent_id: Optional[str] = None) -> dict:
         key = agent_id or "default"
-        if key in self._tenants:
-            return self._tenants[key]
+        async with self._lock:
+            if key in self._tenants:
+                return self._tenants[key]
 
-        data_dir = get_agent_data_dir(self.config, agent_id)
-        memory_dir = data_dir / "memory"
-        l1_dir = data_dir / "cache" / "l1"
-        l2_dir = data_dir / "cache" / "l2"
+            data_dir = get_agent_data_dir(self.config, agent_id)
+            memory_dir = data_dir / "memory"
+            l1_dir = data_dir / "cache" / "l1"
+            l2_dir = data_dir / "cache" / "l2"
 
-        for d in [memory_dir, l1_dir, l2_dir]:
-            d.mkdir(parents=True, exist_ok=True)
+            for d in [memory_dir, l1_dir, l2_dir]:
+                d.mkdir(parents=True, exist_ok=True)
 
-        tenant = {
-            "data_dir": data_dir,
-            "memory_dir": memory_dir,
-            "l1": L1Cache(l1_dir, self.config.cache),
-            "l2": L2Index(l2_dir, self.config.cache),
-            "sessions": SessionManager(data_dir, SessionConfig()),
-        }
-        self._tenants[key] = tenant
-        return tenant
+            tenant = {
+                "data_dir": data_dir,
+                "memory_dir": memory_dir,
+                "l1": L1Cache(l1_dir, self.config.cache),
+                "l2": L2Index(l2_dir, self.config.cache),
+                "sessions": SessionManager(data_dir, SessionConfig()),
+            }
+            self._tenants[key] = tenant
+            return tenant
 
     @property
     def active_tenants(self) -> list[str]:
@@ -174,7 +192,8 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
         r_ok = await reasoner.health_check()
         e_ok = await embedder.health_check()
         total_sessions = {"hot": 0, "warm": 0, "cold": 0}
-        for t in tenants._tenants.values():
+        tenant_snapshot = list(tenants._tenants.values())
+        for t in tenant_snapshot:
             s = t["sessions"].stats
             total_sessions["hot"] += s["hot_sessions"]
             total_sessions["warm"] += s["warm_sessions"]
@@ -195,7 +214,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
     async def recall(req: RecallRequest):
         start = time.time()
         persona = get_persona(config, req.persona, req.agent_id)
-        tenant = tenants.get(req.agent_id)
+        tenant = await tenants.get(req.agent_id)
         l1, l2 = tenant["l1"], tenant["l2"]
         memory_dir = tenant["memory_dir"]
         sessions = tenant["sessions"]
@@ -221,7 +240,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
         if remaining > 0:
             all_chunks.extend(l2.search(query_embedding, top_k=remaining, persona=persona))
 
-        # Apply compression if requested
+        # Apply compression if requested (results are cached by content hash + level)
         if req.compression != "none":
             for chunk in all_chunks:
                 ext = ""
@@ -229,8 +248,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
                     source_parts = chunk.source.split(":")
                     if "." in source_parts[-1]:
                         ext = source_parts[-1].split(".")[-1]
-                
-                chunk.content = smart_compress(chunk.content, ext=ext, level=req.compression)
+                chunk.content = _cached_compress(chunk.content, ext=ext, level=req.compression)
 
         latency = (time.time() - start) * 1000
         return RecallResponse(
@@ -245,7 +263,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
     async def audit(req: AuditRequest):
         start = time.time()
         persona = get_persona(config, req.persona, req.agent_id)
-        tenant = tenants.get(req.agent_id)
+        tenant = await tenants.get(req.agent_id)
         
         system_prompt = build_audit_system_prompt(persona)
         user_prompt = f"PROMPT:\n{req.prompt}\n\nDRAFT RESPONSE:\n{req.draft_response}"
@@ -262,15 +280,16 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
                 persona=persona.name, provider_used=reasoner.active_label,
             )
         except Exception as e:
+            log.warning("Audit failed (returning WARN): %s", e)
             return AuditResponse(
-                verdict="PASS", confidence=0.0, reason=f"Audit failed: {e}",
+                verdict="WARN", confidence=0.0, reason=f"Audit parse failed: {e}",
                 latency_ms=round((time.time() - start) * 1000, 1),
                 persona=persona.name, provider_used=reasoner.active_label,
             )
 
     @router.post("/learn")
     async def learn(req: LearnRequest):
-        tenant = tenants.get(req.agent_id)
+        tenant = await tenants.get(req.agent_id)
         result = tenant["sessions"].ingest(req.prompt, req.response, req.metadata)
         return LearnResponse(
             status="learned", session_id=result["session_id"],

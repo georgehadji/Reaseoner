@@ -30,8 +30,10 @@ function formatModelLabel(model: string) {
   return model.split('/').pop() || model;
 }
 
+import { TIMING } from '@/lib/config';
+
 function formatDurationMs(ms: number) {
-  if (ms < 1000) return `${ms.toFixed(0)}ms`;
+  if (ms < TIMING.durationFormatMsThreshold) return `${ms.toFixed(0)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
 }
 

@@ -11,12 +11,14 @@ Lifecycle:
 
 import json
 import gzip
+import asyncio
+import inspect
 import logging
 import time
 import hashlib
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, Callable
 from dataclasses import dataclass, field
 
 log = logging.getLogger("neuro.sessions")
@@ -44,7 +46,7 @@ class SessionConfig:
 class SessionManager:
     """
     Manages live session capture and lifecycle.
-    
+
     Directory structure per agent:
       sessions/
         hot/
@@ -72,14 +74,19 @@ class SessionManager:
         self._last_ingest_time: float = 0
         self._entry_count: int = 0
 
+        # Per-file write locks to prevent JSONL corruption under concurrency
+        self._file_locks: dict[str, asyncio.Lock] = {}
+        self._file_locks_meta = asyncio.Lock()
+
+        # Entry-count cache: path → count, invalidated on ingest
+        self._counts_cache: dict[str, int] = {}
+
     def _generate_session_id(self) -> str:
-        """Generate a new session ID based on timestamp."""
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H%M%S")
         suffix = hashlib.sha256(str(time.time()).encode()).hexdigest()[:6]
         return f"{ts}_{suffix}"
 
     def _should_start_new_session(self) -> bool:
-        """Check if we need a new session (gap too long or no current session)."""
         if not self._current_session_id:
             return True
         if self._last_ingest_time == 0:
@@ -88,13 +95,11 @@ class SessionManager:
         return gap > (self.config.max_session_gap_minutes * 60)
 
     def _start_session(self) -> str:
-        """Start a new hot session file."""
         session_id = self._generate_session_id()
         self._current_session_id = session_id
         self._current_session_file = self.hot_dir / f"{session_id}.jsonl"
         self._entry_count = 0
 
-        # Write session header
         header = {
             "_type": "session_start",
             "session_id": session_id,
@@ -106,29 +111,25 @@ class SessionManager:
         log.info(f"Session started: {session_id}")
         return session_id
 
+    async def _get_file_lock(self, path: Path) -> asyncio.Lock:
+        key = str(path)
+        async with self._file_locks_meta:
+            if key not in self._file_locks:
+                self._file_locks[key] = asyncio.Lock()
+            return self._file_locks[key]
+
     def ingest(self, prompt: str, response: str, metadata: Optional[dict] = None) -> dict:
         """
         Ingest a prompt/response pair into the current session.
         This is the Live Wire — fast, append-only, crash-safe.
-        
-        Args:
-            prompt: User prompt
-            response: Model response
-            metadata: Optional metadata dictionary
-            
-        Returns:
-            Session info dictionary
-            
-        Raises:
-            OSError: If session file cannot be written
-            json.JSONDecodeError: If data cannot be serialized
-            RuntimeError: If session is not properly initialized
+
+        Note: file-level lock is acquired synchronously here; callers running in
+        async contexts should use ingest_async() to avoid blocking the event loop.
         """
         try:
             if self._should_start_new_session():
                 self._start_session()
 
-            # Safety cap
             if self._entry_count >= self.config.max_hot_entries:
                 self._start_session()
 
@@ -140,13 +141,15 @@ class SessionManager:
                 "metadata": metadata or {},
             }
 
-            # Append-only write — crash-safe (worst case: lose last partial line)
             with open(self._current_session_file, "a") as f:
                 f.write(json.dumps(entry) + "\n")
-                f.flush()  # force to disk
+                f.flush()
 
             self._last_ingest_time = time.time()
             self._entry_count += 1
+
+            # Invalidate count cache for this file
+            self._counts_cache.pop(str(self._current_session_file), None)
 
             return {
                 "session_id": self._current_session_id,
@@ -162,6 +165,55 @@ class SessionManager:
         except Exception as e:
             log.error(f"Unexpected error ingesting session entry: {e}")
             raise RuntimeError(f"Failed to ingest session: {e}") from e
+
+    async def ingest_async(self, prompt: str, response: str, metadata: Optional[dict] = None) -> dict:
+        """
+        Async variant of ingest — acquires a per-file asyncio.Lock before writing
+        to prevent interleaved writes under concurrent callers.
+        """
+        try:
+            if self._should_start_new_session():
+                self._start_session()
+
+            if self._entry_count >= self.config.max_hot_entries:
+                self._start_session()
+
+            entry = {
+                "_type": "exchange",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "prompt": prompt,
+                "response": response,
+                "metadata": metadata or {},
+            }
+
+            lock = await self._get_file_lock(self._current_session_file)
+            async with lock:
+                await asyncio.to_thread(self._write_entry, self._current_session_file, entry)
+
+            self._last_ingest_time = time.time()
+            self._entry_count += 1
+            self._counts_cache.pop(str(self._current_session_file), None)
+
+            return {
+                "session_id": self._current_session_id,
+                "entry_number": self._entry_count,
+                "session_file": str(self._current_session_file.name),
+            }
+        except OSError as e:
+            log.error(f"Failed to write to session file {self._current_session_file}: {e}")
+            raise
+        except (TypeError, ValueError) as e:
+            log.error(f"Failed to serialize session entry: {e}")
+            raise
+        except Exception as e:
+            log.error(f"Unexpected error ingesting session entry: {e}")
+            raise RuntimeError(f"Failed to ingest session: {e}") from e
+
+    @staticmethod
+    def _write_entry(path: Path, entry: dict):
+        with open(path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+            f.flush()
 
     def get_hot_sessions(self) -> list[dict]:
         """List all hot session files with stats."""
@@ -229,36 +281,50 @@ class SessionManager:
 
         return results
 
+    async def get_session_transcript_async(self, session_id: str) -> list[dict]:
+        """Async version of get_session_transcript — uses asyncio.to_thread for I/O."""
+        hot_file = self.hot_dir / f"{session_id}.jsonl"
+        if hot_file.exists():
+            return await asyncio.to_thread(self._read_jsonl, hot_file)
+
+        warm_gz = self.warm_dir / f"{session_id}.jsonl.gz"
+        if warm_gz.exists():
+            return await asyncio.to_thread(self._read_jsonl_gz, warm_gz)
+
+        cold_gz = self.cold_dir / f"{session_id}.jsonl.gz"
+        if cold_gz.exists():
+            return await asyncio.to_thread(self._read_jsonl_gz, cold_gz)
+
+        return []
+
     def get_session_transcript(self, session_id: str) -> list[dict]:
         """Get full transcript of a session."""
-        # Check hot
         hot_file = self.hot_dir / f"{session_id}.jsonl"
         if hot_file.exists():
             return self._read_jsonl(hot_file)
 
-        # Check warm (compressed)
         warm_gz = self.warm_dir / f"{session_id}.jsonl.gz"
         if warm_gz.exists():
             return self._read_jsonl_gz(warm_gz)
 
-        # Check cold
         cold_gz = self.cold_dir / f"{session_id}.jsonl.gz"
         if cold_gz.exists():
             return self._read_jsonl_gz(cold_gz)
 
         return []
 
-    def archive_hot_sessions(self, summarize_fn=None) -> list[dict]:
+    async def archive_hot_sessions(self, summarize_fn: Optional[Callable] = None) -> list[dict]:
         """
         Move expired hot sessions to warm storage.
         Optionally summarize them using the reasoning provider.
         Returns list of archived sessions.
+
+        summarize_fn may be sync or async.
         """
         cutoff = datetime.now(timezone.utc) - timedelta(days=self.config.hot_days)
         archived = []
 
         for session_file in list(self.hot_dir.glob("*.jsonl")):
-            # Skip current active session
             if self._current_session_file and session_file == self._current_session_file:
                 continue
 
@@ -268,20 +334,17 @@ class SessionManager:
                 continue
 
             session_id = session_file.stem
-            entries = self._read_jsonl(session_file)
+            entries = await asyncio.to_thread(self._read_jsonl, session_file)
             exchanges = [e for e in entries if e.get("_type") == "exchange"]
 
             if not exchanges:
                 session_file.unlink()
                 continue
 
-            # Compress raw log to warm
+            # Compress raw log to warm (offload gzip to thread)
             gz_path = self.warm_dir / f"{session_id}.jsonl.gz"
-            with gzip.open(gz_path, "wt", encoding="utf-8") as gz:
-                for entry in entries:
-                    gz.write(json.dumps(entry) + "\n")
+            await asyncio.to_thread(self._write_gzip, gz_path, entries)
 
-            # Generate summary if function provided
             summary_data = {
                 "session_id": session_id,
                 "archived_at": datetime.now(timezone.utc).isoformat(),
@@ -296,9 +359,13 @@ class SessionManager:
                 try:
                     transcript = "\n".join(
                         f"User: {e['prompt']}\nAssistant: {e['response']}"
-                        for e in exchanges[-20:]  # last 20 exchanges max
+                        for e in exchanges[-20:]
                     )
-                    summary_result = summarize_fn(transcript)
+                    if inspect.iscoroutinefunction(summarize_fn):
+                        summary_result = await summarize_fn(transcript)
+                    else:
+                        summary_result = await asyncio.to_thread(summarize_fn, transcript)
+
                     if isinstance(summary_result, dict):
                         summary_data["summary"] = summary_result.get("summary", "")
                         summary_data["key_facts"] = summary_result.get("key_facts", [])
@@ -306,15 +373,14 @@ class SessionManager:
                         summary_data["summary"] = str(summary_result)
                 except Exception as e:
                     log.warning(f"Summarization failed for {session_id}: {e}")
-                    # Still archive, just without summary
                     summary_data["summary"] = f"[Auto-summary failed: {str(e)[:50]}]"
 
-            # Save summary
             summary_path = self.warm_dir / f"{session_id}.json"
             summary_path.write_text(json.dumps(summary_data, indent=2))
 
-            # Remove hot file
             session_file.unlink()
+            # Remove stale count cache entry
+            self._counts_cache.pop(str(session_file), None)
             archived.append(summary_data)
             log.info(f"Archived session {session_id}: {len(exchanges)} exchanges → warm")
 
@@ -335,7 +401,6 @@ class SessionManager:
             dest = self.cold_dir / gz_file.name
             gz_file.rename(dest)
 
-            # Move summary too if it exists
             summary = self.warm_dir / f"{session_id}.json"
             if summary.exists():
                 summary.rename(self.cold_dir / summary.name)
@@ -359,10 +424,9 @@ class SessionManager:
             if len(all_exchanges) >= n_exchanges:
                 break
 
-        # Sort by timestamp descending, take most recent
         all_exchanges.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
         recent = all_exchanges[:n_exchanges]
-        recent.reverse()  # chronological order
+        recent.reverse()
 
         if not recent:
             return ""
@@ -401,6 +465,10 @@ class SessionManager:
     # ── Internal helpers ──
 
     def _count_entries(self, path: Path) -> int:
+        """Return exchange count for a JSONL file, using an in-memory cache."""
+        key = str(path)
+        if key in self._counts_cache:
+            return self._counts_cache[key]
         count = 0
         try:
             with open(path) as f:
@@ -412,6 +480,7 @@ class SessionManager:
                         pass
         except Exception:
             pass
+        self._counts_cache[key] = count
         return count
 
     def _read_jsonl(self, path: Path) -> list[dict]:
@@ -439,3 +508,9 @@ class SessionManager:
         except Exception:
             pass
         return entries
+
+    @staticmethod
+    def _write_gzip(path: Path, entries: list[dict]):
+        with gzip.open(path, "wt", encoding="utf-8", compresslevel=6) as gz:
+            for entry in entries:
+                gz.write(json.dumps(entry) + "\n")

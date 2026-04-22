@@ -27,6 +27,7 @@ from reasoner.presets import (
     get_method_from_preset,
     get_preset_tier,
 )
+from reasoner.phases._shared import build_followup_context, _wrap_user_input
 
 from .cache import CACHE_DIR, _cache_key, _load_cache, _save_cache
 from .history import HISTORY_DIR, HistoryEntry, _save_history_entry
@@ -60,11 +61,50 @@ def _get_phase_subagents(state: PipelineState, phase_name: str) -> list[dict[str
     return []
 
 
+# Creative-writing model tiers with 2 fallbacks each.
+# Format: (model_id, description)
+_CREATIVE_MODELS_BUDGET: list[tuple[str, str]] = [
+    ("kimi-k2-6", "Kimi K2.6 — 1T MoE, best value creative"),
+    ("qwen3.6-plus", "Qwen 3.6 Plus — multilingual fallback"),
+    ("mistral-large-3", "Mistral Large — European language fallback"),
+]
+_CREATIVE_MODELS_PREMIUM: list[tuple[str, str]] = [
+    ("claude-sonnet", "Claude Sonnet — gold standard creative"),
+    ("gpt-5", "GPT-5 — structured/academic fallback"),
+    ("gemini-pro", "Gemini Pro — research-backed fallback"),
+]
+
+# Enhanced system prompt for creative writing with hallucination guards.
+_CREATIVE_SYSTEM_PROMPT = (
+    "You are an expert writer and creative assistant.\n"
+    "\n"
+    "WRITING PRINCIPLES:\n"
+    "1. Produce well-structured, engaging, and original content.\n"
+    "2. Follow the user's instructions precisely regarding tone, length, format, and style.\n"
+    "3. Maintain a consistent voice and perspective throughout the piece.\n"
+    "\n"
+    "HALLUCINATION PREVENTION:\n"
+    "1. If you include historical events, real people, statistics, or scientific claims, "
+    "ensure they are accurate and widely accepted. Do NOT invent studies, citations, dates, or data.\n"
+    "2. Clearly distinguish between factual claims and creative interpretation, opinion, or speculation.\n"
+    "3. If you are uncertain about a fact, rephrase it as a general observation or omit it.\n"
+    "4. Do NOT fabricate quotes, sources, or references.\n"
+    "\n"
+    "SELF-CORRECTION:\n"
+    "Before finalizing, mentally review your draft for any unsupported factual claims. "
+    "Replace dubious claims with safer, more general statements.\n"
+)
+
+
 async def _stream_direct_answer(
     router: ProviderRouter,
     problem: str,
     run_id: str,
     cancel_event: asyncio.Event | None = None,
+    conversation_history: list[dict[str, str]] | None = None,
+    previous_synthesis: str = "",
+    turn_number: int = 1,
+    preset_name: str = "",
 ) -> AsyncGenerator[str, None]:
     """Stream a direct LLM answer as a virtual single-phase pipeline for UI compatibility."""
     yield _event({"type": "start"})
@@ -75,17 +115,88 @@ async def _stream_direct_answer(
 
     yield _event({"type": "phase_start", "phase": 0, "name": "Direct Response"})
     phase_start = time.monotonic()
-    try:
-        response, meta = await router.call(
-            role="primary",
-            system_prompt="You are an analytical assistant. Provide a clear, concise answer.",
-            user_prompt=problem,
-            max_tokens=2048,
-            temperature=0.7,
+
+    # Build conversation context for follow-up turns
+    context_block = build_followup_context(
+        conversation_history,
+        previous_synthesis=previous_synthesis[:2000],
+        turn_number=turn_number,
+    )
+    if context_block:
+        user_prompt = f"{context_block}\nCURRENT USER REQUEST:\n{_wrap_user_input(problem)}"
+    else:
+        user_prompt = _wrap_user_input(problem)
+
+    # Choose system prompt and creative model based on task type and preset tier
+    from reasoner.hypergate.hyperagent import _is_creative_writing
+    is_creative = _is_creative_writing(problem)
+
+    if is_creative:
+        system_prompt = _CREATIVE_SYSTEM_PROMPT
+        max_tokens = 4096
+        temperature = 0.8
+        tier = get_preset_tier(preset_name)
+        creative_models = (
+            _CREATIVE_MODELS_PREMIUM if tier == "premium" else _CREATIVE_MODELS_BUDGET
         )
-    except Exception as exc:
-        logger.warning("Direct answer LLM call failed: %s", exc)
-        err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
+    else:
+        system_prompt = "You are an analytical assistant. Provide a clear, concise answer."
+        max_tokens = 2048
+        temperature = 0.7
+        creative_models = []
+
+    # ── LLM call with fallback chain ──
+    response: str = ""
+    meta: dict[str, Any] = {}
+    last_error: Exception | None = None
+    models_to_try: list[tuple[str, str]] = []
+
+    # Resolve primary provider safely (handles test fakes without .primary)
+    _primary_provider = getattr(router, "primary", None) or getattr(router, "_primary", None)
+    _primary_model = getattr(_primary_provider, "model", "unknown") if _primary_provider else "unknown"
+
+    if is_creative and creative_models:
+        # Build fallback chain: try creative models first, then fall back to primary
+        models_to_try = list(creative_models)
+        models_to_try.append((_primary_model, "primary fallback"))
+    else:
+        models_to_try = [(_primary_model, "primary")]
+
+    for model_id, reason in models_to_try:
+        try:
+            if model_id == _primary_model:
+                # Use existing router (primary or routing table)
+                response, meta = await router.call(
+                    role="primary",
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+            else:
+                # Build a temporary provider for the creative model
+                from reasoner.infrastructure.llm.registry import build_provider
+                provider = build_provider(model_id)
+                response = await provider.complete_with_retry(
+                    system_prompt, user_prompt, max_tokens, temperature
+                )
+                meta = {"model": model_id, "input_tokens": 0, "output_tokens": 0}
+            logger.info(
+                "Direct answer succeeded with %s (%s) for creative=%s",
+                model_id, reason, is_creative,
+            )
+            break
+        except Exception as exc:
+            last_error = exc
+            logger.warning(
+                "Direct answer failed with %s (%s): %s — trying next fallback",
+                model_id, reason, exc,
+            )
+            continue
+    else:
+        # All fallbacks exhausted
+        logger.error("Direct answer failed after all fallbacks: %s", last_error)
+        err_msg = f"{type(last_error).__name__ if last_error else 'Unknown'}: {str(last_error)[:120] if last_error else 'All models failed'}"
         yield _event({"type": "phase_error", "phase": 0, "error": err_msg})
         yield _event({
             "type": "done",
@@ -160,7 +271,13 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             gate = HyperGateAgent(router)
             decision = await gate.decide(req.problem)
             if decision.action == "direct":
-                async for chunk in _stream_direct_answer(router, req.problem, run_id, cancel_event):
+                async for chunk in _stream_direct_answer(
+                    router, req.problem, run_id, cancel_event,
+                    conversation_history=initial_state.conversation_history if initial_state else None,
+                    previous_synthesis=initial_state.previous_synthesis if initial_state else "",
+                    turn_number=initial_state.turn_number if initial_state else 1,
+                    preset_name=effective_preset_name,
+                ):
                     yield chunk
                 return
             if decision.action == "web_search":
@@ -185,6 +302,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             source_type=req.source_type,
             domain=req.domain,
             enhance_prompt=req.enhance_prompt,
+            attachments=getattr(req, "attachments", []) or [],
         )
         state = initial_state or PipelineState(problem=req.problem, preset_name=effective_preset_name)
 
@@ -199,9 +317,9 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                 await pipeline._phase_enhance_prompt(state)
                 if state.enhanced_problem and state.enhanced_problem != state.problem:
                     yield _event({"type": "prompt_enhanced", "original": state.problem, "enhanced": state.enhanced_problem})
-            except Exception:
+            except Exception as exc:
+                logger.warning("Prompt enhancement failed, using original: %s", exc)
                 state.enhanced_problem = state.problem
-                pass
 
         async def decompose_and_vet(state: PipelineState):
             await pipeline._phase_1_decompose(state)
@@ -265,6 +383,35 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                     continue
             return models
 
+        async def _run_phase_cancellable(coro_fn, state: PipelineState) -> bool:
+            """Run a phase coroutine; cancel it if cancel_event fires. Returns True if cancelled."""
+            phase_task = asyncio.ensure_future(coro_fn(state))
+            cancel_task = asyncio.ensure_future(cancel_event.wait())
+            done, pending = await asyncio.wait(
+                {phase_task, cancel_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+                try:
+                    await t
+                except (asyncio.CancelledError, Exception):
+                    pass
+            if cancel_task in done:
+                # Cancel the phase task if still running
+                if not phase_task.done():
+                    phase_task.cancel()
+                    try:
+                        await phase_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                return True
+            # Phase finished — propagate any exception
+            exc = phase_task.exception()
+            if exc:
+                raise exc
+            return False
+
         run_start = time.monotonic()
         for num, name, fn, serializer in phases:
             if cancel_event.is_set():
@@ -280,7 +427,10 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             yield _event(start_payload)
             phase_start = time.monotonic()
             try:
-                await fn(state)
+                cancelled = await _run_phase_cancellable(fn, state)
+                if cancelled:
+                    yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
+                    return
             except Exception as exc:
                 import traceback
 
@@ -409,6 +559,7 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
         top_k=req.top_k,
         sequential=req.sequential,
         enhance_prompt=req.enhance_prompt,
+        attachments=getattr(req, "attachments", []) or [],
     )
     async for chunk in run_stream(run_req, initial_state=state):
         yield chunk

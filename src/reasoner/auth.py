@@ -208,8 +208,9 @@ class AuthManager:
             AuthorizationError: If not authorized
         """
         if required_scope not in api_key.scopes:
-            raise AuthenticationError(
+            raise AuthorizationError(
                 f"Insufficient permissions. Required: {required_scope}",
+                required_scope=required_scope,
             )
         return True
 

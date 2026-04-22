@@ -16,6 +16,8 @@ export function usePipelineStream() {
 
   const streamEvents = useCallback(
     async (url: string, body: object, onEvent: (ev: PhaseEvent) => void) => {
+      // Abort any in-flight stream before starting a new one.
+      abortControllerRef.current?.abort();
       abortControllerRef.current = new AbortController();
       const resp = await fetchWithCsrf(url, {
         method: 'POST',

@@ -134,6 +134,13 @@ MODEL_CLAUDE_SONNET: str = "claude-sonnet"
 MODEL_GEMINI_FLASH: str = "gemini-flash"
 MODEL_GEMINI_PRO: str = "gemini-pro"
 MODEL_GPT4O_MINI: str = "gpt-4o-mini"
+MODEL_GEMINI_FLASH_IMAGE: str = "gemini-flash-image"
+MODEL_GEMINI_PRO_IMAGE: str = "gemini-pro-image"
+MODEL_GEMINI_31_FLASH_IMAGE_PREVIEW: str = "gemini-3.1-flash-image-preview"
+MODEL_GPT5_IMAGE: str = "gpt-5-image"
+MODEL_GPT5_IMAGE_MINI: str = "gpt-5-image-mini"
+MODEL_FLUX_2_PRO: str = "flux.2-pro"
+MODEL_FLUX_2_FLEX: str = "flux.2-flex"
 
 # Qwen (temperature-supporting, non-OpenAI)
 MODEL_QWEN35_FLASH: str = "qwen3.5-flash"
@@ -190,3 +197,68 @@ TRUNCATION = TruncationLimits()
 # ═════════════════════════════════════════════════════════════════════
 
 JSON_ONLY_FOOTER: str = "Output ONLY valid JSON."
+
+# ═════════════════════════════════════════════════════════════════════
+# IMAGE GENERATION
+# ═════════════════════════════════════════════════════════════════════
+
+IMAGE_GEN_BUDGET_PRESET: str = "image-gen-budget"
+IMAGE_GEN_PREMIUM_PRESET: str = "image-gen-premium"
+IMAGE_GEN_PRESET_ALIASES: tuple[str, str] = ("budget", "premium")
+IMAGE_GEN_ALLOWED_PRESETS: tuple[str, str] = (
+    IMAGE_GEN_BUDGET_PRESET,
+    IMAGE_GEN_PREMIUM_PRESET,
+)
+IMAGE_GEN_DEFAULT_PRESET: str = IMAGE_GEN_BUDGET_PRESET
+IMAGE_GEN_DEFAULT_ASPECT_RATIO: str = "1:1"
+IMAGE_GEN_ALLOWED_ASPECT_RATIOS: tuple[str, ...] = ("1:1", "16:9", "9:16", "4:3", "3:4")
+IMAGE_GEN_DEFAULT_RESOLUTION: str = "1024x1024"
+IMAGE_GEN_DEFAULT_WIDTH: int = 1024
+IMAGE_GEN_DEFAULT_HEIGHT: int = 1024
+IMAGE_GEN_REMOTE_TIMEOUT_SECONDS: float = 20.0
+IMAGE_GEN_COMPLETION_TIMEOUT_SECONDS: float = 90.0
+IMAGE_GEN_ENHANCEMENT_MODEL: str = MODEL_GEMINI_FLASH
+IMAGE_GEN_PRESETS: dict[str, list[str]] = {
+    "budget": [MODEL_GEMINI_FLASH_IMAGE, MODEL_GPT5_IMAGE_MINI],
+    "premium": [MODEL_GEMINI_PRO_IMAGE, MODEL_GPT5_IMAGE],
+    IMAGE_GEN_BUDGET_PRESET: [MODEL_GEMINI_FLASH_IMAGE, MODEL_GPT5_IMAGE_MINI],
+    IMAGE_GEN_PREMIUM_PRESET: [MODEL_GEMINI_PRO_IMAGE, MODEL_GPT5_IMAGE],
+}
+IMAGE_GEN_FALLBACKS: dict[str, list[str]] = {
+    "budget": [MODEL_GEMINI_31_FLASH_IMAGE_PREVIEW, MODEL_FLUX_2_FLEX],
+    "premium": [MODEL_GPT5_IMAGE_MINI, MODEL_FLUX_2_PRO, MODEL_FLUX_2_FLEX],
+    IMAGE_GEN_BUDGET_PRESET: [MODEL_GEMINI_31_FLASH_IMAGE_PREVIEW, MODEL_FLUX_2_FLEX],
+    IMAGE_GEN_PREMIUM_PRESET: [MODEL_GPT5_IMAGE_MINI, MODEL_FLUX_2_PRO, MODEL_FLUX_2_FLEX],
+}
+IMAGE_GEN_ENHANCEMENT_SYSTEM_PROMPT: str = (
+    "You are an expert image-generation prompt engineer for DALL-E 3, Midjourney, and Flux. "
+    "Take the user's simple description and expand it into a highly detailed, vivid prompt "
+    "optimized for AI image generation. "
+    "Focus on: "
+    "1. Subject: Detailed description of the main focus. "
+    "2. Style: Artistic style (e.g., photorealistic, oil painting, cinematic, synthwave). "
+    "3. Composition: Camera angle, depth of field, framing. "
+    "4. Lighting: Type of light, direction, mood. "
+    "5. Colors: Color palette, saturation, contrast. "
+    "6. Details: Texture, atmosphere, intricate background elements. "
+    "Output ONLY the enhanced prompt — no intro, no quotes, no explanation."
+)
+IMAGE_GEN_POLICY_REWRITE_SYSTEM_PROMPT: str = (
+    "You rewrite image prompts so they are safe for mainstream image providers. "
+    "If the prompt references copyrighted, trademarked, franchise, mascot, or studio-owned characters, "
+    "replace them with original non-infringing character descriptions while preserving scene, medium, mood, "
+    "composition, color palette, and high-level archetypes. "
+    "Do not mention any brand, franchise, studio, or character names in the rewritten prompt. "
+    "Keep the prompt concrete and production-ready for image generation. "
+    "Output ONLY the rewritten prompt."
+)
+
+# ═════════════════════════════════════════════════════════════════════
+# ARTICLE / ESSAY GENERATION
+# ═════════════════════════════════════════════════════════════════════
+
+ARTICLE_MIN_SOURCE_COUNT: int = 8
+ARTICLE_MAX_SOURCE_COUNT: int = 16
+ARTICLE_SEARCH_RESULTS_PER_QUERY: int = 6
+ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION: int = 16
+ARTICLE_MIN_CLAIM_SUPPORT_RATIO: float = 0.5

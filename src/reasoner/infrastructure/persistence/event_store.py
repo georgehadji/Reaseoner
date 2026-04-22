@@ -310,28 +310,28 @@ class EventStore:
             sqlite3.Error: If database operation fails
             ValueError: If aggregate_id is invalid
         """
-        try:
-            conn = self._get_connection()
+        def _get_events_sync() -> list[DomainEvent]:
+            try:
+                conn = self._get_connection()
+                cursor = conn.execute("""
+                    SELECT * FROM events
+                    WHERE aggregate_id = ? AND version > ?
+                    ORDER BY version ASC
+                """, (aggregate_id, from_version))
+                events = []
+                for row in cursor.fetchall():
+                    event = self._deserialize_event(row)
+                    if event:
+                        events.append(event)
+                return events
+            except sqlite3.Error as e:
+                logger.error(f"Database error retrieving events for {aggregate_id}: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error retrieving events for {aggregate_id}: {e}")
+                raise
 
-            cursor = conn.execute("""
-                SELECT * FROM events
-                WHERE aggregate_id = ? AND version > ?
-                ORDER BY version ASC
-            """, (aggregate_id, from_version))
-
-            events = []
-            for row in cursor.fetchall():
-                event = self._deserialize_event(row)
-                if event:
-                    events.append(event)
-
-            return events
-        except sqlite3.Error as e:
-            logger.error(f"Database error retrieving events for {aggregate_id}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error retrieving events for {aggregate_id}: {e}")
-            raise
+        return await self._run_in_executor(_get_events_sync)
     
     def _deserialize_event(self, row: sqlite3.Row) -> DomainEvent | None:
         """Deserialize database row to domain event."""
@@ -376,40 +376,38 @@ class EventStore:
         Raises:
             sqlite3.Error: If database operation fails
         """
-        try:
-            conn = self._get_connection()
+        def _list_pipelines_sync() -> list[dict[str, Any]]:
+            try:
+                conn = self._get_connection()
+                query = "SELECT * FROM aggregates WHERE aggregate_type = 'pipeline'"
+                params: list = []
+                if status:
+                    query += " AND status = ?"
+                    params.append(status)
+                query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+                cursor = conn.execute(query, params)
+                return [
+                    {
+                        "aggregate_id": row["aggregate_id"],
+                        "status": row["status"],
+                        "problem": row["problem"],
+                        "preset": row["preset"],
+                        "method": row["method"],
+                        "version": row["current_version"],
+                        "created_at": row["created_at"],
+                        "updated_at": row["updated_at"],
+                    }
+                    for row in cursor.fetchall()
+                ]
+            except sqlite3.Error as e:
+                logger.error(f"Database error listing pipelines: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error listing pipelines: {e}")
+                raise
 
-            query = "SELECT * FROM aggregates WHERE aggregate_type = 'pipeline'"
-            params = []
-
-            if status:
-                query += " AND status = ?"
-                params.append(status)
-
-            query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-            params.extend([limit, offset])
-
-            cursor = conn.execute(query, params)
-
-            return [
-                {
-                    "aggregate_id": row["aggregate_id"],
-                    "status": row["status"],
-                    "problem": row["problem"],
-                    "preset": row["preset"],
-                    "method": row["method"],
-                    "version": row["current_version"],
-                    "created_at": row["created_at"],
-                    "updated_at": row["updated_at"],
-                }
-                for row in cursor.fetchall()
-            ]
-        except sqlite3.Error as e:
-            logger.error(f"Database error listing pipelines: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error listing pipelines: {e}")
-            raise
+        return await self._run_in_executor(_list_pipelines_sync)
     
     async def get_aggregate_state(
         self,
@@ -427,33 +425,33 @@ class EventStore:
         Raises:
             sqlite3.Error: If database operation fails
         """
-        try:
-            conn = self._get_connection()
+        def _get_aggregate_state_sync() -> dict[str, Any] | None:
+            try:
+                conn = self._get_connection()
+                cursor = conn.execute(
+                    "SELECT * FROM aggregates WHERE aggregate_id = ?",
+                    (aggregate_id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    return {
+                        "aggregate_id": row["aggregate_id"],
+                        "type": row["aggregate_type"],
+                        "version": row["current_version"],
+                        "status": row["status"],
+                        "problem": row["problem"],
+                        "preset": row["preset"],
+                        "method": row["method"],
+                    }
+                return None
+            except sqlite3.Error as e:
+                logger.error(f"Database error retrieving aggregate state for {aggregate_id}: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error retrieving aggregate state for {aggregate_id}: {e}")
+                raise
 
-            cursor = conn.execute("""
-                SELECT * FROM aggregates WHERE aggregate_id = ?
-            """, (aggregate_id,))
-
-            row = cursor.fetchone()
-
-            if row:
-                return {
-                    "aggregate_id": row["aggregate_id"],
-                    "type": row["aggregate_type"],
-                    "version": row["current_version"],
-                    "status": row["status"],
-                    "problem": row["problem"],
-                    "preset": row["preset"],
-                    "method": row["method"],
-                }
-
-            return None
-        except sqlite3.Error as e:
-            logger.error(f"Database error retrieving aggregate state for {aggregate_id}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error retrieving aggregate state for {aggregate_id}: {e}")
-            raise
+        return await self._run_in_executor(_get_aggregate_state_sync)
     
     async def save_snapshot(
         self,
@@ -520,32 +518,29 @@ class EventStore:
             sqlite3.Error: If database operation fails
             json.JSONDecodeError: If snapshot data is corrupted
         """
-        try:
-            conn = self._get_connection()
+        def _get_snapshot_sync() -> tuple[int, dict[str, Any]] | None:
+            try:
+                conn = self._get_connection()
+                cursor = conn.execute(
+                    "SELECT version, state FROM snapshots WHERE aggregate_id = ?",
+                    (aggregate_id,),
+                )
+                row = cursor.fetchone()
+                if row:
+                    try:
+                        return row["version"], json.loads(row["state"])
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Corrupted snapshot data for {aggregate_id}: {e}")
+                        raise
+                return None
+            except sqlite3.Error as e:
+                logger.error(f"Database error retrieving snapshot for {aggregate_id}: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error retrieving snapshot for {aggregate_id}: {e}")
+                raise
 
-            cursor = conn.execute("""
-                SELECT version, state FROM snapshots
-                WHERE aggregate_id = ?
-            """, (aggregate_id,))
-
-            row = cursor.fetchone()
-
-            if row:
-                try:
-                    return row["version"], json.loads(row["state"])
-                except json.JSONDecodeError as e:
-                    logger.error(f"Corrupted snapshot data for {aggregate_id}: {e}")
-                    raise
-
-            return None
-        except sqlite3.Error as e:
-            logger.error(f"Database error retrieving snapshot for {aggregate_id}: {e}")
-            raise
-        except json.JSONDecodeError:
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error retrieving snapshot for {aggregate_id}: {e}")
-            raise
+        return await self._run_in_executor(_get_snapshot_sync)
     
     async def get_events_since(
         self,
@@ -568,20 +563,22 @@ class EventStore:
         Raises:
             sqlite3.Error: If database operation fails
         """
-        try:
-            conn = self._get_connection()
+        def _count_events_sync() -> int:
+            try:
+                conn = self._get_connection()
+                cursor = conn.execute(
+                    "SELECT COUNT(*) FROM events WHERE aggregate_id = ?",
+                    (aggregate_id,),
+                )
+                return cursor.fetchone()[0]
+            except sqlite3.Error as e:
+                logger.error(f"Database error counting events for {aggregate_id}: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error counting events for {aggregate_id}: {e}")
+                raise
 
-            cursor = conn.execute("""
-                SELECT COUNT(*) FROM events WHERE aggregate_id = ?
-            """, (aggregate_id,))
-
-            return cursor.fetchone()[0]
-        except sqlite3.Error as e:
-            logger.error(f"Database error counting events for {aggregate_id}: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error counting events for {aggregate_id}: {e}")
-            raise
+        return await self._run_in_executor(_count_events_sync)
 
     async def delete_aggregate(self, aggregate_id: str) -> None:
         """
@@ -632,44 +629,33 @@ class EventStore:
         Raises:
             sqlite3.Error: If database operation fails
         """
-        try:
-            conn = self._get_connection()
+        def _get_stats_sync() -> dict[str, Any]:
+            try:
+                conn = self._get_connection()
+                stats: dict[str, Any] = {}
+                cursor = conn.execute("SELECT COUNT(*) FROM events")
+                stats["total_events"] = cursor.fetchone()[0]
+                cursor = conn.execute("SELECT COUNT(*) FROM aggregates")
+                stats["total_aggregates"] = cursor.fetchone()[0]
+                cursor = conn.execute(
+                    "SELECT status, COUNT(*) FROM aggregates GROUP BY status"
+                )
+                stats["by_status"] = {row["status"]: row[1] for row in cursor.fetchall()}
+                cursor = conn.execute(
+                    "SELECT aggregate_type, COUNT(*) FROM aggregates GROUP BY aggregate_type"
+                )
+                stats["by_type"] = {
+                    row["aggregate_type"]: row[1] for row in cursor.fetchall()
+                }
+                return stats
+            except sqlite3.Error as e:
+                logger.error(f"Database error retrieving stats: {e}")
+                raise
+            except Exception as e:
+                logger.error(f"Unexpected error retrieving stats: {e}")
+                raise
 
-            stats = {}
-
-            # Total events
-            cursor = conn.execute("SELECT COUNT(*) FROM events")
-            stats["total_events"] = cursor.fetchone()[0]
-
-            # Total aggregates
-            cursor = conn.execute("SELECT COUNT(*) FROM aggregates")
-            stats["total_aggregates"] = cursor.fetchone()[0]
-
-            # By status
-            cursor = conn.execute("""
-                SELECT status, COUNT(*) FROM aggregates
-                GROUP BY status
-            """)
-            stats["by_status"] = {
-                row["status"]: row[1] for row in cursor.fetchall()
-            }
-
-            # By type
-            cursor = conn.execute("""
-                SELECT aggregate_type, COUNT(*) FROM aggregates
-                GROUP BY aggregate_type
-            """)
-            stats["by_type"] = {
-                row["aggregate_type"]: row[1] for row in cursor.fetchall()
-            }
-
-            return stats
-        except sqlite3.Error as e:
-            logger.error(f"Database error retrieving stats: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error retrieving stats: {e}")
-            raise
+        return await self._run_in_executor(_get_stats_sync)
     
     def close(self) -> None:
         """Close database connection and thread pool."""

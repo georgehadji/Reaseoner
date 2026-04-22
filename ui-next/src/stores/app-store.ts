@@ -2,6 +2,15 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Conversation } from '@/lib/types';
 
+export interface ComposerAttachment {
+  id: string;
+  file: File;
+  name: string;
+  size: number;
+  type: string;
+  previewUrl?: string;
+}
+
 export type Tier = 'budget' | 'premium';
 
 interface AppState {
@@ -12,8 +21,10 @@ interface AppState {
   isWebSearch: boolean;
   isSmartSearch: boolean;
   isEnhancePrompt: boolean;
+  isImageMode: boolean;
   sidebarCollapsed: boolean;
   composerText: string;
+  attachments: ComposerAttachment[];
   history: Conversation[];
   activeRun: {
     progressId: string;
@@ -32,8 +43,12 @@ interface AppState {
   toggleWebSearch: () => void;
   toggleSmartSearch: () => void;
   toggleEnhancePrompt: () => void;
+  toggleImageMode: () => void;
   toggleSidebar: () => void;
   setComposerText: (text: string) => void;
+  addAttachment: (file: File) => void;
+  removeAttachment: (id: string) => void;
+  clearAttachments: () => void;
   setHistory: (history: Conversation[]) => void;
   setActiveRun: (run: AppState['activeRun']) => void;
   addPhaseToActiveRun: (phase: { phase: number; name: string; data: unknown }) => void;
@@ -52,8 +67,10 @@ export const useAppStore = create<AppState>()(
       isWebSearch: false,
       isSmartSearch: true,
       isEnhancePrompt: true,
+      isImageMode: false,
       sidebarCollapsed: false,
       composerText: '',
+      attachments: [],
       history: [],
       activeRun: null,
 
@@ -67,8 +84,39 @@ export const useAppStore = create<AppState>()(
       toggleWebSearch: () => set((state) => ({ isWebSearch: !state.isWebSearch, isSmartSearch: state.isWebSearch ? false : true })),
       toggleSmartSearch: () => set((state) => ({ isSmartSearch: !state.isSmartSearch })),
       toggleEnhancePrompt: () => set((state) => ({ isEnhancePrompt: !state.isEnhancePrompt })),
+      toggleImageMode: () => set((state) => ({ isImageMode: !state.isImageMode })),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
       setComposerText: (composerText) => set({ composerText }),
+
+      addAttachment: (file) =>
+        set((state) => {
+          if (state.attachments.length >= 5) return state;
+          const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const attachment: ComposerAttachment = {
+            id,
+            file,
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined,
+          };
+          return { attachments: [...state.attachments, attachment] };
+        }),
+
+      removeAttachment: (id) =>
+        set((state) => {
+          const att = state.attachments.find((a) => a.id === id);
+          if (att?.previewUrl) URL.revokeObjectURL(att.previewUrl);
+          return { attachments: state.attachments.filter((a) => a.id !== id) };
+        }),
+
+      clearAttachments: () =>
+        set((state) => {
+          state.attachments.forEach((a) => {
+            if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+          });
+          return { attachments: [] };
+        }),
       setHistory: (history) => set({ history }),
       setActiveRun: (activeRun) => set({ activeRun }),
 
@@ -97,7 +145,18 @@ export const useAppStore = create<AppState>()(
     {
       name: 'ara-ui-store',
       version: 2,
-      migrate: () => ({}),   // reset all persisted state on version bump
+      migrate: (persistedState) => {
+        const s = (persistedState || {}) as Record<string, unknown>;
+        return {
+          tier: s.tier === 'premium' ? 'premium' : 'budget',
+          isSequential: typeof s.isSequential === 'boolean' ? s.isSequential : false,
+          isExpert: typeof s.isExpert === 'boolean' ? s.isExpert : false,
+          isEnhancePrompt: typeof s.isEnhancePrompt === 'boolean' ? s.isEnhancePrompt : true,
+          sidebarCollapsed: typeof s.sidebarCollapsed === 'boolean' ? s.sidebarCollapsed : false,
+          // Force image mode false on migration/load
+          isImageMode: false,
+        };
+      },
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         tier: state.tier,
@@ -105,6 +164,7 @@ export const useAppStore = create<AppState>()(
         isExpert: state.isExpert,
         isEnhancePrompt: state.isEnhancePrompt,
         sidebarCollapsed: state.sidebarCollapsed,
+        // Do not persist isImageMode so it defaults to false on next load
       }),
     }
   )

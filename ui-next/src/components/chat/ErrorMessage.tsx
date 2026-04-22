@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Copy, Check, AlertTriangle, AlertCircle } from 'lucide-react';
+import { TIMING } from '@/lib/config';
 import { copyToClipboard } from '@/lib/utils';
 
 interface ErrorMessageProps {
@@ -21,7 +22,7 @@ export function ErrorMessage({ content }: ErrorMessageProps) {
     const ok = await copyToClipboard(content);
     if (ok) {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), TIMING.copiedFeedbackMs);
     }
   }
 

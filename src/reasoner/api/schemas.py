@@ -14,6 +14,11 @@ from reasoner.core.constants import (
     DEFAULT_SEQUENTIAL,
     DEFAULT_SOURCE_TYPE,
     DEFAULT_TOP_K,
+    IMAGE_GEN_ALLOWED_ASPECT_RATIOS,
+    IMAGE_GEN_ALLOWED_PRESETS,
+    IMAGE_GEN_DEFAULT_ASPECT_RATIO,
+    IMAGE_GEN_DEFAULT_PRESET,
+    IMAGE_GEN_DEFAULT_RESOLUTION,
     TRUNCATION,
 )
 from reasoner.presets import is_valid_preset_name, resolve_preset_name
@@ -42,6 +47,14 @@ class SearchRequest(BaseModel):
     model_config = {"extra": "forbid"}
 
 
+class AttachmentRef(BaseModel):
+    file_id: str
+    filename: str
+    mime_type: str
+    extracted_text: str
+    size: int = 0
+
+
 class RunRequest(BaseModel):
     problem: str
     preset: str = DEFAULT_PRESET
@@ -53,6 +66,7 @@ class RunRequest(BaseModel):
     enhance_prompt: bool = False
     source_type: str = DEFAULT_SOURCE_TYPE
     domain: str | None = None
+    attachments: list[AttachmentRef] = []
 
     @field_validator("problem")
     @classmethod
@@ -142,6 +156,7 @@ class FollowupRequest(BaseModel):
     history: list[dict[str, str]]
     previous_synthesis: str
     agent_model: str | None = None
+    attachments: list[AttachmentRef] = []
 
     @field_validator("question")
     @classmethod
@@ -152,6 +167,43 @@ class FollowupRequest(BaseModel):
         from reasoner.sanitization import sanitize_for_prompt
 
         v, _ = sanitize_for_prompt(v)
+        return v
+
+
+class GenerateImageRequest(BaseModel):
+    """Request model for image generation."""
+
+    prompt: str
+    preset: str = IMAGE_GEN_DEFAULT_PRESET
+    aspect_ratio: str = IMAGE_GEN_DEFAULT_ASPECT_RATIO
+    resolution: str = IMAGE_GEN_DEFAULT_RESOLUTION
+    enhance: bool = True
+    preview_only: bool = False
+
+    @field_validator("prompt")
+    @classmethod
+    def validate_prompt(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Prompt cannot be empty")
+        if len(v) > 2000:
+            raise ValueError("Prompt too long (max 2000 characters)")
+        return v
+
+    @field_validator("preset")
+    @classmethod
+    def validate_preset(cls, v: str) -> str:
+        allowed = set(IMAGE_GEN_ALLOWED_PRESETS)
+        if v not in allowed:
+            raise ValueError(f"Invalid image generation preset: {v}. Allowed: {allowed}")
+        return v
+
+    @field_validator("aspect_ratio")
+    @classmethod
+    def validate_aspect_ratio(cls, v: str) -> str:
+        allowed = set(IMAGE_GEN_ALLOWED_ASPECT_RATIOS)
+        if v not in allowed:
+            raise ValueError(f"Invalid aspect ratio: {v}. Allowed: {allowed}")
         return v
 
 

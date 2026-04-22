@@ -86,6 +86,8 @@ class ProviderRouter:
         actual_provider = assigned
         try:
             response = await _call(assigned)
+            if not response or not response.strip():
+                raise LLMError(f"Empty response from {assigned.model} for role={role}")
         except (LLMError, asyncio.TimeoutError) as exc:
             if fallback is None:
                 raise

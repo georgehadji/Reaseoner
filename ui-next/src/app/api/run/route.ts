@@ -6,6 +6,7 @@ import {
   sanitizeResponseHeaders,
   readJsonBody,
   validateRunRequest,
+  requireCsrfToken,
   rateLimit,
   ValidationError,
   SECURITY_SERVER_HASH,
@@ -25,6 +26,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     upstreamUrl = `${apiBase}/api/run`;
     const body = await readJsonBody(req);

@@ -1,5 +1,6 @@
 'use client';
 
+import { TIMING } from '@/lib/config';
 import { useState, useEffect } from 'react';
 
 export function useServerStatus() {
@@ -10,7 +11,7 @@ export function useServerStatus() {
 
     async function check() {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), TIMING.serverStatusAbortTimeoutMs);
       try {
         const resp = await fetch('/api/presets', { signal: controller.signal });
         if (mounted) setOnline(resp.ok);
@@ -22,7 +23,7 @@ export function useServerStatus() {
     }
 
     check();
-    const id = setInterval(check, 10000);
+    const id = setInterval(check, TIMING.serverStatusCheckIntervalMs);
     return () => {
       mounted = false;
       clearInterval(id);

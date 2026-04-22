@@ -39,9 +39,12 @@ class PhaseSubAgent(ABC):
     ROLE: str = "synthesis"
     TIMEOUT_SECONDS: float = 30.0
 
-    # Class-level content-based cache.
-    _cache: dict[str, PhaseSubAgentOutput] = {}
     _MAX_CACHE: int = 256
+
+    def __new__(cls, *args, **kwargs):
+        instance = super().__new__(cls)
+        instance._cache: dict[str, PhaseSubAgentOutput] = {}
+        return instance
 
     # ── Abstract interface ────────────────────────────────────────────
 

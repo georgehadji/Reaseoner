@@ -5,7 +5,10 @@ import {
   sanitizeRequestHeaders,
   sanitizeResponseHeaders,
   readJsonBody,
+  validateRunFollowupRequest,
+  requireCsrfToken,
   rateLimit,
+  ValidationError,
   SECURITY_SERVER_HASH,
 } from '@/lib/security-server';
 
@@ -23,15 +26,17 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     upstreamUrl = `${apiBase}/api/run-followup`;
     const body = await readJsonBody(req);
+    const payload = validateRunFollowupRequest(body);
 
     const headers = sanitizeRequestHeaders(req.headers);
     const upstream = await fetch(upstreamUrl, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (upstream.status === 422) {
@@ -46,6 +51,10 @@ export async function POST(req: NextRequest) {
       headers: sanitizeResponseHeaders(upstream),
     });
   } catch (err) {
+    if (err instanceof ValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
+
     const msg = err instanceof Error ? err.message : 'Proxy error';
     const errName = err instanceof Error ? err.constructor.name : 'Unknown';
 

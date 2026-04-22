@@ -48,7 +48,10 @@
       "Bash(cat)",
       "Read(//tmp/**)",
       "Bash(python /tmp/test_edge_case.py)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python reproduce_image_issue.py)",
+      "Bash(find . -type f -name \"*.py\" -exec grep -l \"image\" {})",
+      "Bash(python -m pytest tests/test_image_generation.py -v)"
     ]
   },
   "enableAllProjectMcpServers": true,

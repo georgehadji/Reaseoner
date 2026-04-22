@@ -293,6 +293,8 @@ class PipelineState:
     pot_state: dict[str, Any] = field(default_factory=dict)
     # Self-Discover: Dynamic reasoning module composition
     self_discover_state: dict[str, Any] = field(default_factory=dict)
+    # Writing Method: Structured article writing with research-backed outline, draft, fact-check
+    writing_state: dict[str, Any] = field(default_factory=dict)
     # PhaseSubAgent outputs (for transparency / resume / debugging)
     synthesis_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
     critique_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
@@ -328,6 +330,11 @@ class PipelineState:
     previous_synthesis: str = ""
     agent_model: str | None = None  # Tier-based agent override for follow-ups
 
+    # ─────────────────────────────────────────────────────────────────────
+    # Uploaded File Attachments
+    # ─────────────────────────────────────────────────────────────────────
+    attachments: list[dict[str, Any]] = field(default_factory=list)  # [{file_id, filename, mime_type, extracted_text}]
+
     def log(self, phase: str, message: str) -> None:
         entry = f"[{phase}] {message}"
         self.phase_logs.append(entry)
@@ -344,6 +351,8 @@ class PipelineState:
         Returns:
             Context dictionary optimized for token efficiency
         """
+        from reasoner.core.constants import TRUNCATION
+        
         # Base context - always included
         context = {
             "problem": self.problem,
@@ -351,7 +360,15 @@ class PipelineState:
             "language": self.language,
         }
         
-        from reasoner.core.constants import TRUNCATION
+        # Include attachments as a distinct field so synthesis phases see them explicitly
+        if self.attachments:
+            context["attachments"] = [
+                {
+                    "filename": a.get("filename", "unknown"),
+                    "extracted_text": (a.get("extracted_text", "") or "")[:TRUNCATION.LARGE_CONTENT],
+                }
+                for a in self.attachments
+            ]
         # Aggressive compression: minimal context
         if compression == "aggressive":
             context["problem"] = self.problem[:TRUNCATION.PROBLEM]  # Truncate problem
@@ -547,6 +564,8 @@ class PipelineState:
         logger = logging.getLogger(__name__)
         
         path = Path(path)
+        if ".." in path.parts:
+            raise ValueError("Invalid path: directory traversal not allowed")
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, 'w', encoding='utf-8') as f:
@@ -586,6 +605,8 @@ class PipelineState:
         logger = logging.getLogger(__name__)
         
         path = Path(path)
+        if ".." in path.parts:
+            raise ValueError("Invalid path: directory traversal not allowed")
         try:
             if not path.exists():
                 raise FileNotFoundError(f"PipelineState file not found: {path}")
@@ -613,7 +634,10 @@ class PipelineState:
         """Deserialize dictionary to PipelineState with proper type reconstruction."""
         # Convert string enums back to Enum types
         if data.get('task_type'):
-            data['task_type'] = TaskType(data['task_type'])
+            try:
+                data['task_type'] = TaskType(data['task_type'])
+            except ValueError:
+                data['task_type'] = None
         if data.get('started_at'):
             data['started_at'] = datetime.fromisoformat(data['started_at'])
         

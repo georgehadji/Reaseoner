@@ -35,6 +35,7 @@ _TAXONOMY: dict[str, tuple[str, str]] = {
     "O": ("pipeline", "tot"),
     "P": ("pipeline", "pot"),
     "Q": ("pipeline", "self_discover"),
+    "R": ("pipeline", "writing"),
 }
 
 _SYSTEM = (
@@ -56,9 +57,10 @@ _SYSTEM = (
     "- N: can be decomposed into independent parallel subtasks then assembled\n"
     "- O: requires sequential decision-tree exploration of solution branches\n"
     "- P: requires computational or mathematical reasoning with executable code\n"
-    "- Q: requires dynamic composition of reasoning modules to fit the problem\n\n"
+    "- Q: requires dynamic composition of reasoning modules to fit the problem\n"
+    "- R: requires structured article writing with research, outline, draft, and fact-checking\n\n"
     "Output ONLY valid JSON with exactly three keys: "
-    "'category' (one letter B–Q), "
+    "'category' (one letter B–R), "
     "'confidence' (float 0.0–1.0), "
     "'rationale' (one short sentence). "
     "No markdown, no extra text."

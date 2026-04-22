@@ -5,10 +5,14 @@ from __future__ import annotations
 import hashlib
 from typing import Optional
 
+import logging
+
 from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from reasoner.auth import AuthenticationError, get_auth_manager
+
+logger = logging.getLogger(__name__)
 from reasoner.core.settings import settings
 from reasoner.rate_limiter import RateLimitConfig, get_rate_limiter
 
@@ -105,5 +109,6 @@ async def optional_auth(
 
     try:
         return await auth_manager.authenticate(credentials.credentials)
-    except AuthenticationError:
+    except AuthenticationError as e:
+        logger.warning("Invalid API key rejected in optional_auth: %s", e.message)
         return None

@@ -28,3 +28,4 @@ from reasoner.phases.sot import *
 from reasoner.phases.tot import *
 from reasoner.phases.pot import *
 from reasoner.phases.self_discover import *
+from reasoner.phases.writing import *

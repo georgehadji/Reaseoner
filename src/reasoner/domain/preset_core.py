@@ -66,6 +66,19 @@ _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     "subagent_decomposition",
     "subagent_search_query",
     "subagent_search_eval",
+    # Article Pipeline roles (research-backed article generation)
+    "article_decompose",
+    "article_claim_extract",
+    "article_cove_verify",
+    "article_cove_answer",
+    "article_cove_revise",
+    "article_verifier",
+    "article_sot_skeleton",
+    "article_sot_solve",
+    "article_synthesize",
+    "article_pre_mortem",
+    "article_critic",
+    "article_assemble",
 })
 
 
@@ -97,6 +110,8 @@ def get_method_from_preset(preset: str) -> str:
         return "self_discover"
     if "cove" in preset:
         return "cove"
+    if "writing" in preset:
+        return "writing"
     if "sot" in preset:
         return "sot"
     if "tot" in preset:
@@ -133,6 +148,7 @@ _METHOD_TO_SLUG: dict[str, str] = {
     "tot": "tot",
     "pot": "pot",
     "self_discover": "self-discover",
+    "writing": "writing",
 }
 
 
@@ -152,7 +168,7 @@ def build_auto_preset(method: str, tier: str = "budget") -> str:
 # Agent model used for follow-up synthesis / classification / decomposition.
 # This ensures a consistent conversational persona across all methods.
 FOLLOWUP_AGENT_MODELS: dict[str, str] = {
-    "budget": "kimi-k2-5",
+    "budget": "kimi-k2-6",
     "premium": "grok-4.20",
 }
 

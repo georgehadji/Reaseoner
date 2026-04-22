@@ -6,6 +6,7 @@ L1/L2/L3 with persona-aware similarity thresholds.
 import json
 import time
 import hashlib
+import asyncio
 import logging
 from pathlib import Path
 from typing import Optional, Callable, Awaitable
@@ -155,7 +156,16 @@ async def l3_scan(
     threshold: float = 0.4,
     top_k: int = 3,
 ) -> list[ContextChunk]:
+    """
+    Scan L3 (cold) memory files for relevant context.
+
+    Embeddings are cached as sidecar .emb.json files alongside each memory file
+    so that repeated scans never re-call the embedding provider for unchanged content.
+    """
     memory_dir.mkdir(parents=True, exist_ok=True)
+    sidecar_dir = memory_dir / ".emb_cache"
+    sidecar_dir.mkdir(exist_ok=True)
+
     results = []
     for mem_file in sorted(memory_dir.glob("*.json")):
         try:
@@ -163,7 +173,26 @@ async def l3_scan(
             content = mem.get("summary", "") + "\n" + "\n".join(mem.get("key_facts", []))
             if not content.strip():
                 continue
-            content_embedding = await embed_fn(content)
+
+            content_hash = hashlib.sha256(content.encode()).hexdigest()[:16]
+            sidecar = sidecar_dir / f"{mem_file.stem}.emb.json"
+
+            content_embedding = None
+            if sidecar.exists():
+                try:
+                    cached = json.loads(sidecar.read_text())
+                    if cached.get("hash") == content_hash:
+                        content_embedding = cached["embedding"]
+                except Exception:
+                    pass
+
+            if content_embedding is None:
+                content_embedding = await embed_fn(content)
+                try:
+                    sidecar.write_text(json.dumps({"hash": content_hash, "embedding": content_embedding}))
+                except Exception as e:
+                    log.debug(f"L3 sidecar write failed for {mem_file.stem}: {e}")
+
             sim = cosine_similarity(query_embedding, content_embedding)
             if sim > threshold:
                 results.append(ContextChunk(content, f"l3-scan:{mem_file.stem}", sim, "L3"))

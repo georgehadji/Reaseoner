@@ -37,9 +37,12 @@ class BaseSubAgent(ABC):
     TEMPERATURE: float = 0.0
     TIMEOUT_SECONDS: float = HYPERGATE_TIMEOUT_SECONDS
 
-    # Class-level cache — shared across all instances of the same subclass.
-    _cache: dict[str, SubAgentOutput] = {}
     _MAX_CACHE: int = HYPERGATE_CACHE_SIZE
+
+    def __new__(cls, *args, **kwargs):
+        instance = super().__new__(cls)
+        instance._cache: dict[str, SubAgentOutput] = {}
+        return instance
 
     # ── Abstract interface ────────────────────────────────────────────
 

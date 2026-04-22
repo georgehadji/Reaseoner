@@ -149,16 +149,17 @@ class RateLimiter:
             bucket.requests_minute += 1
             bucket.requests_hour += 1
     
-    def get_client_stats(self, client_id: str) -> dict:
+    async def get_client_stats(self, client_id: str) -> dict:
         """Get rate limit stats for client."""
-        bucket = self._get_bucket(client_id)
-        return {
-            "tokens": bucket.tokens,
-            "requests_minute": bucket.requests_minute,
-            "requests_hour": bucket.requests_hour,
-            "limit_minute": self.config.requests_per_minute,
-            "limit_hour": self.config.requests_per_hour,
-        }
+        async with self._lock:
+            bucket = self._get_bucket(client_id)
+            return {
+                "tokens": bucket.tokens,
+                "requests_minute": bucket.requests_minute,
+                "requests_hour": bucket.requests_hour,
+                "limit_minute": self.config.requests_per_minute,
+                "limit_hour": self.config.requests_per_hour,
+            }
     
     def reset_client(self, client_id: str) -> None:
         """Reset rate limits for client."""

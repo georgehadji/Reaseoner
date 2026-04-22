@@ -4,7 +4,7 @@ import { useRef } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { EXAMPLE_PROMPTS } from '@/lib/config';
 import { cn } from '@/lib/utils';
-import { ArrowUp, Sparkles, Globe } from 'lucide-react';
+import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon } from 'lucide-react';
 
 interface ComposerProps {
   running: boolean;
@@ -14,18 +14,36 @@ interface ComposerProps {
   isFollowup?: boolean;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'image/png',
+  'image/jpeg',
+  'image/jpg',
+  'image/webp',
+];
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+}
+
 export function Composer({ running, onSubmit, onStop, centered, isFollowup }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const composerText = useAppStore((s) => s.composerText);
   const setComposerText = useAppStore((s) => s.setComposerText);
+  const attachments = useAppStore((s) => s.attachments);
+  const addAttachment = useAppStore((s) => s.addAttachment);
+  const removeAttachment = useAppStore((s) => s.removeAttachment);
   const tier = useAppStore((s) => s.tier);
   const toggleTier = useAppStore((s) => s.toggleTier);
-  const isWebSearch = useAppStore((s) => s.isWebSearch);
-  const toggleWebSearch = useAppStore((s) => s.toggleWebSearch);
-
-
-
-  const hasContent = composerText.trim().length > 0;
+  const isImageMode = useAppStore((s) => s.isImageMode);
+  const toggleImageMode = useAppStore((s) => s.toggleImageMode);
+  const hasContent = composerText.trim().length > 0 || attachments.length > 0;
 
   function autoResize() {
     const el = textareaRef.current;
@@ -44,25 +62,114 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
     }
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files) return;
+
+    for (const file of Array.from(files)) {
+      if (attachments.length >= 5) {
+        alert('Maximum 5 files allowed per message.');
+        break;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`File "${file.name}" exceeds 10MB limit.`);
+        continue;
+      }
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        alert(`File type "${file.type}" not supported. Allowed: PDF, TXT, MD, PNG, JPG, WEBP.`);
+        continue;
+      }
+      addAttachment(file);
+    }
+
+    // Reset input so the same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  }
+
+  /** Attachment chip renderer */
+  function AttachmentChip({ att }: { att: (typeof attachments)[0] }) {
+    const isImage = att.type.startsWith('image/');
+    return (
+      <div className="group inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]">
+        {isImage && att.previewUrl ? (
+          <img src={att.previewUrl} alt={att.name} className="h-5 w-5 rounded object-cover" />
+        ) : (
+          <FileText className="h-4 w-4 shrink-0" />
+        )}
+        <span className="max-w-[120px] truncate">{att.name}</span>
+        <span className="text-[10px] text-[var(--text-subtle)]">{formatFileSize(att.size)}</span>
+        <button
+          type="button"
+          onClick={() => removeAttachment(att.id)}
+          className="ml-1 rounded-full p-0.5 text-[var(--text-subtle)] transition-colors hover:bg-red-500/10 hover:text-red-500"
+          aria-label={`Remove ${att.name}`}
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+    );
+  }
+
+  /** Plus button to open file picker */
+  function AttachButton() {
+    return (
+      <button
+        type="button"
+        onClick={() => fileInputRef.current?.click()}
+        disabled={attachments.length >= 5 || running}
+        className={cn(
+          'flex h-8 w-8 items-center justify-center rounded-full border transition-colors',
+          attachments.length >= 5 || running
+            ? 'cursor-not-allowed border-[var(--border)] text-[var(--text-subtle)] opacity-40'
+            : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+        )}
+        title="Attach files (PDF, TXT, MD, images)"
+        aria-label="Attach files"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    );
+  }
+
   /** Tier toggle button — shared between centered and non-centered layouts */
   function TierToggle() {
     const isPremium = tier === 'premium';
     return (
       <button
         type="button"
-        disabled={isWebSearch}
         onClick={toggleTier}
         className={cn(
           'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
           isPremium
             ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-            : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
-          isWebSearch && 'opacity-40 cursor-not-allowed'
+            : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
         )}
         title={isPremium ? 'Premium mode active — click to switch to Budget' : 'Budget mode active — click to switch to Premium'}
       >
         <Sparkles className="h-3.5 w-3.5" />
         <span>Premium</span>
+      </button>
+    );
+  }
+
+  /** Image generation mode toggle */
+  function ImageModeToggle() {
+    return (
+      <button
+        type="button"
+        onClick={toggleImageMode}
+        className={cn(
+          'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+          isImageMode
+            ? 'border-purple-500/50 bg-purple-500/10 text-purple-400'
+            : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+        )}
+        title={isImageMode ? 'Image generation mode — click to switch to reasoning' : 'Generate an image — click to switch to image mode'}
+      >
+        <ImageIcon className="h-3.5 w-3.5" />
+        <span>Image</span>
       </button>
     );
   }
@@ -84,32 +191,26 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
                 autoResize();
               }}
               onKeyDown={handleKeyDown}
-              placeholder={isWebSearch ? 'Search the web...' : 'Ask anything...'}
+              placeholder={isImageMode ? 'Describe the image you want to generate...' : 'Ask anything...'}
               rows={1}
               className="w-full resize-none bg-transparent px-1 py-3 text-[17px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
               style={{ minHeight: 120 }}
             />
 
+            {/* Attachment chips — centered layout */}
+            {attachments.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-2 px-1">
+                {attachments.map((att) => (
+                  <AttachmentChip key={att.id} att={att} />
+                ))}
+              </div>
+            )}
+
             <div className="mt-1 flex items-center justify-between">
               <div className="flex items-center gap-2">
+                <AttachButton />
                 <TierToggle />
-
-                <button
-                  type="button"
-                  onClick={toggleWebSearch}
-                  className={cn(
-                    'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                    isWebSearch
-                      ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                      : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-                  )}
-                  title="Web search with LLM-powered decomposition"
-                >
-                  <Globe className="h-3.5 w-3.5" />
-                  {isWebSearch ? 'Web Search' : 'Web'}
-                </button>
-
-
+                <ImageModeToggle />
               </div>
 
               {running ? (
@@ -136,8 +237,17 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           </div>
 
           <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-            Enter to send · Shift+Enter for newline · Esc to stop
+            {isImageMode ? 'Enter to generate image · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp"
+            multiple
+            className="hidden"
+            onChange={handleFileSelect}
+          />
         </div>
       </div>
     );
@@ -156,15 +266,6 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
             </span>
           </div>
         )}
-        {isWebSearch && (
-          <div className="mb-2 flex flex-wrap items-center gap-2 px-1">
-            <span className="text-xs font-medium text-[var(--text-muted)]">Web Search</span>
-            <span className="max-w-full break-words text-xs text-[var(--text-subtle)]">
-              Advanced web search with LLM processing.
-            </span>
-          </div>
-        )}
-
         <div className="relative rounded-3xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)] transition-shadow focus-within:shadow-[var(--shadow-lg)]">
           <textarea
             ref={textareaRef}
@@ -174,32 +275,26 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
               autoResize();
             }}
             onKeyDown={handleKeyDown}
-            placeholder={isWebSearch ? 'Search the web...' : 'Ask anything...'}
+            placeholder='Ask anything...'
             rows={1}
             className="w-full resize-none bg-transparent px-1 py-2 text-[17px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
             style={{ minHeight: 28 }}
           />
 
+          {/* Attachment chips — bottom-bar layout */}
+          {attachments.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2 px-1">
+              {attachments.map((att) => (
+                <AttachmentChip key={att.id} att={att} />
+              ))}
+            </div>
+          )}
+
           <div className="mt-1 flex items-center justify-between">
             <div className="flex items-center gap-2">
+              <AttachButton />
               <TierToggle />
-
-              <button
-                type="button"
-                onClick={toggleWebSearch}
-                className={cn(
-                  'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-                  isWebSearch
-                    ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-                    : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-                )}
-                title="Web search with LLM-powered decomposition"
-              >
-                <Globe className="h-3.5 w-3.5" />
-                {isWebSearch ? 'Web Search' : 'Web'}
-              </button>
-
-
+              <ImageModeToggle />
             </div>
 
             {running ? (
@@ -226,8 +321,17 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         </div>
 
         <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-          Enter to send · Shift+Enter for newline · Esc to stop
+          {isImageMode ? 'Enter to generate image · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
         </div>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.txt,.md,.png,.jpg,.jpeg,.webp"
+          multiple
+          className="hidden"
+          onChange={handleFileSelect}
+        />
       </div>
     </div>
   );

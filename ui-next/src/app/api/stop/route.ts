@@ -4,7 +4,9 @@ import {
   validateUpstreamUrl,
   sanitizeRequestHeaders,
   sanitizeResponseHeaders,
+  requireCsrfToken,
   rateLimit,
+  ValidationError,
 } from '@/lib/security-server';
 
 export async function POST(req: NextRequest) {
@@ -17,6 +19,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const headers = sanitizeRequestHeaders(req.headers);
     const upstream = await fetch(`${apiBase}/api/stop`, {
@@ -28,6 +31,9 @@ export async function POST(req: NextRequest) {
       headers: sanitizeResponseHeaders(upstream),
     });
   } catch (err) {
+    if (err instanceof ValidationError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const msg = err instanceof Error ? err.message : 'Proxy error';
     return NextResponse.json({ error: msg }, { status: 400 });
   }

@@ -225,7 +225,6 @@ def _make_phase1_router(
 @pytest.mark.asyncio
 async def test_hypergate_short_prompt_direct():
     """Problems < 10 chars bypass sub-agents entirely."""
-    HyperGateAgent._cache.clear()
     router = make_router()  # will not be called
     agent = HyperGateAgent(router)
     decision = await agent.decide("hi")
@@ -236,13 +235,6 @@ async def test_hypergate_short_prompt_direct():
 @pytest.mark.asyncio
 async def test_hypergate_routes_to_direct():
     """Simple greeting → DirectDetector wins → action=direct."""
-    # Clear all sub-agent caches
-    for cls in (LanguageDetectorSubAgent, ComplexityEstimatorSubAgent,
-                DirectDetectorSubAgent, WebSearchDetectorSubAgent,
-                MethodClassifierSubAgent):
-        cls._cache.clear()
-    HyperGateAgent._cache.clear()
-
     router = _make_phase1_router(
         is_direct=True, dir_conf=0.92,
         cpx="simple", cpx_conf=0.95,
@@ -257,12 +249,6 @@ async def test_hypergate_routes_to_direct():
 @pytest.mark.asyncio
 async def test_hypergate_routes_to_web_search():
     """Real-time query → WebDetector wins → action=web_search."""
-    for cls in (LanguageDetectorSubAgent, ComplexityEstimatorSubAgent,
-                DirectDetectorSubAgent, WebSearchDetectorSubAgent,
-                MethodClassifierSubAgent):
-        cls._cache.clear()
-    HyperGateAgent._cache.clear()
-
     router = _make_phase1_router(
         is_direct=False, dir_conf=0.05,
         needs_search=True, web_conf=0.91,
@@ -278,12 +264,6 @@ async def test_hypergate_routes_to_web_search():
 @pytest.mark.asyncio
 async def test_hypergate_routes_to_pipeline():
     """Complex problem → MethodClassifier wins → action=pipeline."""
-    for cls in (LanguageDetectorSubAgent, ComplexityEstimatorSubAgent,
-                DirectDetectorSubAgent, WebSearchDetectorSubAgent,
-                MethodClassifierSubAgent):
-        cls._cache.clear()
-    HyperGateAgent._cache.clear()
-
     router = _make_phase1_router(
         is_direct=False, dir_conf=0.05,
         needs_search=False, web_conf=0.05,
@@ -300,12 +280,6 @@ async def test_hypergate_routes_to_pipeline():
 @pytest.mark.asyncio
 async def test_hypergate_tiebreaker_called_on_ambiguous():
     """All Phase-1 signals between 0.45–0.70 → TieBreaker runs."""
-    for cls in (LanguageDetectorSubAgent, ComplexityEstimatorSubAgent,
-                DirectDetectorSubAgent, WebSearchDetectorSubAgent,
-                MethodClassifierSubAgent, TieBreakerSubAgent):
-        cls._cache.clear()
-    HyperGateAgent._cache.clear()
-
     # Phase-1 responses (all low confidence)
     phase1_responses = [
         _j(language="English", confidence=0.99),
@@ -327,12 +301,6 @@ async def test_hypergate_tiebreaker_called_on_ambiguous():
 @pytest.mark.asyncio
 async def test_hypergate_all_fail_fallback():
     """All sub-agents raise → hard fallback to pipeline+multi_perspective."""
-    for cls in (LanguageDetectorSubAgent, ComplexityEstimatorSubAgent,
-                DirectDetectorSubAgent, WebSearchDetectorSubAgent,
-                MethodClassifierSubAgent, TieBreakerSubAgent):
-        cls._cache.clear()
-    HyperGateAgent._cache.clear()
-
     broken_router = MagicMock()
     broken_router.get.return_value = FakeProvider()
     broken_router.call = AsyncMock(side_effect=RuntimeError("all broken"))
@@ -347,12 +315,6 @@ async def test_hypergate_all_fail_fallback():
 @pytest.mark.asyncio
 async def test_hypergate_top_level_cache():
     """Identical problem on second call returns cached GateDecision."""
-    for cls in (LanguageDetectorSubAgent, ComplexityEstimatorSubAgent,
-                DirectDetectorSubAgent, WebSearchDetectorSubAgent,
-                MethodClassifierSubAgent):
-        cls._cache.clear()
-    HyperGateAgent._cache.clear()
-
     router = _make_phase1_router(
         is_direct=True, dir_conf=0.92,
         cpx="simple", cpx_conf=0.95,

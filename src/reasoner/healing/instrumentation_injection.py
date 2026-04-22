@@ -554,7 +554,8 @@ def main():
         
         # Verify observability module syntax
         observe_path = project_root / "observability.py"
-        source = open(observe_path, encoding='utf-8').read()
+        with open(observe_path, encoding='utf-8') as f:
+            source = f.read()
         ast.parse(source)
         print("✓ observability.py: Syntax valid")
         

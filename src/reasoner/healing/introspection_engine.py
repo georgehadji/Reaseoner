@@ -768,7 +768,8 @@ def main():
     print("\nSELF-VERIFICATION:")
     try:
         import ast
-        source = open(__file__, encoding='utf-8').read()
+        with open(__file__, encoding='utf-8') as f:
+            source = f.read()
         ast.parse(source)  # Syntax check
         print("✓ Syntax valid")
         

@@ -64,9 +64,8 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "qwen3.5-flash":    {"model": "qwen/qwen3.5-flash-02-23"},
     "qwen3.5-9b":       {"model": "qwen/qwen3.5-9b"},
     # Kimi
-    "kimi-k2":          {"model": "moonshotai/kimi-k2"},
     "kimi-k2-5":        {"model": "moonshotai/kimi-k2.5"},
-    "kimi-k2-thinking": {"model": "moonshotai/kimi-k2-thinking"},
+    "kimi-k2-6":        {"model": "moonshotai/kimi-k2.6"},
     # GLM
     "glm-5":            {"model": "z-ai/glm-5"},
     "glm-4-plus":       {"model": "z-ai/glm-4.5"},
@@ -90,6 +89,25 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "minimax-m2.5":     {"model": "minimax/minimax-m2.5"},
     "minimax-m2.5-free": {"model": "minimax/minimax-m2.5:free"},
     "minimax-m2.7":     {"model": "minimax/minimax-m2.7"},
+    # Image generation models (OpenRouter multimodal image output)
+    "gemini-flash-image":            {"model": "google/gemini-2.5-flash-image", "extra_body": {"include_images": True}},
+    "gemini-pro-image":              {"model": "google/gemini-3-pro-image-preview", "extra_body": {"include_images": True}},
+    "gemini-3.1-flash-image-preview": {"model": "google/gemini-3.1-flash-image-preview", "extra_body": {"include_images": True}},
+    "gpt-5-image":                   {"model": "openai/gpt-5-image", "extra_body": {"include_images": True}},
+    "gpt-5-image-mini":              {"model": "openai/gpt-5-image-mini", "extra_body": {"include_images": True}},
+    # Flux 2 (Black Forest Labs)
+    "flux.2-pro":                    {"model": "black-forest-labs/flux.2-pro", "extra_body": {"include_images": True}},
+    "flux.2-flex":                   {"model": "black-forest-labs/flux.2-flex", "extra_body": {"include_images": True}},
+    "flux.2-max":                    {"model": "black-forest-labs/flux.2-max", "extra_body": {"include_images": True}},
+    "flux.2-klein-4b":               {"model": "black-forest-labs/flux.2-klein-4b", "extra_body": {"include_images": True}},
+    # Seedream (ByteDance)
+    "seedream-4.5":                  {"model": "bytedance-seed/seedream-4.5", "extra_body": {"include_images": True}},
+    # Riverflow (Sourceful)
+    "riverflow-v2-pro":              {"model": "sourceful/riverflow-v2-pro", "extra_body": {"include_images": True}},
+    "riverflow-v2-fast":             {"model": "sourceful/riverflow-v2-fast", "extra_body": {"include_images": True}},
+    "riverflow-v2-max-preview":      {"model": "sourceful/riverflow-v2-max-preview", "extra_body": {"include_images": True}},
+    "riverflow-v2-standard-preview": {"model": "sourceful/riverflow-v2-standard-preview", "extra_body": {"include_images": True}},
+    "riverflow-v2-fast-preview":     {"model": "sourceful/riverflow-v2-fast-preview", "extra_body": {"include_images": True}},
     # Ollama (local)
     "ollama-llama3":    {"cls": "compat", "model": "llama3",    "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},
     "ollama-llama3.1":  {"cls": "compat", "model": "llama3.1",  "base": f"{DEFAULT_OLLAMA_URL}/v1", "env": "OLLAMA_API_KEY", "is_local": True},

@@ -54,6 +54,13 @@ def clear_memory_cache() -> None:
 
 def _cache_key(req: "RunRequest") -> str:
     # v=3 invalidates old caches after GateAgent introduction
+    # v=5 includes attachments in cache key
+    attachments_key = None
+    if getattr(req, "attachments", None):
+        attachments_key = [
+            {"file_id": a.file_id, "text_hash": hashlib.sha256(a.extracted_text.encode()).hexdigest()[:16]}
+            for a in req.attachments
+        ]
     payload = json.dumps({
         "problem": req.problem,
         "preset":  req.preset,
@@ -64,7 +71,8 @@ def _cache_key(req: "RunRequest") -> str:
         "enhance_prompt": req.enhance_prompt,
         "source_type": req.source_type,
         "domain": req.domain,
-        "v": 4,
+        "attachments": attachments_key,
+        "v": 5,
     }, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()
 

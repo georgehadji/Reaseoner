@@ -859,3 +859,93 @@ src/reasoner/infrastructure/
 | `src/reasoner/pipeline.py` | Skip disambiguation, early-exit on poor results |
 | `src/reasoner/models.py` (or `phases.py`) | Truncate web results in synthesis context |
 | `tests/test_search_quality.py` (new) | Unit tests |
+## Article Writing Failure Remediation Plan
+
+### Problem
+- Article requests can be routed into the generic multi-perspective pipeline instead of the dedicated writing pipeline.
+- Follow-up context handling can leak unrelated prior prompts and rendered phase output into new analytical or writing requests.
+- Search and source filtering are too weak for research-backed writing, allowing irrelevant and unsafe sources into the evidence set.
+- The article retrieval path has an implementation defect around discovery-client usage and is not robust enough to be the primary writing retrieval path as-is.
+
+### Root Cause Chain
+- The frontend treats nearly every later turn as a follow-up and sends prior chat history plus the previous assistant output back to the backend.
+- The backend injects that follow-up context into classification, decomposition, perspective, and synthesis prompts without checking whether the new request is actually a continuation.
+- Method routing for article requests is still heuristic/LLM-driven, so an article prompt can fall back to `multi_perspective` instead of `writing`.
+- Once misrouted, contaminated context influences decomposition and perspective generation, which then poisons search intent and source selection.
+- Search gating relies on a limited denylist and weak heuristic filters, so junk or unsafe sources can survive if they look superficially article-like.
+- The dedicated article retrieval path currently calls `get_discovery_client()` incorrectly and also uses simplistic query expansion and ranking.
+
+### Fix Plan
+
+#### 1. Deterministic Writing Routing
+- Add a server-side writing-intent detector for prompts requesting an article, essay, blog post, report, explainer, or research-backed writeup.
+- If writing intent is detected, bypass generic method classification and force `writing-budget` or `writing-premium` based on the active tier.
+- Keep this override on the backend so it applies regardless of client behavior.
+- Add regression tests proving article/essay prompts resolve to the writing workflow and phase sequence.
+
+#### 2. Safe Follow-Up Scoping
+- Replace the current “any existing assistant message means follow-up” behavior with explicit continuation detection.
+- Only send follow-up context when the new turn is referential, such as “continue,” “expand,” “revise that,” “same topic,” or equivalent signals.
+- For non-referential new requests, start a fresh run context even if they occur in the same visible chat session.
+- Add frontend and backend safeguards so non-conforming clients cannot reintroduce this bug.
+
+#### 3. Context Minimization
+- Stop injecting raw multi-turn history into classification, decomposition, perspective, and synthesis prompts by default.
+- Build a compact structured continuation context with only bounded fields such as prior topic, prior constraints, prior method, and a concise summary.
+- Never pass rendered phase markdown or raw intermediate reasoning back into follow-up prompts.
+- Exclude image-generation prompts/results from unrelated analytical or writing turns unless the user explicitly references them.
+
+#### 4. Previous Synthesis Hygiene
+- Change follow-up payload construction so `previous_synthesis` contains only the real final answer payload, not rendered phase output.
+- Store a dedicated summary or `final_solution.core_solution` for follow-up use.
+- Add tests for cross-mode contamination: image request followed by article request must not leak character names, scene details, or prior failures.
+
+#### 5. Repair the Article Retrieval Path
+- Fix `_phase_article_retrieve` to correctly unpack `get_discovery_client()` and use the returned client object safely.
+- Replace naive query variants like “overview” and “evidence analysis” with retrieval grounded in decomposed subquestions plus shared search utilities.
+- Prefer using the existing shared search/ranking pipeline instead of a second weaker retrieval stack.
+- Add focused regression tests for retrieval success, failure handling, and tuple-unpacking correctness.
+
+#### 6. Strengthen Source Safety and Relevance Filtering
+- Extend domain rejection to explicitly block adult-content, forum-spam, low-signal UGC, and irrelevant aggregator surfaces.
+- Add topical relevance scoring between the user’s request and candidate results before admission to the article evidence set.
+- Add trust weighting by source class: peer-reviewed, academic, government, primary archive, reputable newsroom, and known low-trust surfaces.
+- Fail closed when the evidence set is dominated by weak or off-topic sources.
+- Add regression tests for known bad domains and obviously irrelevant titles/snippets.
+
+#### 7. Writing Pipeline Fail-Closed Rules
+- Require a minimum count of trustworthy, on-topic sources before article drafting proceeds.
+- Abort with an evidence-insufficient response when claim-support ratio remains below threshold after verification.
+- Prevent final assembly from presenting a polished article if retrieval or verification quality gates fail.
+- Ensure the user gets a clear explanation of evidence limits instead of a contaminated or low-trust article.
+
+#### 8. End-to-End Verification
+- Add unit tests for routing, follow-up scoping, source filtering, and article retrieval.
+- Add integration tests for same-chat mode changes:
+- Image generation turn followed by unrelated article request.
+- Generic analytical turn followed by unrelated writing request.
+- True continuation request followed by correctly scoped follow-up context.
+- Assert the writing phase sequence appears for article requests and that contaminated terms do not appear in decomposition/perspective prompts.
+
+#### 9. Safe Observability
+- Add debug logging that records phase/method/routing decisions and follow-up-mode decisions without logging raw user content.
+- Log hashed request identifiers and structured reasons for “fresh run” vs “follow-up continuation.”
+- Log source-filter rejection reasons so unsafe or irrelevant admissions can be diagnosed without exposing sensitive prompt text.
+
+### Implementation Order
+- 1. Deterministic writing routing.
+- 2. Follow-up scoping and context minimization.
+- 3. `previous_synthesis` hygiene.
+- 4. Article retrieval bug fix and shared-search integration.
+- 5. Stronger source safety/relevance filters.
+- 6. Fail-closed writing quality gates.
+- 7. Regression and integration coverage.
+- 8. Observability improvements.
+
+### Acceptance Criteria
+- An explicit article request always enters the writing workflow.
+- A non-referential new request in the same chat does not inherit prior task details.
+- Prior image-generation prompts do not appear in later article decomposition or perspective output unless explicitly referenced.
+- Unsafe/off-topic sources are rejected before claim extraction.
+- The article pipeline either produces a research-backed article with traceable sources or fails explicitly with an evidence-insufficient response.
+- Regression coverage exists for routing, context isolation, retrieval, and source safety.

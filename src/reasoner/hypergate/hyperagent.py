@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import re
 from typing import Literal
 
 from reasoner.core.constants import (
@@ -33,6 +34,51 @@ from reasoner.hypergate.sub_agents import (
     WebSearchDetectorSubAgent,
 )
 from reasoner.llm import ProviderRouter
+
+# Fast-path patterns for pure creative-writing requests that should bypass the pipeline
+# and go straight to direct answer (no search, no multi-phase reasoning).
+# Deliberately excludes articles/essays/blog posts because those should route
+# to the research-backed writing pipeline.
+_CREATIVE_PATTERNS: list[re.Pattern[str]] = [
+    # English — pure creative genres without topic indicators
+    re.compile(r"\b(write|compose|draft|create)\s+(me\s+)?(an?\s+)?(poem|story|narrative|letter|speech|script)\b", re.I),
+    re.compile(r"\b(tell\s+me\s+a\s+story|make\s+up\s+a\s+story|write\s+me\s+a\s+poem)\b", re.I),
+    # Greek — pure creative genres
+    re.compile(r"\b(γράψε|συνέθεσε|δημιούργησε|σχεδίασε|φτιάξε)\s+(μου\s+)?(ένα\s+|μια\s+)?(ποίημα|ιστορία|λόγο|σενάριο|βιογραφικό|αφήγηση)\b", re.I),
+    re.compile(r"\b(πες\s+μου|φτιάξε\s+μου|γράψε\s+μου)\s+(μια\s+)?(ιστορία|αφήγηση)\b", re.I),
+]
+
+# Research indicators — if these appear with creative verbs, treat as research-backed
+# (requires full pipeline with search, NOT creative fast-path).
+_RESEARCH_INDICATORS: list[re.Pattern[str]] = [
+    re.compile(r"\b(research\s+(article|paper|essay)|informative\s+(article|essay)|academic\s+(article|essay))\b", re.I),
+    re.compile(r"\b(with\s+(sources|citations|references)|based\s+on\s+(sources|research|data))\b", re.I),
+    re.compile(r"\b(about|on|regarding|concerning|explaining|analyzing)\s+\w{4,}\b", re.I),
+    # Greek
+    re.compile(r"\b(έρευνα|μελέτη|ενημερωτικό|με\s+πηγές|με\s+αναφορές)\b", re.I),
+    re.compile(r"\b(για\s+(την|τον|τη|το|τους|τις|τα)\s+\w{4,}|σχετικά\s+με\s+\w{4,})\b", re.I),
+]
+
+
+_WRITING_INTENT = re.compile(
+    r"\b(write|draft|compose|create|prepare|produce)\s+(an?\s+)?(article|essay|blog\s+post|report|explainer|whitepaper|paper)\b",
+    re.I,
+)
+
+
+def _is_creative_writing(problem: str) -> bool:
+    """Return True only for PURE creative tasks (no research needed).
+
+    Research-backed requests like "write an article about climate change"
+    return False so they go through the full pipeline with search.
+    """
+    # Must match a creative pattern first
+    if not any(p.search(problem) for p in _CREATIVE_PATTERNS):
+        return False
+    # If research indicators are present, it's research-backed → NOT pure creative
+    if any(p.search(problem) for p in _RESEARCH_INDICATORS):
+        return False
+    return True
 
 logger = logging.getLogger(__name__)
 
@@ -59,11 +105,11 @@ class HyperGateAgent:
     then synthesises their outputs into a final GateDecision.
     """
 
-    _cache: dict[str, GateDecision] = {}
     _MAX_CACHE: int = HYPERGATE_CACHE_SIZE
 
     def __init__(self, router: ProviderRouter) -> None:
         self.router = router
+        self._cache: dict[str, GateDecision] = {}
         self._lang = LanguageDetectorSubAgent()
         self._complexity = ComplexityEstimatorSubAgent()
         self._direct = DirectDetectorSubAgent()
@@ -84,6 +130,36 @@ class HyperGateAgent:
             return GateDecision(
                 action="direct", confidence=1.0, reasoning="Very short prompt, assumed direct"
             )
+
+        # Fast-path: pure creative-writing requests (poems, stories, scripts, etc.)
+        # bypass the full pipeline and go straight to direct answer.
+        if _is_creative_writing(problem):
+            decision = GateDecision(
+                action="direct",
+                confidence=0.95,
+                reasoning="Pure creative writing request (poem, story, script, etc.) — direct generation is sufficient",
+            )
+            self._cache[problem_hash] = decision
+            logger.info(
+                "HyperGateAgent fast-path: creative-writing hash=%s action=direct",
+                problem_hash[:16],
+            )
+            return decision
+
+        # Fast-path: research-backed writing (articles/essays/blog posts/reports)
+        if _WRITING_INTENT.search(problem) or any(p.search(problem) for p in _RESEARCH_INDICATORS):
+            decision = GateDecision(
+                action="pipeline",
+                method="writing",
+                confidence=0.92,
+                reasoning="Detected research-backed writing intent (article/essay/blog/report)",
+            )
+            self._cache[problem_hash] = decision
+            logger.info(
+                "HyperGateAgent fast-path: writing-intent hash=%s action=pipeline method=writing",
+                problem_hash[:16],
+            )
+            return decision
 
         ctx = await self._run_phase1(problem)
         decision = self._synthesize(ctx)

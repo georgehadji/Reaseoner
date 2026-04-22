@@ -6,8 +6,11 @@ Robust JSON extraction from LLM responses.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 from reasoner.models import CritiqueScore, PerspectiveType
 
@@ -54,6 +57,11 @@ def extract_json(text: str) -> dict[str, Any]:
         text = text[:MAX_INPUT_LENGTH]
     
     text = strip_perplexity_citations(text.strip())
+    
+    # Guard against empty LLM responses (content filters, API errors, etc.)
+    if not text:
+        logger.warning("extract_json received empty response; returning empty dict as fallback")
+        return {}
 
     # Try multiple approaches to extract JSON from code fences
     # Approach 1: Match ```json ... ``` or ``` ... ``` anywhere

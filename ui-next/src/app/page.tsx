@@ -18,7 +18,7 @@ import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '
 import { METHOD_PHASES } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
-import { clearCache, searchWeb } from '@/lib/api-client';
+import { clearCache, searchWeb, uploadFiles, generateImage, generateImageEnhancement } from '@/lib/api-client';
 
 /** Resolve METHOD_PHASES by trying snake_case then kebab-case then fallback. */
 function getMethodPhases(method: string) {
@@ -36,8 +36,12 @@ export default function Home() {
   const setRunning = useAppStore((s) => s.setRunning);
   const composerText = useAppStore((s) => s.composerText);
   const setComposerText = useAppStore((s) => s.setComposerText);
+  const attachments = useAppStore((s) => s.attachments);
+  const clearAttachments = useAppStore((s) => s.clearAttachments);
   const isWebSearch = useAppStore((s) => s.isWebSearch);
   const isSmartSearch = useAppStore((s) => s.isSmartSearch);
+  const isImageMode = useAppStore((s) => s.isImageMode);
+  const tier = useAppStore((s) => s.tier);
   const getAutoPreset = useAppStore((s) => s.getAutoPreset);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
 
@@ -58,6 +62,11 @@ export default function Home() {
   const [currentPhase, setCurrentPhase] = useState<number | undefined>(undefined);
   const [phaseDurations, setPhaseDurations] = useState<Record<number, number>>({});
   const phaseStartTimesRef = useRef<Record<number, number>>({});
+
+  const isContinuation = (text: string) =>
+    /\b(continue|cont\.?|keep going|more|expand|elaborate|extend|add more|next (step|section|part)|again|revise|rewrite|improve|same topic|build on|follow up)\b/i.test(
+      text,
+    );
 
   const {
     scrollToBottom,
@@ -87,7 +96,39 @@ export default function Home() {
     setAutoSelectedMethod('multi_perspective');
     phaseStartTimesRef.current = {};
 
-    const userMsg: ChatFeedMessage = { id: 'u-' + Date.now(), role: 'user', content: problem };
+    // Upload attachments before running
+    let uploadedAttachments: { file_id: string; filename: string; mime_type: string; extracted_text: string; size: number }[] = [];
+    if (attachments.length > 0) {
+      try {
+        const uploadResult = await uploadFiles(attachments.map((a) => a.file));
+        uploadedAttachments = (uploadResult.files || [])
+          .filter((f) => f.success && f.file_id)
+          .map((f) => ({
+            file_id: f.file_id!,
+            filename: f.filename!,
+            mime_type: f.mime_type || 'application/octet-stream',
+            extracted_text: f.text || '',
+            size: f.size || 0,
+          }));
+      } catch (err) {
+        console.error('Attachment upload failed:', err);
+      }
+    }
+
+    const userMsg: ChatFeedMessage = {
+      id: 'u-' + Date.now(),
+      role: 'user',
+      content: problem,
+      attachments: attachments.length > 0
+        ? attachments.map((a) => ({
+            id: a.id,
+            name: a.name,
+            size: a.size,
+            type: a.type,
+            previewUrl: a.previewUrl,
+          }))
+        : undefined,
+    };
     const assistantId = 'a-' + Date.now();
     const assistantMsg: ChatFeedMessage = {
       id: assistantId,
@@ -96,8 +137,10 @@ export default function Home() {
       phases: [],
       isStreaming: true,
       currentPhaseName: undefined,
+      loadingKind: undefined,
+      loadingPrompt: undefined,
     };
-    setMessages((prev) => [...prev, userMsg, assistantMsg]);
+    setMessages((prev) => (isImageMode ? [...prev, userMsg] : [...prev, userMsg, assistantMsg]));
 
     const progressId = 'prog-' + Date.now();
     progressIdRef.current = progressId;
@@ -180,9 +223,108 @@ export default function Home() {
       return;
     }
 
+    // ── Image Generation mode ──
+    if (isImageMode) {
+      const genStart = performance.now();
+      try {
+        const enhancement = await generateImageEnhancement(problem, tier);
+        const enhancedPrompt = enhancement.enhanced_prompt || problem;
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: 'info-enhanced-img-' + Date.now(),
+            role: 'info',
+            content:
+              enhancedPrompt === problem
+                ? `Prompt used for generation: “${enhancedPrompt}”`
+                : `Enhanced prompt: “${enhancedPrompt}”`,
+            meta: enhancedPrompt === problem ? undefined : { original: problem, enhanced: enhancedPrompt },
+          },
+          {
+            ...assistantMsg,
+            loadingKind: 'image-generation',
+            loadingPrompt: enhancedPrompt,
+          },
+        ]);
+
+        const result = await generateImage(enhancedPrompt, tier, false);
+        const genDuration = (performance.now() - genStart) / 1000;
+        if (result.success && result.images && result.images.length > 0) {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === assistantId);
+            if (idx !== -1) {
+              const formattedImages =
+                result.images?.map((img) => ({
+                  data: img.image_data,
+                  model: img.model_used,
+                })) || [];
+              next[idx] = {
+                ...next[idx],
+                content:
+                  formattedImages.length >= 2
+                    ? `Generated ${formattedImages.length} images`
+                    : `Generated image using **${formattedImages[0]?.model || 'model'}**`,
+                images: formattedImages,
+                isStreaming: false,
+                duration: genDuration,
+                loadingKind: undefined,
+                loadingPrompt: undefined,
+              };
+            }
+            return next;
+          });
+        } else {
+          setMessages((prev) => {
+            const next = [...prev];
+            const idx = next.findIndex((m) => m.id === assistantId);
+            if (idx !== -1) {
+              next[idx] = {
+                ...next[idx],
+                content: `**Image generation failed:** ${result.error || 'Unknown error'}`,
+                isStreaming: false,
+                loadingKind: undefined,
+                loadingPrompt: undefined,
+              };
+            }
+            return next;
+          });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Image generation failed';
+        setMessages((prev) => {
+          const next = [...prev];
+          const idx = next.findIndex((m) => m.id === assistantId);
+          if (idx !== -1) {
+            next[idx] = {
+              ...next[idx],
+              content: `**Error:** ${msg}`,
+              isStreaming: false,
+              loadingKind: undefined,
+              loadingPrompt: undefined,
+            };
+          } else {
+            next.push({
+              ...assistantMsg,
+              content: `**Error:** ${msg}`,
+              isStreaming: false,
+              loadingKind: undefined,
+              loadingPrompt: undefined,
+            });
+          }
+          return next;
+        });
+      } finally {
+        setRunning(false);
+        progressIdRef.current = null;
+        clearAttachments();
+      }
+      return;
+    }
+
     // ── Detect follow-up mode ──
     const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
-    const isFollowup = !!lastAssistantMsg && messages.length > 0;
+    const isFollowup = !!lastAssistantMsg && messages.length > 0 && isContinuation(problem);
 
     const phases: RenderedPhase[] = [];
     let finalErrors: string[] = [];
@@ -385,6 +527,7 @@ export default function Home() {
             .map((m) => ({ role: m.role, content: m.content || '' })),
           previous_synthesis: lastAssistantMsg.content || '',
           agent_model: null,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         };
         await startFollowup(followupReq, onEvent);
       } else {
@@ -396,6 +539,7 @@ export default function Home() {
           top_k: 2,
           sequential: false,
           enhance_prompt: useAppStore.getState().isEnhancePrompt,
+          attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
         };
         await startRun(req, onEvent);
       }
@@ -414,6 +558,7 @@ export default function Home() {
     } finally {
       progressIdRef.current = null;
       setRunning(false);
+      clearAttachments();
     }
   }
 
@@ -452,6 +597,7 @@ export default function Home() {
         phases: renderedPhases,
         tokens: conv.total_tokens ?? undefined,
         duration: conv.duration,
+        animated: false,
       },
     ];
     if (conv.errors.length > 0) {

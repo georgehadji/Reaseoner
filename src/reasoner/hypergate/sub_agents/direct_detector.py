@@ -12,13 +12,21 @@ from typing import Any
 from reasoner.core.constants import HYPERGATE_MAX_TOKENS_DIRECT
 from reasoner.hypergate.base_sub_agent import BaseSubAgent
 
+_CREATIVE_PATTERNS = [
+    r"\b(write|compose|draft|create)\s+(an?\s+)?(poem|story|narrative|letter|speech|script)",
+    r"\b(γράψε|συνέθεσε|δημιούργησε|σχεδίασε)\s+(μου\s+)?(ένα\s+)?(ποίημα|ιστορία|λόγο|σενάριο)",
+    r"\b(tell\s+me\s+a\s+story|make\s+up\s+a\s+story|write\s+me\s+a\s+poem)",
+    r"\b(πες\s+μου\s+μια\s+ιστορία|φτιάξε\s+μου\s+ένα\s+ποίημα)",
+]
+
 _SYSTEM = (
-    "Decide whether the user's request can be answered directly in 1–2 sentences "
-    "without any multi-step reasoning pipeline.\n"
+    "Decide whether the user's request can be answered directly without any multi-step "
+    "reasoning pipeline.\n"
     "Answer 'true' for: greetings, simple arithmetic, definitions, casual conversation, "
-    "basic factual questions with a known answer.\n"
+    "basic factual questions with a known answer, creative writing requests "
+    "(poems, stories, letters, speeches, scripts).\n"
     "Answer 'false' for: anything requiring analysis, strategy, research, structured reasoning, "
-    "trade-off evaluation, or professional judgment.\n"
+    "trade-off evaluation, professional judgment, or research-backed writing such as articles, essays, and blog posts.\n"
     "Output ONLY valid JSON with exactly three keys: "
     "'is_direct' (boolean), "
     "'confidence' (float 0.0–1.0), "

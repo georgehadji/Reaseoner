@@ -44,6 +44,7 @@ from reasoner.llm import ProviderRouter
 from reasoner.core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
 from reasoner.core.temperatures import PHASE_TEMPERATURES
 from reasoner.core.constants import (
+    ARTICLE_MIN_SOURCE_COUNT,
     PHASE_TOKEN_BUDGETS,
     get_token_budget,
     DEFAULT_MAX_TOKENS,
@@ -63,6 +64,8 @@ from reasoner.application.mixins.dialectical_mixin import DialecticalMixin
 from reasoner.application.mixins.delphi_mixin import DelphiMixin
 from reasoner.application.mixins.cognitive_mixin import CognitiveMixin
 from reasoner.application.mixins.recovery_mixin import RecoveryMixin
+from reasoner.application.mixins.writing_mixin import WritingMixin
+from reasoner.application.mixins.article_pipeline import ArticlePipelineMixin
 
 logger = logging.getLogger(__name__)
 
@@ -108,6 +111,8 @@ class ARAPipeline(
     CognitiveMixin,
     DialecticalMixin,
     RecoveryMixin,
+    WritingMixin,
+    ArticlePipelineMixin,
 ):
     """
     Dynamic ARA v2.1 Pipeline Orchestrator.
@@ -133,6 +138,22 @@ class ARAPipeline(
         "primary": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
         "research": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["research"]),
         "deep_read": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["deep_read"]),
+        "writing_outline": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "writing_draft": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "writing_factcheck": PhaseConfig(role="verifier", temperature=PHASE_TEMPERATURES["verifier"]),
+        "writing_assemble": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
+        "article_decompose": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "article_claim_extract": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "article_cove_verify": PhaseConfig(role="verifier", temperature=PHASE_TEMPERATURES["verifier"]),
+        "article_cove_answer": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "article_cove_revise": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "article_verifier": PhaseConfig(role="verifier", temperature=PHASE_TEMPERATURES["verifier"]),
+        "article_synthesize": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
+        "article_pre_mortem": PhaseConfig(role="destructive", temperature=PHASE_TEMPERATURES["perspective"]),
+        "article_critic": PhaseConfig(role="critic_1", temperature=PHASE_TEMPERATURES["critic"]),
+        "article_assemble": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
+        "article_sot_skeleton": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "article_sot_solve": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
         "prompt_enhancement": PhaseConfig(role="prompt_enhancement", temperature=PHASE_TEMPERATURES["primary"]),
         "expert_1": PhaseConfig(role="expert_1", temperature=PHASE_TEMPERATURES["generator"]),
         "expert_2": PhaseConfig(role="expert_2", temperature=PHASE_TEMPERATURES["generator"]),
@@ -150,6 +171,7 @@ class ARAPipeline(
         self.source_type = kwargs.get('source_type', 'general')  # For iterative RAG
         self.domain = kwargs.get('domain', None)  # For domain-specific search
         self.enhance_prompt = kwargs.get('enhance_prompt', False)
+        self.attachments = kwargs.get('attachments', [])
         self.phase_configs = self._PHASE_CONFIGS.copy() # Simplified for brevity
         self.perspectives = list(DEFAULT_PERSPECTIVES)
 
@@ -157,7 +179,35 @@ class ARAPipeline(
         if self.verbose: logger.info(f"[{phase}] {message}")
         state.log(phase, message)
 
-    
+    def _build_attachment_context(self, attachments: list[dict[str, Any]]) -> str:
+        """Build a context string from extracted attachment texts.
+        
+        Format is designed to be unambiguous to LLMs: the injected text IS the
+        actual file content.  We use explicit markers so the model cannot mistake
+        this for metadata or instructions.
+        """
+        parts: list[str] = []
+        for att in attachments:
+            filename = att.get("filename", "unknown")
+            extracted = att.get("extracted_text", "").strip()
+            if extracted:
+                parts.append(
+                    f"=== FILE: {filename} ===\n"
+                    f"[CONTENT START]\n"
+                    f"{extracted}\n"
+                    f"[CONTENT END]"
+                )
+        if not parts:
+            return ""
+        return (
+            "=== ATTACHED FILES (full content provided below) ===\n"
+            "The user has uploaded the following file(s). "
+            "Treat the content between [CONTENT START] and [CONTENT END] "
+            "as the actual file contents.\n\n"
+            + "\n\n".join(parts)
+            + "\n=== END OF ATTACHED FILES ==="
+        )
+
     async def _call_llm_cached(
         self,
         role: str,
@@ -227,6 +277,10 @@ class ARAPipeline(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             **kwargs)
+        
+        if not raw or not raw.strip():
+            logger.warning(f"LLM returned empty response for role={role}; possible content filter or API error")
+            state.errors.append(f"Empty LLM response in phase {role}")
 
         # Extract cost info from metadata and accumulate in state
         cost_usd = metadata.get("cost_usd", 0.0)
@@ -292,11 +346,21 @@ class ARAPipeline(
         if "sot" in preset: return "sot"
         if "tot" in preset: return "tot"
         if "pot" in preset: return "pot"
+        if "writing" in preset or "article" in preset or "essay" in preset: return "writing"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
         """Main entry point. Executes the dynamic pipeline."""
         state = self.initial_state if self.initial_state else PipelineState(problem=problem, preset_name=self.preset_name)
+        
+        # --- ATTACHMENTS: Inject extracted text into problem ---
+        if self.attachments:
+            state.attachments = self.attachments
+            attachment_context = self._build_attachment_context(self.attachments)
+            if attachment_context:
+                state.problem = f"{state.problem}\n\n{attachment_context}"
+                if state.enhanced_problem:
+                    state.enhanced_problem = f"{state.enhanced_problem}\n\n{attachment_context}"
         
         # --- UNIVERSAL START PHASES ---
         if self.enhance_prompt and not state.enhanced_problem:
@@ -359,6 +423,28 @@ class ARAPipeline(
         
         return state
 
+    def _validate_enhancement(self, original: str, enhanced: str) -> bool:
+        """Reject enhancements that distort meaning, append foreign text, or blow up length."""
+        if not enhanced or len(enhanced) < 20:
+            return False
+        # Length guard — reject if more than 1.5x the original (prevents injection bloat).
+        # For very short prompts, allow up to 100 chars so concise inputs can still be expanded.
+        if len(enhanced) > max(100, len(original) * 1.5):
+            return False
+        # Fusion guard — reject if original text is concatenated without whitespace separator
+        # (indicates the LLM glued extra text directly onto the original)
+        stripped = original.rstrip(";!?.")
+        if stripped in enhanced and not enhanced.endswith(stripped + " "):
+            tail = enhanced[len(stripped):]
+            if tail and not tail[0].isspace():
+                return False
+        # Semantic-flip guard — simple heuristic: if the original asks a positive question
+        # and the enhanced asks a negative one, reject. (We can't do full semantic analysis,
+        # but we can guard against obvious polarity inversions.)
+        # For now, the stricter system prompt handles this; the length/fusion guards catch
+        # the most common corruption vectors.
+        return True
+
     @timed
     async def _phase_enhance_prompt(self, state: PipelineState):
         """Optional pre-phase: rewrite the user's problem for clarity and specificity."""
@@ -373,12 +459,12 @@ class ARAPipeline(
             agent = EnhancementHyperAgent()
             try:
                 enhanced = await agent.execute(state, self.router)
-                if enhanced and len(enhanced) >= 20 and enhanced != state.problem:
+                if self._validate_enhancement(state.problem, enhanced):
                     state.enhanced_problem = enhanced
                     self._log("PROMPT-ENHANCE", f"Enhanced prompt: {enhanced[:TRUNCATION.API_STORAGE]}...", state)
                 else:
                     state.enhanced_problem = state.problem
-                    self._log("PROMPT-ENHANCE", "Subagent enhancement returned no changes; using original prompt.", state)
+                    self._log("PROMPT-ENHANCE", "Subagent enhancement rejected by validation; using original prompt.", state)
             except Exception as exc:
                 state.enhanced_problem = state.problem
                 self._log("PROMPT-ENHANCE", f"Subagent enhancement failed ({exc}); using original prompt.", state)
@@ -398,12 +484,12 @@ class ARAPipeline(
         try:
             data = extract_json(raw)
             enhanced = data.get("enhanced_problem", "").strip()
-            if enhanced and len(enhanced) >= 20:
+            if self._validate_enhancement(state.problem, enhanced):
                 state.enhanced_problem = enhanced
                 self._log("PROMPT-ENHANCE", f"Enhanced prompt: {enhanced[:TRUNCATION.API_STORAGE]}...", state)
             else:
                 state.enhanced_problem = state.problem
-                self._log("PROMPT-ENHANCE", "Enhancement returned empty/short result; using original prompt.", state)
+                self._log("PROMPT-ENHANCE", "Enhancement rejected by validation; using original prompt.", state)
         except Exception as exc:
             state.enhanced_problem = state.problem
             self._log("PROMPT-ENHANCE", f"Enhancement failed ({exc}); using original prompt.", state)
@@ -470,6 +556,55 @@ class ARAPipeline(
     @timed
     async def _phase_synthesis(self, state: PipelineState):
         self._log("SYNTHESIS", "Synthesizing final solution...", state)
+
+        method_name = self._get_method_from_preset()
+        if method_name == "writing" and state.writing_state.get("final_article"):
+            self._log("SYNTHESIS", "Using assembled article directly for writing workflow.", state)
+            final_article = state.writing_state.get("final_article", "")
+            raw_cited_sources = state.writing_state.get("sources_cited", [])
+            article_link_lookup = {
+                url.strip(): {"title": title.strip() or url.strip(), "url": url.strip()}
+                for title, url in re.findall(r"\[([^\]]+)\]\((https?://[^)]+)\)", final_article)
+            }
+            cited_sources: list[dict[str, str]] = []
+            seen_urls: set[str] = set()
+            for source in raw_cited_sources:
+                if isinstance(source, dict):
+                    url = str(source.get("url", "")).strip()
+                    title = str(source.get("title", "")).strip() or article_link_lookup.get(url, {}).get("title", url)
+                elif isinstance(source, str):
+                    url = source.strip()
+                    title = article_link_lookup.get(url, {}).get("title", url)
+                else:
+                    continue
+                if not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                cited_sources.append({"title": title or url, "url": url})
+            confidence_parts = [
+                f"Claim support ratio: {state.writing_state.get('metrics', {}).get('claim_support_ratio', 0)}",
+                f"Citation accuracy: {state.writing_state.get('metrics', {}).get('citation_accuracy', 0)}",
+            ]
+            if len(cited_sources) < ARTICLE_MIN_SOURCE_COUNT:
+                confidence_parts.append(
+                    f"Evidence base is limited to {len(cited_sources)} source links, below the preferred target of {ARTICLE_MIN_SOURCE_COUNT}."
+                )
+            state.final_solution = FinalSolution(
+                core_solution=final_article,
+                critical_insights=state.writing_state.get("final_changes", [])[:5] or state.writing_state.get("gaps_noted", [])[:5],
+                action_blueprint=[],
+                open_questions=state.writing_state.get("gaps_noted", []),
+                claim_labels={},
+                meta_audit=MetaCognitiveAudit(
+                    most_dangerous_assumption="",
+                    dominant_bias="",
+                    remaining_uncertainty=" ".join(confidence_parts).strip(),
+                    assumption_failure_impact="",
+                    non_obvious_insight="",
+                ),
+                sources=cited_sources,
+            )
+            return
 
         # ── Subagent path (opt-in via env) ────────────────────────────
         if USE_PHASE_SUBAGENTS["synthesis"]:
@@ -619,6 +754,6 @@ class ARAPipeline(
                 "evaluation": data.get("evaluation", []),
                 "recommendations": data.get("recommendations", []),
             }
-        except (ParseError, Exception) as e:
+        except Exception as e:
             self._log("POST-SYNTHESIS", f"Verification failed: {e}", state)
             state.errors.append(f"Post-synthesis verification error: {e}")

@@ -1,5 +1,6 @@
 'use client';
 
+import { TIMING } from '@/lib/config';
 import { useRef, useCallback, useEffect, useState } from 'react';
 
 interface ScrollAnchor {
@@ -9,7 +10,7 @@ interface ScrollAnchor {
   dismissIndicator: () => void;
 }
 
-const THRESHOLD = 120;
+const THRESHOLD = TIMING.scrollAnchorThresholdPx;
 
 export function useScrollAnchor(containerRef: React.RefObject<HTMLElement | null>): ScrollAnchor {
   const [isNearBottom, setIsNearBottom] = useState(true);

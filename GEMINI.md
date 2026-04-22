@@ -32,15 +32,22 @@ Reasoner is a sophisticated, multi-method AI reasoning system designed for compl
 
 ### Installation
 ```bash
-pip install fastapi uvicorn python-dotenv rich anthropic openai google-generativeai mistralai
+pip install -r requirements.txt
 ```
 *Note: A `.env` file with relevant API keys is required for execution.*
 
-### Running the Web UI
+### Running the Backend
+To run the primary FastAPI application (defined in `asgi.py`):
 ```bash
 uvicorn asgi:app --reload --port 8000
 ```
 Then access `http://localhost:8000`.
+
+To run the API entry point (defined in `api.py`):
+```bash
+uvicorn src.reasoner.api:app --reload --port 8000
+```
+Note: Ensure only one Uvicorn instance is running on the same port at a time.
 
 ### Running the CLI
 ```bash
@@ -95,6 +102,11 @@ python -m pytest test_parsing.py test_models.py test_perplexity_config.py -q
 - Describe UI changes clearly.
 - Note if new API keys or `.env` changes are required.
 
+## External Tools, Linters, and Formatters
+To maintain code quality and consistency:
+- **Ruff:** This project likely uses Ruff for linting and formatting (indicated by `.ruff_cache`). To run: `ruff check .` or `ruff format .`
+- Always check `pyproject.toml`, `setup.cfg`, `.eslintrc.js`, etc., for specific configurations and other tools in use.
+
 ## Operational Realities
 - **Routing & Fallbacks:** The system has a robust `ProviderRouter` in `llm.py` that handles provider-specific nuances and implements fallback logic if a primary model fails.
 - **Structured Output:** The system heavily relies on JSON extraction (see `parsing.py`). Some models (like Perplexity) use specific `response_format` configurations.
@@ -140,14 +152,14 @@ python -m pytest test_parsing.py test_models.py test_perplexity_config.py -q
 - Go fix failing CI tests without being told how
 
 ## Task Management
-1. **+*Plan First**: Write plan to `../tasks/todo.md` with checkable items
-2. **+*Verify Plan**: Check in before starting implementation
-3. **+*Track Progress**: Mark items complete as you go
-4. **+*Explain Changes**: High-level summary at each step
-5. **+*Document Results**: Add review section to `../tasks/todo.md`
-6. **+*Capture Lessons**: Update `../tasks/lessons.md` after corrections
+1. **Plan First**: Write plan to `../tasks/todo.md` with checkable items
+2. **Verify Plan**: Check in before starting implementation
+3. **Track Progress**: Mark items complete as you go
+4. **Explain Changes**: High-level summary at each step
+5. **Document Results**: Add review section to `../tasks/todo.md`
+6. **Capture Lessons**: Update `../tasks/lessons.md` after corrections
 
 ## Core Principles
-- **+*Simplicity First**: Make every change as simple as possible. Impact minimal code.
-- **+*Root Causes**: Find root causes. No temporary fixes. Senior developer standards.
-- **+*Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.
+- **Simplicity First**: Make every change as simple as possible. Impact minimal code.
+- **Root Causes**: Find root causes. No temporary fixes. Senior developer standards.
+- **Minimal Impact**: Changes should only touch what's necessary. Avoid introducing bugs.

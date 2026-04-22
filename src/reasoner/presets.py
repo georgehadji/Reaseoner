@@ -49,7 +49,7 @@ def build_custom_router(routing_dict: dict[str, str]) -> ProviderRouter:
     Example:
         build_custom_router({
             "primary":        "claude-sonnet",
-            "constructive":   "kimi-k2",
+            "constructive":   "kimi-k2-6",
             "scoring":        "sonar-pro",
             "synthesis":      "glm-5",
         })

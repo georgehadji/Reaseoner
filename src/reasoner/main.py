@@ -22,7 +22,7 @@ USAGE — CUSTOM ROUTING
 # Fully custom routing (JSON dict, must include "primary"):
 python main.py --problem "..." --routing '{
   "primary":       "deepseek-v3",
-  "constructive":  "kimi-k2",
+  "constructive":  "kimi-k2-6",
   "destructive":   "qwen3-max",
   "scoring":       "sonar-pro",
   "synthesis":     "glm-5"

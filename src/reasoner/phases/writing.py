@@ -1,0 +1,325 @@
+from __future__ import annotations
+import json
+from reasoner.models import PipelineState
+from reasoner.core.constants import (
+    ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION,
+    ARTICLE_MIN_SOURCE_COUNT,
+    JSON_ONLY_FOOTER,
+)
+from reasoner.phases._shared import get_language_instruction, _wrap_user_input, _wrap_external_content
+
+# ── CoVE for Claims ──────────────────────────────────────────────────────────
+
+ARTICLE_COVE_DRAFT_SYSTEM = (
+    "You are a precise fact extractor. Draft atomic claims from the provided sources. "
+    "One factual statement per claim. No interpretation. Must be directly supported by text. "
+    "Prefer claims backed by multiple independent sources when available. "
+    + JSON_ONLY_FOOTER
+)
+
+ARTICLE_COVE_VERIFY_SYSTEM = (
+    "You are a skeptical fact-checker. For EACH claim below, independently verify whether it is "
+    "actually supported by the provided sources. Do NOT trust the claims — check them against the sources. "
+    "Generate 1-2 specific verification questions per claim. "
+    + JSON_ONLY_FOOTER
+)
+
+ARTICLE_COVE_ANSWER_SYSTEM = (
+    "You are an independent researcher. Answer the verification questions based ONLY on the sources. "
+    "Do not refer to the draft claims. For each question, explicitly state whether the evidence "
+    "supports, contradicts, or is insufficient to evaluate the target claim. "
+    + JSON_ONLY_FOOTER
+)
+
+ARTICLE_COVE_REVISE_SYSTEM = (
+    "You are a careful editor. Given draft claims and independent verification results, "
+    "revise the claim list. Keep only claims where verification SUPPORTS them. "
+    "Downgrade weak claims. Remove contradicted claims. Add caveats where evidence is insufficient. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def article_cove_draft_prompt(state, sources_json: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Topic: {state.problem}\n\n'
+        f'Sources:\n{sources_json}\n\n'
+        f'Draft atomic claims from the sources. Rules:\n'
+        f'- One factual statement per claim\n'
+        f'- No interpretation or speculation\n'
+        f'- Must be directly supported by source text\n'
+        f'- Assign a confidence score (0.0-1.0) per claim\n\n'
+        f'Output JSON: {{"claims": [{{'
+        f'"id": "C1", "text": "...", "source_url": "...", "confidence": 0.85'
+        f'}}]}}'
+    )
+
+
+def article_cove_verify_prompt(state, claims_json: str, sources_json: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Draft Claims:\n{claims_json}\n\n'
+        f'Sources:\n{sources_json}\n\n'
+        f'For EACH claim above, generate 1-2 specific verification questions that would '
+        f'independently test whether the claim is true. The questions must be answerable '
+        f'from the sources without referring to the claims.\n\n'
+        f'Output JSON: {{"verification_questions": [{{'
+        f'"question": "...", "target_claim_id": "C1", "expected_evidence_type": "fact|statistic|authority"'
+        f'}}]}}'
+    )
+
+
+def article_cove_answer_prompt(state, questions_json: str, sources_json: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Sources:\n{sources_json}\n\n'
+        f'Answer these verification questions INDEPENDENTLY using ONLY the sources above. '
+        f'Do not refer to any draft claims. For each question, explicitly state whether '
+        f'the evidence supports, contradicts, or is insufficient.\n\n'
+        f'Questions:\n{questions_json}\n\n'
+        f'Output JSON: {{"answers": [{{'
+        f'"question": "...", "answer": "...", "verdict": "supports|contradicts|insufficient", '
+        f'"confidence": 0.8, "reasoning": "..."'
+        f'}}]}}'
+    )
+
+
+def article_cove_revise_prompt(state, claims_json: str, answers_json: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Draft Claims:\n{claims_json}\n\n'
+        f'Independent Verification Results:\n{answers_json}\n\n'
+        f'Revise the claim list. Keep ONLY claims where verification SUPPORTS them. '
+        f'Downgrade weak claims (lower confidence). Remove contradicted claims. '
+        f'Add caveats for insufficient evidence. Document what changed.\n\n'
+        f'Output JSON: {{"claims": [{{'
+        f'"id": "C1", "text": "...", "source_url": "...", "confidence": 0.85, "status": "verified|weak|rejected"'
+        f'}}], '
+        f'"changes_made": ["..."], '
+        f'"remaining_uncertainties": ["..."]}}'
+    )
+
+
+# ── Pre-Mortem for Articles ──────────────────────────────────────────────────
+
+ARTICLE_PRE_MORTEM_SYSTEM = (
+    "You are a strategic risk analyst. Imagine the article was rejected by journal reviewers. "
+    "Work backwards to identify the root causes of failure. Be brutally honest. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def article_pre_mortem_prompt(state, article: str, claims_json: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Article Draft:\n{article}\n\n'
+        f'Claims:\n{claims_json}\n\n'
+        f'Imagine this article was submitted to a top-tier journal and was REJECTED. '
+        f'Work backwards: what went wrong?\n'
+        f'1. What are the weakest sections?\n'
+        f'2. Which claims would reviewers challenge?\n'
+        f'3. What counterarguments are missing?\n'
+        f'4. What overgeneralizations exist?\n'
+        f'5. What would make a hostile reviewer say "this is unpublishable"?\n\n'
+        f'Output JSON: {{'
+        f'"failure_narrative": "...", '
+        f'"root_causes": ["..."], '
+        f'"weak_sections": ["..."], '
+        f'"challenged_claims": ["..."], '
+        f'"missing_counterarguments": ["..."], '
+        f'"overgeneralizations": ["..."], '
+        f'"early_warnings": ["..."]'
+        f'}}'
+    )
+
+
+# ── SoT for Article Synthesis ────────────────────────────────────────────────
+
+ARTICLE_SOT_SYSTEM = (
+    "You are an expert at parallel article writing. Generate a skeleton outline with sections "
+    "that can be written independently. Identify dependencies between sections. "
+    + JSON_ONLY_FOOTER
+)
+
+ARTICLE_SOT_SOLVE_SYSTEM = (
+    "You are a disciplined research writer. Write ONE section using ONLY verified claims. "
+    "Inline markdown citations required. Do not generalize beyond sources. "
+    "Every non-trivial factual paragraph must include at least one citation. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def article_sot_skeleton_prompt(state, claims_json: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Topic: {state.problem}\n\n'
+        f'Verified Claims:\n{claims_json}\n\n'
+        f'Create an article skeleton. Break into sections that can be written in parallel. '
+        f'For each section, specify:\n'
+        f'1. Section heading\n'
+        f'2. Which claims it uses (by claim_id)\n'
+        f'3. Dependencies (which sections must be written before this one)\n'
+        f'4. Estimated word count\n\n'
+        f'Output JSON: {{"sections": [{{'
+        f'"id": "S1", "heading": "...", "claim_ids": ["C1"], '
+        f'"dependencies": [], "word_count": 200'
+        f'}}]}}'
+    )
+
+
+def article_sot_solve_prompt(state, section: dict, claims_json: str) -> str:
+    section_heading = section.get("heading", "")
+    section_claims = section.get("claim_ids", [])
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Topic: {state.problem}\n\n'
+        f'Section: {section_heading}\n\n'
+        f'Relevant Claims (use ONLY these):\n{claims_json}\n\n'
+        f'Write this section. Rules:\n'
+        f'- Use ONLY the provided claims\n'
+        f'- Inline [Source: URL] citations\n'
+        f'- Do not invent new facts\n'
+        f'- Target word count: {section.get("word_count", 200)}\n\n'
+        f'Output JSON: {{"content": "...", "word_count": 200}}'
+    )
+
+
+WRITING_OUTLINE_SYSTEM = (
+    "You are an expert research editor. Create a detailed article outline based on the provided "
+    "sources. Each section must map to specific sources. Do NOT write the article yet — only the outline. "
+    "Prioritize high-signal sections supported by multiple sources. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def writing_outline_prompt(state: PipelineState) -> str:
+    sources = state.web_discovery_results[:ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION]
+    sources_text = json.dumps(sources, indent=2, ensure_ascii=False) if sources else "No sources available."
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Available Sources:\n{_wrap_external_content(sources_text)}\n\n'
+        f'Create a detailed article outline. For each section, specify:\n'
+        f'1. Section title\n'
+        f'2. Key points to cover\n'
+        f'3. Required sources (by URL) that support this section\n'
+        f'4. Estimated word count\n\n'
+        f'Use the source set aggressively. Aim to cover at least {ARTICLE_MIN_SOURCE_COUNT} distinct sources across the full outline when available.\n\n'
+        f'Output JSON: {{"outline": [{{'
+        f'"title": "<section title>", '
+        f'"key_points": ["<point>"], '
+        f'"source_urls": ["<url>"], '
+        f'"word_count": 200'
+        f'}}], '
+        f'"total_word_count": 1200, '
+        f'"suggested_title": "<article title>"}}'
+    )
+
+
+WRITING_DRAFT_SYSTEM = (
+    "You are a skilled research writer. Write article sections using ONLY the facts from the provided sources. "
+    "Every factual claim MUST have an inline markdown citation [Source Title](URL). "
+    "Do NOT invent statistics, quotes, or facts. If a section lacks source support, mark it as [NEEDS SOURCE]. "
+    "Separate clearly: FACT (from sources) vs INTERPRETATION (your analysis). "
+    "The article must read like a publishable high-end magazine or journal explainer, not a generic blog post. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def writing_draft_prompt(state: PipelineState) -> str:
+    outline = state.writing_state.get("outline", [])
+    sources = state.web_discovery_results[:ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION]
+    outline_json = json.dumps(outline, indent=2, ensure_ascii=False) if outline else "[]"
+    sources_text = json.dumps(sources, indent=2, ensure_ascii=False) if sources else "No sources available."
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Article Outline:\n{_wrap_external_content(outline_json)}\n\n'
+        f'Sources:\n{_wrap_external_content(sources_text)}\n\n'
+        f'Write the FULL article following the outline. Rules:\n'
+        f'1. Use ONLY facts from the provided sources\n'
+        f'2. Every factual claim MUST have inline citation in format [Source Title](URL)\n'
+        f'3. Do NOT invent statistics, dates, or quotes\n'
+        f'4. Mark unsupported sections with [NEEDS SOURCE]\n'
+        f'5. Separate FACT paragraphs from INTERPRETATION paragraphs\n'
+        f'6. Include a brief abstract at the start\n'
+        f'7. Use as many relevant sources as possible, aiming for at least {ARTICLE_MIN_SOURCE_COUNT} distinct URLs when available\n'
+        f'8. End the article with a "Sources" section listing every URL actually cited in the body\n\n'
+        f'Output JSON: {{"article": "<full article text>", '
+        f'"abstract": "<abstract>", '
+        f'"word_count": 1200, '
+        f'"sections_written": ["<section title>"]}}'
+    )
+
+
+WRITING_FACTCHECK_SYSTEM = (
+    "You are a rigorous fact-checker. Review the article against the provided sources. "
+    "Flag every claim that cannot be verified by the sources. "
+    "Calculate a confidence score for the article. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def writing_factcheck_prompt(state: PipelineState) -> str:
+    article = state.writing_state.get("article", "")
+    sources = state.web_discovery_results[:ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION]
+    sources_text = json.dumps(sources, indent=2, ensure_ascii=False) if sources else "[]"
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Article to Review:\n{_wrap_external_content(article)}\n\n'
+        f'Sources:\n{_wrap_external_content(sources_text)}\n\n'
+        f'Review the article and for EACH paragraph:\n'
+        f'1. Verify all factual claims against the sources\n'
+        f'2. Flag any claim WITHOUT source support as UNVERIFIED\n'
+        f'3. Flag any statistic or quote that cannot be traced to a source\n'
+        f'4. Check for contradictions between the article and sources\n'
+        f'5. Assign a confidence score (0.0-1.0) per paragraph\n\n'
+        f'Output JSON: {{"paragraph_reviews": [{{'
+        f'"paragraph_num": 1, '
+        f'"claims": ["<claim>"], '
+        f'"verified": true, '
+        f'"unverified_claims": ["<claim>"], '
+        f'"confidence": 0.85, '
+        f'"notes": "<reviewer notes>"'
+        f'}}], '
+        f'"overall_confidence": 0.8, '
+        f'"hallucination_risk": "low|medium|high", '
+        f'"recommendations": ["<suggested fix>"], '
+        f'"needs_rewrite": false}}'
+    )
+
+
+WRITING_ASSEMBLE_SYSTEM = (
+    "You are a senior editor. Produce the final polished article incorporating fact-check feedback. "
+    "Remove or flag unverified claims. Add a 'Sources' section at the end. "
+    "The final output must preserve only actual source links used in the article body. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def writing_assemble_prompt(state: PipelineState) -> str:
+    article = state.writing_state.get("article", "")
+    reviews = state.writing_state.get("factcheck_reviews", [])
+    reviews_json = json.dumps(reviews, indent=2, ensure_ascii=False) if reviews else "[]"
+    sources = state.web_discovery_results[:ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION]
+    sources_text = json.dumps(sources, indent=2, ensure_ascii=False) if sources else "[]"
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Original Article:\n{_wrap_external_content(article)}\n\n'
+        f'Fact-Check Reviews:\n{_wrap_external_content(reviews_json)}\n\n'
+        f'Sources:\n{_wrap_external_content(sources_text)}\n\n'
+        f'Produce the FINAL article. Instructions:\n'
+        f'1. Remove all claims flagged as UNVERIFIED\n'
+        f'2. Add caveats for claims with insufficient evidence\n'
+        f'3. Keep all inline citations in format [Source Title](URL)\n'
+        f'4. Add a "Sources" section at the end listing all cited URLs and only cited URLs\n'
+        f'5. Add a "Confidence Notice" paragraph noting overall reliability\n'
+        f'6. Include the abstract at the top\n'
+        f'7. If fewer than {ARTICLE_MIN_SOURCE_COUNT} sources are available, be explicit about the evidence limit\n\n'
+        f'Output JSON: {{"final_article": "<full final article>", '
+        f'"abstract": "<abstract>", '
+        f'"changes_made": ["<change description>"], '
+        f'"sources_cited": ["<url>"], '
+        f'"confidence_notice": "<notice text>", '
+        f'"word_count": 1200}}'
+    )

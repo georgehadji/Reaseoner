@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from 'next-themes';
 import { Check, Copy } from 'lucide-react';
+import { TIMING } from '@/lib/config';
 import { copyToClipboard } from '@/lib/utils';
 
 export function MarkdownRenderer({ children }: { children: string }) {
@@ -60,7 +61,7 @@ function CodeBlock({ code, language, isDark }: { code: string; language: string;
     const ok = await copyToClipboard(code);
     if (ok) {
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), TIMING.copiedFeedbackMs);
     }
   }
 

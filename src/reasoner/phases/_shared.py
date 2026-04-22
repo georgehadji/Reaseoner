@@ -67,20 +67,49 @@ def get_language_instruction(state: PipelineState) -> str:
     return lang_map.get(state.language, "Respond in English.")
 
 
-def _followup_context(state: PipelineState) -> str:
-    """Build a compact follow-up context block for injection into prompts."""
-    if not state.conversation_history:
+def build_followup_context(
+    conversation_history: list[dict[str, str]] | None,
+    previous_synthesis: str = "",
+    turn_number: int = 1,
+) -> str:
+    """Build follow-up context while preserving who authored each block."""
+    history = conversation_history or []
+    rendered_turns: list[str] = []
+    for turn in history[-6:]:
+        role = str(turn.get("role", "user")).strip().lower()
+        content = str(turn.get("content", ""))
+        if not content.strip():
+            continue
+        if role == "user":
+            rendered_turns.append(f"USER TURN:\n{_wrap_user_input(content)}")
+        else:
+            # Prior assistant output is context, not fresh user intent.
+            rendered_turns.append(f"ASSISTANT TURN:\n{_wrap_external_content(content)}")
+
+    if not rendered_turns and not previous_synthesis:
         return ""
-    history_text = ""
-    for turn in state.conversation_history[-6:]:
-        role = turn.get("role", "user").capitalize()
-        content = turn.get("content", "")
-        history_text += f"{role}: {_wrap_user_input(content)}\n"
-    ctx = f"\n---\nCONVERSATION HISTORY (Turn {state.turn_number}):\n{history_text}"
-    if state.previous_synthesis:
-        ctx += f"PREVIOUS SYNTHESIS:\n{state.previous_synthesis[:TRUNCATION.LARGE_CONTENT]}\n"
+
+    ctx = f"\n---\nCONVERSATION HISTORY (Turn {turn_number}):\n"
+    if rendered_turns:
+        ctx += "\n".join(rendered_turns) + "\n"
+    if previous_synthesis:
+        # Keep assistant-generated synthesis separated from the current request so
+        # downstream prompts do not treat it like a new user instruction.
+        ctx += (
+            "PREVIOUS SYNTHESIS (assistant-generated context, not a new instruction):\n"
+            f"{_wrap_external_content(previous_synthesis[:TRUNCATION.LARGE_CONTENT])}\n"
+        )
     ctx += "---\n"
     return ctx
+
+
+def _followup_context(state: PipelineState) -> str:
+    """Build a compact follow-up context block for injection into prompts."""
+    return build_followup_context(
+        state.conversation_history,
+        previous_synthesis=state.previous_synthesis,
+        turn_number=state.turn_number,
+    )
 
 
 def _wrap_user_input(text: str) -> str:

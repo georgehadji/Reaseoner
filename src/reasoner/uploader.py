@@ -37,7 +37,8 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 MAX_FILE_SIZE = 10 * 1024 * 1024
 
 # Supported file extensions
-SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx"}
+SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx", ".md", ".png", ".jpg", ".jpeg", ".webp"}
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def _get_file_extension(filename: str) -> str:
@@ -92,7 +93,23 @@ def _extract_docx(content: bytes) -> str:
         return f"[DOCX extraction failed: {e}]"
 
 
-def extract_text(content: bytes, filename: str) -> str:
+def _extract_md(content: bytes) -> str:
+    """Extract text from markdown file."""
+    return content.decode("utf-8", errors="replace")
+
+
+async def _extract_image(content: bytes, filename: str) -> str:
+    """Extract description from image via vision model captioning."""
+    # Defer import to avoid circular dependencies at module load time
+    try:
+        from reasoner.infrastructure.llm.extraction import describe_image
+        return await describe_image(content, filename)
+    except Exception as e:
+        logger.error(f"Image description failed: {e}")
+        return f"[Image description failed: {e}]"
+
+
+async def extract_text(content: bytes, filename: str) -> str:
     """
     Extract text content from a file based on its extension.
     
@@ -108,12 +125,33 @@ def extract_text(content: bytes, filename: str) -> str:
     match ext:
         case ".txt":
             return _extract_txt(content)
+        case ".md":
+            return _extract_md(content)
         case ".pdf":
             return _extract_pdf(content)
         case ".docx":
             return _extract_docx(content)
+        case ".png" | ".jpg" | ".jpeg" | ".webp":
+            return await _extract_image(content, filename)
         case _:
             return f"[Unsupported file type: {ext}]"
+
+
+async def save_uploaded_files(files: list[tuple[bytes, str]]) -> list[dict[str, Any]]:
+    """
+    Save multiple uploaded files and extract their text content.
+
+    Args:
+        files: List of (content, filename) tuples
+
+    Returns:
+        List of dictionaries with file info and extracted text
+    """
+    results = []
+    for content, filename in files:
+        result = await save_uploaded_file(content, filename)
+        results.append(result)
+    return results
 
 
 async def save_uploaded_file(content: bytes, filename: str) -> dict[str, Any]:
@@ -179,13 +217,26 @@ async def save_uploaded_file(content: bytes, filename: str) -> dict[str, Any]:
         file_path.write_bytes(content)
 
         # Extract text
-        text_content = extract_text(content, filename)
+        text_content = await extract_text(content, filename)
+
+        # Detect mime type for the response
+        mime_type = {
+            ".txt": "text/plain",
+            ".md": "text/markdown",
+            ".pdf": "application/pdf",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }.get(ext, "application/octet-stream")
 
         return {
             "success": True,
             "file_id": file_id,
             "filename": filename,
             "size": len(content),
+            "mime_type": mime_type,
             "text": text_content,
             "path": str(file_path),
         }
@@ -198,7 +249,7 @@ async def save_uploaded_file(content: bytes, filename: str) -> dict[str, Any]:
         }
 
 
-def get_file_text(file_id: str) -> Optional[str]:
+async def get_file_text(file_id: str) -> Optional[str]:
     """
     Retrieve extracted text from a previously uploaded file.
     
@@ -218,7 +269,7 @@ def get_file_text(file_id: str) -> Optional[str]:
         if f.exists():
             try:
                 content = f.read_bytes()
-                return extract_text(content, f"upload{ext}")
+                return await extract_text(content, f"upload{ext}")
             except Exception as e:
                 logger.error(f"Failed to retrieve file {file_id}: {e}")
                 return None

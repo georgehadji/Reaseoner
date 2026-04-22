@@ -4,6 +4,7 @@ Multi-tenant isolation, provider fallback chains, persona modes.
 """
 
 import os
+import copy
 import yaml
 from pathlib import Path
 from dataclasses import dataclass, field
@@ -20,7 +21,7 @@ DEFAULT_CONFIG_PATHS = [
 
 @dataclass
 class ProviderConfig:
-    provider: str = "ollama"
+    provider: str = "openrouter"
     model: str = ""
     api_key: str = ""
     api_base: str = ""
@@ -130,10 +131,10 @@ def _resolve_env(value) -> str:
 
 def _build_provider(data: dict) -> ProviderConfig:
     return ProviderConfig(
-        provider=data.get("provider", "ollama"),
+        provider=data.get("provider", "openrouter"),
         model=data.get("model", ""),
-        api_key=_resolve_env(data.get("api_key", "")),
-        api_base=_resolve_env(data.get("api_base", "")),
+        api_key=_resolve_env(data.get("api_key", os.environ.get("OPENROUTER_API_KEY", ""))),
+        api_base=_resolve_env(data.get("api_base", "https://openrouter.ai/api/v1")),
         timeout=data.get("timeout", 30.0),
         extra=data.get("extra", {}),
     )
@@ -154,14 +155,22 @@ def _build_resilient(data: dict) -> ResilientProviderConfig:
 
 
 def _build_persona(name: str, data: dict) -> PersonaConfig:
+    l1_override = data.get("l1_similarity_override")
+    l2_override = data.get("l2_similarity_override")
+
+    if l1_override is not None and not (0.0 <= l1_override <= 1.0):
+        raise ValueError(f"Persona '{name}': l1_similarity_override must be in [0, 1], got {l1_override}")
+    if l2_override is not None and not (0.0 <= l2_override <= 1.0):
+        raise ValueError(f"Persona '{name}': l2_similarity_override must be in [0, 1], got {l2_override}")
+
     return PersonaConfig(
         name=name,
         preflight=data.get("preflight", "balanced"),
         context_bias=data.get("context_bias", "neutral"),
         max_confidence_for_pass=data.get("max_confidence_for_pass", 0.7),
         allow_speculative=data.get("allow_speculative", False),
-        l1_similarity_override=data.get("l1_similarity_override"),
-        l2_similarity_override=data.get("l2_similarity_override"),
+        l1_similarity_override=l1_override,
+        l2_similarity_override=l2_override,
         custom_system_prompt=data.get("custom_system_prompt", ""),
     )
 
@@ -268,19 +277,66 @@ def _apply_defaults(cfg: NeuroConfig) -> NeuroConfig:
         cfg.data_dir = str(Path.home() / ".neuro")
     if not cfg.storage.path:
         cfg.storage.path = cfg.data_dir
+
+    # ── Reasoning defaults ──
     p = cfg.reasoning.primary
+    if not p.provider:
+        p.provider = "openrouter"
     if not p.model:
-        p.model = "qwen2.5:32b-instruct" if p.provider == "ollama" else "openai/gpt-4o-mini"
-    if not p.api_base and p.provider == "ollama":
-        p.api_base = "http://localhost:11434"
+        p.model = "openai/gpt-4o-mini"
+    if not p.api_base and p.provider == "openrouter":
+        p.api_base = "https://openrouter.ai/api/v1"
+    if not p.api_key:
+        p.api_key = os.environ.get("OPENROUTER_API_KEY", "")
+
+    # Reasoning fallbacks (value-for-money, cross-provider redundancy)
+    if not cfg.reasoning.fallbacks:
+        cfg.reasoning.fallbacks = [
+            ProviderConfig(
+                provider="openrouter",
+                model="google/gemini-2.0-flash-001",
+                api_key=p.api_key,
+                api_base="https://openrouter.ai/api/v1",
+            ),
+            ProviderConfig(
+                provider="openrouter",
+                model="anthropic/claude-3-haiku",
+                api_key=p.api_key,
+                api_base="https://openrouter.ai/api/v1",
+            ),
+        ]
+
+    # ── Embedding defaults ──
     e = cfg.embedding.primary
+    if not e.provider:
+        e.provider = "openrouter"
     if not e.model:
-        e.model = "nomic-embed-text" if e.provider == "ollama" else "text-embedding-3-small"
-    if not e.api_base and e.provider == "ollama":
-        e.api_base = "http://localhost:11434"
+        e.model = "qwen/qwen3-embedding-8b"
+    if not e.api_base and e.provider == "openrouter":
+        e.api_base = "https://openrouter.ai/api/v1"
+    if not e.api_key:
+        e.api_key = os.environ.get("OPENROUTER_API_KEY", "")
+
+    # Embedding fallbacks (value-for-money, cross-provider redundancy)
+    if not cfg.embedding.fallbacks:
+        cfg.embedding.fallbacks = [
+            ProviderConfig(
+                provider="openrouter",
+                model="openai/text-embedding-3-small",
+                api_key=e.api_key,
+                api_base="https://openrouter.ai/api/v1",
+            ),
+            ProviderConfig(
+                provider="openrouter",
+                model="baai/bge-m3",
+                api_key=e.api_key,
+                api_base="https://openrouter.ai/api/v1",
+            ),
+        ]
+
     for name, persona in DEFAULT_PERSONAS.items():
         if name not in cfg.personas:
-            cfg.personas[name] = persona
+            cfg.personas[name] = copy.deepcopy(persona)
     return cfg
 
 

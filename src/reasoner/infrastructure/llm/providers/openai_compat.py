@@ -113,7 +113,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         'qwen3-max', 'qwen3-plus', 'qwen3-turbo', 'qwen3.5-flash', 'qwen3.5-9b',
         'qwen3.6-plus', 'qwen2.5', 'qwen-max',
         # Kimi
-        'kimi-k2', 'kimi-k2-5', 'kimi-plus',
+        'kimi-k2-5', 'kimi-k2-6',
         # GLM/ZhipuAI
         'glm-5', 'glm-4-plus', 'glm-4-air', 'glm-4',
         # MiniMax

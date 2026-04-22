@@ -107,14 +107,16 @@ def _extract_json(text: str) -> dict:
 
 
 class GateAgent:
-    _cache: dict[str, GateDecision] = {}
     _MAX_CACHE_SIZE = 512
 
     def __init__(self, router: ProviderRouter) -> None:
         self.router = router
+        self._cache: dict[str, GateDecision] = {}
 
     async def decide(self, problem: str) -> GateDecision:
         """Return a GateDecision. Any failure falls back to pipeline."""
+        if not isinstance(problem, str):
+            problem = str(problem)
         problem_hash = hashlib.sha256(problem.encode()).hexdigest()
         cached = self._cache.get(problem_hash)
         if cached is not None:

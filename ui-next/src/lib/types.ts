@@ -43,9 +43,19 @@ export interface PhaseEvent {
   text?: string;
 }
 
+export interface Attachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  previewUrl?: string;
+  extractedText?: string;
+}
+
 export interface ConversationTurn {
   role: 'user' | 'assistant';
   content: string;
+  attachments?: Attachment[];
 }
 
 export interface Conversation {
@@ -62,12 +72,21 @@ export interface Conversation {
   duration?: number;
 }
 
+export interface AttachmentRef {
+  file_id: string;
+  filename: string;
+  mime_type: string;
+  extracted_text: string;
+  size: number;
+}
+
 export interface RunRequest {
   problem: string;
   preset: string;
   top_k: number;
   sequential: boolean;
   enhance_prompt: boolean;
+  attachments?: AttachmentRef[];
 }
 
 export interface RunFollowupRequest {
@@ -80,6 +99,7 @@ export interface RunFollowupRequest {
   history: ConversationTurn[];
   previous_synthesis: string;
   agent_model?: string | null;
+  attachments?: AttachmentRef[];
 }
 
 export interface PresetMeta {

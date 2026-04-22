@@ -5,6 +5,25 @@ import { RunRequest } from './types';
 // Turbopack cache-bust hash — changing this forces a recompile of routes that import it.
 export const SECURITY_SERVER_HASH = 'v1-8001';
 
+export const VALIDATION_LIMITS = {
+  problemMaxLength: 10000,
+  questionMaxLength: 10000,
+  expressionMaxLength: 1000,
+  queryMaxLength: 500,
+  topKMin: 1,
+  topKMax: 10,
+  numResultsMin: 1,
+  numResultsMax: 20,
+};
+
+export const SECURITY_CONSTANTS = {
+  allowedPorts: new Set(['', '80', '443', '8000', '8001', '8080', '3000']),
+  rateLimitWindowMs: 60_000,
+  rateLimitMaxEntries: 10_000,
+  rateLimitEvictionBatch: 100,
+  rateLimitCleanupModulo: 100,
+};
+
 export function generateCsrfToken(): string {
   const arr = new Uint8Array(32);
   crypto.getRandomValues(arr);
@@ -43,6 +62,13 @@ export async function verifyCsrfToken(signed: string): Promise<boolean> {
   return result === 0;
 }
 
+export async function requireCsrfToken(req: NextRequest): Promise<void> {
+  const token = req.headers.get(CSRF_HEADER);
+  if (!token) throw new ValidationError('Missing CSRF token');
+  const valid = await verifyCsrfToken(token);
+  if (!valid) throw new ValidationError('Invalid CSRF token');
+}
+
 export async function generateSignedCsrfToken(): Promise<string> {
   return signCsrfToken(generateCsrfToken());
 }
@@ -67,7 +93,7 @@ export function validateUpstreamUrl(url: string): string {
     throw new Error('Upstream URL must use http or https');
   }
 
-  const allowedPorts = new Set(['', '80', '443', '8000', '8001', '8080', '3000']);
+  const allowedPorts = SECURITY_CONSTANTS.allowedPorts;
   const port = parsed.port || (parsed.protocol === 'https:' ? '443' : '80');
   if (!allowedPorts.has(port)) {
     throw new Error('Upstream URL uses a disallowed port');
@@ -150,13 +176,13 @@ export function validateRunRequest(body: unknown): RunRequest {
   }
   const b = body as Record<string, unknown>;
 
-  if (typeof b.problem !== 'string' || b.problem.length === 0 || b.problem.length > 10000) {
+  if (typeof b.problem !== 'string' || b.problem.length === 0 || b.problem.length > VALIDATION_LIMITS.problemMaxLength) {
     throw new ValidationError('Invalid problem');
   }
   if (typeof b.preset !== 'string' || !VALID_PRESET_PATTERN.test(b.preset)) {
     throw new ValidationError('Invalid preset');
   }
-  if (typeof b.top_k !== 'number' || !Number.isInteger(b.top_k) || b.top_k < 1 || b.top_k > 10) {
+  if (typeof b.top_k !== 'number' || !Number.isInteger(b.top_k) || b.top_k < VALIDATION_LIMITS.topKMin || b.top_k > VALIDATION_LIMITS.topKMax) {
     throw new ValidationError('Invalid top_k');
   }
   if (typeof b.sequential !== 'boolean') {
@@ -175,6 +201,61 @@ export function validateRunRequest(body: unknown): RunRequest {
   };
 }
 
+export function validateRunFollowupRequest(body: unknown): import('./types').RunFollowupRequest {
+  if (!body || typeof body !== 'object') {
+    throw new ValidationError('Invalid body');
+  }
+  const b = body as Record<string, unknown>;
+
+  if (typeof b.question !== 'string' || b.question.length === 0 || b.question.length > VALIDATION_LIMITS.questionMaxLength) {
+    throw new ValidationError('Invalid question');
+  }
+  if (typeof b.preset !== 'string' || !VALID_PRESET_PATTERN.test(b.preset)) {
+    throw new ValidationError('Invalid preset');
+  }
+  if (typeof b.top_k !== 'number' || !Number.isInteger(b.top_k) || b.top_k < VALIDATION_LIMITS.topKMin || b.top_k > VALIDATION_LIMITS.topKMax) {
+    throw new ValidationError('Invalid top_k');
+  }
+  if (typeof b.sequential !== 'boolean') {
+    throw new ValidationError('Invalid sequential');
+  }
+  if (typeof b.enhance_prompt !== 'boolean') {
+    throw new ValidationError('Invalid enhance_prompt');
+  }
+  if (typeof b.conversation_id !== 'string' || b.conversation_id.length === 0) {
+    throw new ValidationError('Invalid conversation_id');
+  }
+  if (!Array.isArray(b.history)) {
+    throw new ValidationError('Invalid history');
+  }
+  const history = (b.history as unknown[]).map((turn, i) => {
+    if (!turn || typeof turn !== 'object') throw new ValidationError(`Invalid history[${i}]`);
+    const t = turn as Record<string, unknown>;
+    if (t.role !== 'user' && t.role !== 'assistant') throw new ValidationError(`Invalid history[${i}].role`);
+    if (typeof t.content !== 'string') throw new ValidationError(`Invalid history[${i}].content`);
+    return { role: t.role as 'user' | 'assistant', content: t.content };
+  });
+  if (typeof b.previous_synthesis !== 'string') {
+    throw new ValidationError('Invalid previous_synthesis');
+  }
+  const agent_model =
+    b.agent_model === null || b.agent_model === undefined ? null
+    : typeof b.agent_model === 'string' ? b.agent_model
+    : null;
+
+  return {
+    question: b.question,
+    preset: b.preset,
+    top_k: b.top_k,
+    sequential: b.sequential,
+    enhance_prompt: b.enhance_prompt,
+    conversation_id: b.conversation_id,
+    history,
+    previous_synthesis: b.previous_synthesis,
+    agent_model,
+  };
+}
+
 export function validateCalculateRequest(body: unknown): { expression: string } {
   if (!body || typeof body !== 'object') {
     throw new ValidationError('Invalid body');
@@ -183,7 +264,7 @@ export function validateCalculateRequest(body: unknown): { expression: string } 
   if (
     typeof b.expression !== 'string' ||
     b.expression.length === 0 ||
-    b.expression.length > 1000 ||
+    b.expression.length > VALIDATION_LIMITS.expressionMaxLength ||
     !/^[\w\d+\-*/().^\s]+$/u.test(b.expression)
   ) {
     throw new ValidationError('Invalid expression');
@@ -198,7 +279,7 @@ export function validateSearchRequest(body: unknown): { query: string; source_ty
     throw new ValidationError('Invalid body');
   }
   const b = body as Record<string, unknown>;
-  if (typeof b.query !== 'string' || b.query.length === 0 || b.query.length > 500) {
+  if (typeof b.query !== 'string' || b.query.length === 0 || b.query.length > VALIDATION_LIMITS.queryMaxLength) {
     throw new ValidationError('Invalid query');
   }
   const sourceType = typeof b.source_type === 'string' ? b.source_type : 'general';
@@ -206,7 +287,7 @@ export function validateSearchRequest(body: unknown): { query: string; source_ty
     throw new ValidationError('Invalid source_type');
   }
   const numResults = typeof b.num_results === 'number' ? b.num_results : 10;
-  if (!Number.isInteger(numResults) || numResults < 1 || numResults > 20) {
+  if (!Number.isInteger(numResults) || numResults < VALIDATION_LIMITS.numResultsMin || numResults > VALIDATION_LIMITS.numResultsMax) {
     throw new ValidationError('Invalid num_results');
   }
   const smart = typeof b.smart === 'boolean' ? b.smart : false;
@@ -215,16 +296,14 @@ export function validateSearchRequest(body: unknown): { query: string; source_ty
 
 // Rate limiting
 const RATE_LIMITS: Record<string, { limit: number; windowMs: number }> = {
-  run: { limit: 10, windowMs: 60_000 },
-  calculate: { limit: 20, windowMs: 60_000 },
-  stop: { limit: 30, windowMs: 60_000 },
-  cache: { limit: 30, windowMs: 60_000 },
-  search: { limit: 20, windowMs: 60_000 },
-  default: { limit: 30, windowMs: 60_000 },
+  run: { limit: 10, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  calculate: { limit: 20, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  stop: { limit: 30, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  cache: { limit: 30, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  search: { limit: 20, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  'generate-image': { limit: 10, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  default: { limit: 30, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
 };
-
-const RATE_LIMIT_MAX_ENTRIES = 10_000;
-const RATE_LIMIT_EVICTION_BATCH = 100;
 
 type RateLimitBucket = { count: number; resetAt: number };
 const rateLimitStore = new Map<string, RateLimitBucket>();
@@ -247,11 +326,11 @@ function _evictExpiredRateLimitBuckets(now: number): void {
 }
 
 function _pruneRateLimitStore(): void {
-  if (rateLimitStore.size <= RATE_LIMIT_MAX_ENTRIES) return;
+  if (rateLimitStore.size <= SECURITY_CONSTANTS.rateLimitMaxEntries) return;
   // Evict oldest buckets by resetAt (FIFO-style)
   const entries = Array.from(rateLimitStore.entries());
   entries.sort((a, b) => a[1].resetAt - b[1].resetAt);
-  const toRemove = entries.slice(0, RATE_LIMIT_EVICTION_BATCH);
+  const toRemove = entries.slice(0, SECURITY_CONSTANTS.rateLimitEvictionBatch);
   for (const [key] of toRemove) {
     rateLimitStore.delete(key);
   }
@@ -268,7 +347,7 @@ export function rateLimit(
 
   // Periodic eviction to prevent unbounded growth
   rateLimitCallCount += 1;
-  if (rateLimitCallCount % 100 === 0) {
+  if (rateLimitCallCount % SECURITY_CONSTANTS.rateLimitCleanupModulo === 0) {
     _evictExpiredRateLimitBuckets(now);
     _pruneRateLimitStore();
   }

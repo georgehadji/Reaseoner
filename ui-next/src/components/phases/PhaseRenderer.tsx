@@ -2,7 +2,9 @@
 
 import { useRef, useEffect } from 'react';
 import { RenderedPhase } from '@/components/chat/ChatFeed';
+import { DEFAULTS } from '@/lib/config';
 import { TypewriterMarkdown } from '@/components/chat/TypewriterMarkdown';
+import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
 import { PhaseCard } from './PhaseCard';
 import { SynthesisCard } from './SynthesisCard';
 import { ClassificationCard } from './ClassificationCard';
@@ -17,6 +19,7 @@ interface PhaseRendererProps {
   phase: RenderedPhase;
   onComplete?: () => void;
   animationKey?: string;
+  animated?: boolean;
 }
 
 function getTokens(data: unknown): { input?: number; output?: number } | null {
@@ -61,7 +64,7 @@ function getDuration(data: unknown): number | undefined {
   return typeof duration === 'number' ? duration : undefined;
 }
 
-export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRendererProps) {
+export function PhaseRenderer({ phase, onComplete, animationKey, animated = true }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
@@ -71,8 +74,10 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
   // Direct Response / Web Search: render inline without a phase card
   if (name === 'Direct Response' || name === 'Web Search') {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
-    return (
-      <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
+    return animated ? (
+      <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+    ) : (
+      <MarkdownRenderer>{md}</MarkdownRenderer>
     );
   }
 
@@ -92,7 +97,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
   }
 
   // Critique (only if there are actual scores)
-  const scoresArray = (data as Record<string, unknown>).scores;
+  const scoresArray = data && typeof data === 'object' ? (data as Record<string, unknown>).scores : undefined;
   if (
     phaseNum === 3 &&
     data &&
@@ -109,7 +114,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
   }
 
   // Scientific state (hypotheses + falsification tests)
-  const scientificState = (data as Record<string, unknown>).scientific_state as Record<string, unknown> | undefined;
+  const scientificState = data && typeof data === 'object' ? (data as Record<string, unknown>).scientific_state as Record<string, unknown> | undefined : undefined;
   if (
     scientificState &&
     (Array.isArray(scientificState.hypotheses) || Array.isArray(scientificState.test_results))
@@ -117,13 +122,17 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-        <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
+        {animated ? (
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+        ) : (
+          <MarkdownRenderer>{md}</MarkdownRenderer>
+        )}
       </PhaseCard>
     );
   }
 
   // Socratic state (questions + answers)
-  const socraticState = (data as Record<string, unknown>).socratic_state as Record<string, unknown> | undefined;
+  const socraticState = data && typeof data === 'object' ? (data as Record<string, unknown>).socratic_state as Record<string, unknown> | undefined : undefined;
   if (
     socraticState &&
     (Array.isArray(socraticState.questions) || Array.isArray(socraticState.answers))
@@ -131,7 +140,32 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-        <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
+        {animated ? (
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+        ) : (
+          <MarkdownRenderer>{md}</MarkdownRenderer>
+        )}
+      </PhaseCard>
+    );
+  }
+
+  // Writing state (outline, draft, fact-check, final article)
+  const writingState = data && typeof data === 'object' ? (data as Record<string, unknown>).writing_state as Record<string, unknown> | undefined : undefined;
+  if (
+    writingState &&
+    (Array.isArray(writingState.outline) ||
+     typeof writingState.article === 'string' ||
+     Array.isArray(writingState.factcheck_reviews) ||
+     typeof writingState.final_article === 'string')
+  ) {
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    return (
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+        {animated ? (
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+        ) : (
+          <MarkdownRenderer>{md}</MarkdownRenderer>
+        )}
       </PhaseCard>
     );
   }
@@ -146,7 +180,11 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
       <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-        <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
+        {animated ? (
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+        ) : (
+          <MarkdownRenderer>{md}</MarkdownRenderer>
+        )}
       </SynthesisCard>
     );
   }
@@ -155,7 +193,11 @@ export function PhaseRenderer({ phase, onComplete, animationKey }: PhaseRenderer
   const md = buildMarkdownFromPhase(index, phaseNum, name, data);
   return (
     <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
-      <TypewriterMarkdown text={md} wordsPerSecond={10} onComplete={onComplete} animationKey={animationKey} />
+      {animated ? (
+        <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+      ) : (
+        <MarkdownRenderer>{md}</MarkdownRenderer>
+      )}
     </PhaseCard>
   );
 }

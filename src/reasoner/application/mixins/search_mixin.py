@@ -12,8 +12,16 @@ import logging
 import os
 import re
 
+import httpx
+
 from reasoner.core.constants import TRUNCATION
-from reasoner.core.search import get_discovery_client, _should_include_result
+from reasoner.core.search import (
+    get_discovery_client,
+    _should_include_result,
+    _normalize_url,
+    _bm25_score,
+    _extract_search_keywords,
+)
 from reasoner.models import PipelineState
 from reasoner.parsing import ParseError, extract_json, safe_list
 from reasoner.sanitization import sanitize_for_prompt
@@ -29,18 +37,75 @@ class SearchMixin(PipelineMixinProtocol):
 
     # ── Shared helpers ───────────────────────────────────────────────────
 
+    _YOUTUBE_URL_RE = re.compile(
+        r'(?:https?://)?(?:www\.)?(?:youtube\.com/watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})',
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _extract_youtube_id(cls, text: str) -> str | None:
+        """Extract YouTube video ID from text."""
+        match = cls._YOUTUBE_URL_RE.search(text)
+        return match.group(1) if match else None
+
+    async def _fetch_youtube_metadata(self, video_id: str) -> dict | None:
+        """Fetch video title and author via YouTube oEmbed (no API key required)."""
+        from reasoner.core.constants import TIMEOUTS
+        oembed_url = "https://www.youtube.com/oembed"
+        watch_url = f"https://www.youtube.com/watch?v={video_id}"
+        try:
+            async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET_SHORT, follow_redirects=True) as client:
+                response = await client.get(
+                    oembed_url,
+                    params={"url": watch_url, "format": "json"},
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    return {
+                        "title": data.get("title", ""),
+                        "author": data.get("author_name", ""),
+                        "thumbnail": data.get("thumbnail_url", ""),
+                        "video_id": video_id,
+                    }
+        except Exception as exc:
+            logger.debug(f"YouTube oEmbed failed for {video_id}: {exc}")
+        return None
+
+    async def _enrich_problem_with_youtube(self, state: PipelineState) -> str:
+        """If the problem contains a YouTube URL, fetch metadata and append it."""
+        video_id = self._extract_youtube_id(state.problem)
+        if not video_id:
+            return state.problem
+        meta = await self._fetch_youtube_metadata(video_id)
+        if not meta:
+            return state.problem
+        self._log(
+            "VETTING",
+            f"YouTube video detected: '{meta['title']}' by {meta['author']}",
+            state,
+        )
+        enriched = (
+            f"{state.problem}\n\n"
+            f"[YouTube Video Metadata: Title: {meta['title']}, Author: {meta['author']}, Video ID: {meta['video_id']}]"
+        )
+        return enriched
+
     @staticmethod
     def _enrich_query(query: str, problem: str) -> str:
         """Append disambiguation terms for known collision acronyms and ambiguous words."""
         problem_lower = problem.lower()
         query_lower = query.lower()
-        # AGI disambiguation
+        # AGI disambiguation (English)
         if "agi" in query_lower and (
             "artificial general intelligence" in problem_lower
             or "singularity" in problem_lower
             or "timeline" in problem_lower
         ):
             if "artificial general intelligence" not in query_lower:
+                query += " artificial general intelligence"
+        # AGI disambiguation (Greek — γενική τεχνητή νοημοσύνη)
+        if any(k in query_lower for k in ["agi", "γενική τεχνητή νοημοσύνη", "γενική τν"]):
+            if "artificial general intelligence" not in query_lower and "γενική τεχνητή νοημοσύνη" not in query_lower:
                 query += " artificial general intelligence"
         # Greek "ανάπτυξη" (development) disambiguation
         if "ανάπτυξη" in problem_lower or "ανάπτυξη" in query_lower:
@@ -67,6 +132,16 @@ class SearchMixin(PipelineMixinProtocol):
             self._log("VETTING", "Reusing existing web discovery results from research phase.", state)
             await self._vet_results(state, state.web_discovery_results)
             return
+
+        # --- YOUTUBE URL ENRICHMENT ---
+        # If the problem contains a YouTube link, fetch metadata (title/author) via
+        # oEmbed so the LLM can generate targeted search queries instead of
+        # generic terms like "video" or "YouTube".
+        _real_original_problem = state.problem
+        enriched_problem = await self._enrich_problem_with_youtube(state)
+        if enriched_problem != state.problem:
+            state.problem = enriched_problem
+            self._log("VETTING", "Enriched problem with YouTube metadata for search.", state)
 
         # --- QUERY DISAMBIGUATION ---
         _AMBIGUOUS_PRONOUNS_RE = re.compile(
@@ -113,7 +188,7 @@ class SearchMixin(PipelineMixinProtocol):
             return
 
         # Temporarily replace problem with disambiguated version for search
-        original_problem = state.problem
+        pre_search_problem = state.problem
         state.problem = disambiguated_problem
 
         # Iterative search loop
@@ -182,38 +257,98 @@ class SearchMixin(PipelineMixinProtocol):
 
             results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries])
 
-            # Flatten, deduplicate, and apply relevance gating
+            # Flatten, deduplicate (by normalised URL), and apply relevance gating
             dropped = 0
             for res_list in results_nested:
                 for res in res_list:
                     url = res.get("url")
-                    if not url or url in seen_urls:
+                    norm = _normalize_url(url) if url else ""
+                    if not norm or norm in seen_urls:
                         continue
                     if not _should_include_result(res):
                         dropped += 1
                         continue
-                    seen_urls.add(url)
+                    seen_urls.add(norm)
                     current_results.append(res)
 
             if dropped:
                 self._log("VETTING", f"Dropped {dropped} low-quality results this iteration.", state)
             self._log("VETTING", f"Found {len(current_results)} unique results so far.", state)
 
-            # Early-exit: if fewer than 3 results passed filtering after the first iteration,
-            # stop burning tokens on useless searches and proceed with LLM-only analysis.
+            # Low-yield broadening: when the first iteration returns fewer than 3 results
+            # (rare/narrow topic), try one broad keyword-only fallback query instead of
+            # stopping outright — this surfaces content that exact phrasing misses.
             if i == 1 and len(current_results) < 3:
                 self._log(
                     "VETTING",
-                    f"Only {len(current_results)} results passed filtering after first iteration. Aborting further searches.",
+                    f"Only {len(current_results)} results after first pass — attempting broad keyword fallback.",
                     state,
                 )
-                break
+                try:
+                    broad_q = _extract_search_keywords(disambiguated_problem, max_keywords=5)
+                    if broad_q and broad_q != disambiguated_problem:
+                        broad_res = await client.search(broad_q, num_results=5, source_type=source_type)
+                        added = 0
+                        for res in broad_res:
+                            norm = _normalize_url(res.get("url", ""))
+                            if norm and norm not in seen_urls and _should_include_result(res):
+                                seen_urls.add(norm)
+                                current_results.append(res)
+                                added += 1
+                        self._log(
+                            "VETTING",
+                            f"Broad fallback added {added} results (total: {len(current_results)}).",
+                            state,
+                        )
+                except Exception as broad_exc:
+                    self._log("VETTING", f"Broad fallback failed: {broad_exc}", state)
 
         # Restore original problem
-        state.problem = original_problem
+        state.problem = pre_search_problem
+        state.problem = _real_original_problem
 
         state.web_discovery_results = current_results
         self._log("VETTING", f"Iterative search complete. Total results: {len(current_results)}", state)
+
+        # ── Re-rank results by relevance ──────────────────────────────────
+        # Phase A: optional SearchHyperAgent credibility/relevance scoring
+        _USE_SUBAGENT_SEARCH = os.getenv("USE_SUBAGENT_SEARCH", "false").lower() == "true"
+        if _USE_SUBAGENT_SEARCH and current_results:
+            try:
+                from reasoner.subagents.search.hyper_agent import SearchHyperAgent
+                agent_outputs = await SearchHyperAgent().execute(state, self.router)
+                evaluations = agent_outputs.get("source_evaluations", [])
+                if evaluations:
+                    title_scores: dict[str, float] = {}
+                    for ev in evaluations:
+                        title_key = (ev.get("title") or "").lower().strip()
+                        if title_key:
+                            cred = float(ev.get("credibility", 5))
+                            rel = float(ev.get("relevance", 5))
+                            title_scores[title_key] = (cred * 0.4 + rel * 0.6) / 10.0
+                    if title_scores:
+                        current_results.sort(
+                            key=lambda r: title_scores.get((r.get("title") or "").lower().strip(), 0.5),
+                            reverse=True,
+                        )
+                        state.web_discovery_results = current_results
+                        self._log("VETTING", "Re-ranked results using SearchHyperAgent scores.", state)
+            except Exception as agent_exc:
+                self._log("VETTING", f"SearchHyperAgent ranking skipped: {agent_exc}", state)
+
+        # Phase B: always-on BM25 re-ranking (no API cost, always runs)
+        # Applies on top of subagent ordering as a tie-breaker, or as sole ranker.
+        if current_results:
+            problem_for_rank = disambiguated_problem or state.problem
+            current_results.sort(
+                key=lambda r: (
+                    _bm25_score(problem_for_rank, r) * 0.8
+                    + r.get("freshness_score", 0.5) * 0.2
+                ),
+                reverse=True,
+            )
+            state.web_discovery_results = current_results
+            self._log("VETTING", "Applied BM25 + freshness re-ranking to search results.", state)
 
         # Apply CoT vetting to all results
         await self._vet_results(state, current_results)
@@ -336,6 +471,36 @@ class SearchMixin(PipelineMixinProtocol):
                 self._log("DEEP_READ", f"Fallback search failed: {exc}", state)
                 state.errors.append(f"Deep Read: fallback search failed: {exc}")
             if not sources_to_scrape:
+                # Fallback: use LLM's built-in knowledge to extract relevant facts
+                self._log("DEEP_READ", "No sources found. Extracting general knowledge fallback...", state)
+                try:
+                    from reasoner.phases import deep_read_prompt, DEEP_READ_SYSTEM
+                    raw, _ = await self._call_llm_cached(
+                        role="primary",
+                        system_prompt=DEEP_READ_SYSTEM,
+                        user_prompt=deep_read_prompt(
+                            state,
+                            url="internal-knowledge",
+                            title="General knowledge",
+                            content=f"Provide a brief, factual overview of topics relevant to: {state.problem}",
+                        ),
+                        phase_key="deep_read",
+                        max_tokens=1024,
+                        state=state,
+                    )
+                    extraction = extract_json(raw)
+                    state.vetted_context.append({
+                        "url": "internal-knowledge",
+                        "title": "General knowledge",
+                        "summary": extraction.get("summary", "").strip() or "No specific sources available; using general knowledge.",
+                        "key_facts": safe_list(extraction.get("key_facts")),
+                        "relevant_quotes": safe_list(extraction.get("relevant_quotes")),
+                        "extraction_success": True,
+                    })
+                    self._log("DEEP_READ", "General knowledge fallback complete.", state)
+                except Exception as exc:
+                    self._log("DEEP_READ", f"General knowledge fallback failed: {exc}", state)
+                    state.errors.append(f"Deep Read: no sources and fallback failed: {exc}")
                 return
 
         self._log("DEEP_READ", f"Deep reading {len(sources_to_scrape)} sources...", state)
@@ -442,6 +607,26 @@ class SearchMixin(PipelineMixinProtocol):
                     return await task
 
             await asyncio.gather(*[_with_limit(t) for t in tasks])
+
+            # Score each deep-read result by BM25 on its extracted content so
+            # the synthesis phase can surface the most on-topic sources.
+            for vc in state.vetted_context:
+                if not vc.get("extraction_success"):
+                    continue
+                deep_text = " ".join([
+                    vc.get("summary", ""),
+                    *vc.get("key_facts", []),
+                ])
+                vc["deep_relevance_score"] = round(_bm25_score(state.problem, {
+                    "title": vc.get("deep_title", vc.get("title", "")),
+                    "content": deep_text,
+                }), 4)
+
+            # Sort vetted_context so the most relevant deep-read sources come first
+            state.vetted_context.sort(
+                key=lambda r: r.get("deep_relevance_score", 0.0),
+                reverse=True,
+            )
 
             self._log("DEEP_READ", "Deep read complete.", state)
 

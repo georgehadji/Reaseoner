@@ -21,7 +21,14 @@ def disambiguation_prompt(problem: str, task_type: str | None) -> str:
         f'Output JSON: {{"was_ambiguous": true/false, "rewritten_query": "<clearest version>", "reasoning": "<why>"}}'
     )
 
-PROMPT_ENHANCEMENT_SYSTEM = "You are an analytical assistant. Rewrite the user's problem to make it clearer, more specific, and easier for an AI reasoning system to solve. Preserve the original intent, tone, and language. Output ONLY valid JSON."
+PROMPT_ENHANCEMENT_SYSTEM = """You are an analytical assistant. Your ONLY job is to rewrite the user's problem to make it clearer, more specific, and easier for an AI reasoning system to solve.
+
+CRITICAL RULES:
+1. Preserve the EXACT original intent, tone, language, and question type. Do NOT flip positive questions into negative ones.
+2. The rewritten problem MUST be a direct rephrasing of the original — do NOT change the subject, scope, or factual claims.
+3. Do NOT add any extra sentences, instructions, opinions, or requirements that were not in the original problem.
+4. Output ONLY valid JSON with the exact shape: {"enhanced_problem": "<rewritten>", "improvements": ["<what was improved>"]}
+5. If the problem is already clear and specific, return it nearly unchanged."""
 
 def prompt_enhancement_prompt(problem: str, language: str) -> str:
     lang_instruction = get_language_instruction(PipelineState(problem="", language=language))
@@ -123,16 +130,41 @@ def synthesis_prompt(state: PipelineState) -> str:
 
     return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}{quality_note}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
 
-COT_DETECTION_SYSTEM = "You are an analytical assistant. Identify potentially unsubstantiated, factually incorrect, or overly speculative statements in the provided text. Output ONLY valid JSON."
+COT_DETECTION_SYSTEM = """You are an analytical assistant. Review retrieved text for CLEAR factual errors, unsubstantiated claims, or obvious speculation. Output ONLY valid JSON.
+
+Rules:
+- Only flag statements that are DIRECTLY contradicted by well-known facts or contain clear logical errors.
+- Do NOT flag minor simplifications, omissions of nuance, or educational summaries appropriate for the target audience.
+- Do NOT flag statements merely because they lack inline citations — flag only if the claim itself is implausible or wrong.
+- If the text is generally accurate for its level of detail, return an empty list."""
 
 def cot_detection_prompt(state: PipelineState, retrieved_text: str) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nReview the following retrieved text. Identify any statements that seem potentially unsubstantiated, factually incorrect, or overly speculative. For each identified statement, provide a brief explanation of your reasoning. If no issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nReview the following retrieved text. Identify ONLY statements that are clearly factually incorrect, unsubstantiated, or overly speculative. Do NOT flag minor simplifications or educational summaries. If no clear issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'
 
-ITERATIVE_CONTEXT_SYSTEM = "You are an analytical assistant. Gather context for a reasoning problem and determine if you have enough information or if more searches are needed. Output ONLY valid JSON."
+ITERATIVE_CONTEXT_SYSTEM = (
+    "You are an analytical research assistant. Your job is to gather high-quality, "
+    "verifiable external sources for a reasoning problem. You must NOT rely on your "
+    "internal knowledge — always search for external sources. Output ONLY valid JSON."
+)
 
 def iterative_context_prompt(state: PipelineState, current_results: list[dict], iteration: int, max_iterations: int) -> str:
     results_str = json.dumps(current_results, indent=2) if current_results else "No results yet."
-    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nIteration: {iteration} of {max_iterations}\n\nCurrent Search Results:\n{results_str}\n\nAnalyze the current results. Do you have enough relevant information to provide a comprehensive answer? If yes, set action to "done". If you need more information, provide up to 3 specific search queries to fill the gaps.\n\nOutput JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you need more info or have enough>"}}'
+    source_count = len(current_results)
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Iteration: {iteration} of {max_iterations}\n'
+        f'Sources gathered so far: {source_count}\n\n'
+        f'Current Search Results:\n{results_str}\n\n'
+        f'RULES:\n'
+        f'1. You MUST continue searching until you have at least 3-5 relevant, '
+        f'high-quality external sources, OR until maximum iterations are reached.\n'
+        f'2. Do NOT declare "done" just because you have internal knowledge on the topic.\n'
+        f'3. Generate up to 3 highly specific, targeted search queries.\n'
+        f'4. Avoid generic queries (e.g., "AI", "technology", "video"). Be specific to the problem.\n'
+        f'5. Prefer authoritative sources: academic papers, reputable news, expert analyses.\n\n'
+        f'Output JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you need more info or have enough>"}}'
+    )
 
 CROSS_VERIFICATION_SYSTEM = "You are an analytical assistant. Identify specific factual errors, unsupported claims, or logical inconsistencies in a proposed solution. Be precise and cite exact problems. Output ONLY valid JSON."
 

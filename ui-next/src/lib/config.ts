@@ -211,4 +211,15 @@ export const API = {
 export const DEFAULTS = {
   tier: 'budget' as 'budget' | 'premium',
   topK: 2,
+  typewriterWordsPerSecond: 15,
+};
+
+export const TIMING = {
+  copiedFeedbackMs: 2000,
+  streamingBounceDelays: [0, 150, 300] as const,
+  serverStatusAbortTimeoutMs: 5000,
+  serverStatusCheckIntervalMs: 10000,
+  presetsRefreshIntervalMs: 60000,
+  scrollAnchorThresholdPx: 120,
+  durationFormatMsThreshold: 1000,
 };

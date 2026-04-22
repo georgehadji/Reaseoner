@@ -25,13 +25,19 @@ export function ChatMessage({ role, children }: ChatMessageProps) {
   );
 }
 
+import { TIMING } from '@/lib/config';
+
 export function StreamingIndicator() {
   return (
     <div className="flex w-full justify-start">
       <div className="flex items-center gap-1 rounded-2xl bg-[var(--surface)] px-4 py-3">
-        <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]" style={{ animationDelay: '0ms' }} />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]" style={{ animationDelay: '150ms' }} />
-        <span className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]" style={{ animationDelay: '300ms' }} />
+        {TIMING.streamingBounceDelays.map((delay) => (
+          <span
+            key={delay}
+            className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
+            style={{ animationDelay: `${delay}ms` }}
+          />
+        ))}
       </div>
     </div>
   );

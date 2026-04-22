@@ -14,8 +14,10 @@ from reasoner.hypergate.base_sub_agent import BaseSubAgent
 
 _SYSTEM = (
     "Estimate the reasoning complexity of the user's problem.\n"
-    "- 'simple': a greeting, basic factual question, or trivial lookup answerable in one sentence\n"
-    "- 'medium': needs some analysis but not deep multi-step reasoning\n"
+    "- 'simple': a greeting, basic factual question, trivial lookup, or creative writing request "
+    "(poem, story, letter, speech, script) that can be answered "
+    "directly by a capable language model without external research.\n"
+    "- 'medium': needs some analysis but not deep multi-step reasoning, including light structured writing.\n"
     "- 'complex': requires structured multi-phase reasoning, trade-off analysis, or expert knowledge\n"
     "Output ONLY valid JSON with exactly two keys: "
     "'complexity' (one of: simple, medium, complex) "

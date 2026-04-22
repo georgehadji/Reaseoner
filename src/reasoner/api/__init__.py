@@ -319,6 +319,9 @@ async def stop_pipeline(run_id: str | None = None):
 from reasoner.api.routes.uploads import router as uploads_router
 app.include_router(uploads_router)
 
+from reasoner.api.routes.images import router as images_router
+app.include_router(images_router)
+
 
 @app.get("/api/presets")
 async def api_presets():

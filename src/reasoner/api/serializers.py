@@ -8,7 +8,7 @@ from reasoner.models import PipelineState
 
 
 def _is_orchestrated(preset: str) -> bool:
-    return preset in ("jury", "jury-budget", "jury-balanced", "jury-premium", "orchestrated")
+    return preset in ("jury", "jury-budget", "jury-premium", "orchestrated")
 
 def _is_debate(preset: str) -> bool:
     return "debate" in preset

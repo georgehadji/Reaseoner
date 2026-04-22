@@ -1,14 +1,17 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2, Download, X } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
 import { ErrorMessage } from './ErrorMessage';
+import { WidgetRenderer } from '@/components/widgets/WidgetRenderer';
 import { TokenCount, Attachment } from '@/lib/types';
 import { TIMING } from '@/lib/config';
 import { copyToClipboard } from '@/lib/utils';
+import { ManifestationVisuals } from './ManifestationVisuals';
 
 export interface RenderedPhase {
   index: number;
@@ -28,14 +31,19 @@ export interface ChatFeedMessage {
   currentPhaseName?: string;
   tokens?: TokenCount;
   duration?: number;
+  cost?: number;
   meta?: { original?: string; enhanced?: string };
   activeAgents?: { name: string; task: string }[];
   streamingContent?: string;
   phaseModels?: string[];
   imageData?: string; // base64 data URL for generated images
   images?: { data: string; model?: string }[]; // multiple generated images
+  widgets?: { widget_type: string; name: string; result: Record<string, unknown>; citations?: string[] }[];
   loadingKind?: 'image-generation';
   loadingPrompt?: string;
+  errorType?: string | null;
+  errorRetryable?: boolean | null;
+  errorRetryAfter?: number | null;
 }
 
 interface ChatFeedProps {
@@ -104,6 +112,26 @@ function PhaseIndicator({
 }
 
 function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    // Average image gen is 15-40s. We'll target ~25s for the fake progress
+    // but slow down as it gets closer to 99% to wait for real data.
+    const duration = 25000;
+    const interval = 100;
+    const step = interval / duration;
+    const timer = setInterval(() => {
+      setProgress((p) => {
+        if (p >= 0.98) return p;
+        // Ease out - slow down as we approach the end
+        const remaining = 1 - p;
+        const slowdown = Math.max(0.2, remaining);
+        return p + step * slowdown;
+      });
+    }, interval);
+    return () => clearInterval(timer);
+  }, []);
+
   return (
     <div className="mb-2 w-full max-w-3xl overflow-hidden rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(255,196,132,0.18),rgba(255,255,255,0.88)_38%,rgba(143,212,255,0.2))] p-4 shadow-[var(--shadow)]">
       <div className="relative overflow-hidden rounded-[24px] border border-white/50 bg-[var(--surface)]/80 p-5 backdrop-blur">
@@ -116,51 +144,25 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
           </div>
           <div className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white/70 px-2.5 py-1 text-[10px] font-medium text-[var(--text-subtle)]">
             <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-            Multi-model
+            {Math.round(progress * 100)}%
           </div>
         </div>
 
-        <div className="relative mx-auto mb-5 flex h-56 w-full max-w-xl items-center justify-center">
-          <div className="absolute h-40 w-40 animate-spin rounded-full border border-dashed border-sky-300/70" style={{ animationDuration: '14s' }} />
-          <div className="absolute h-28 w-28 animate-spin rounded-full border border-dashed border-amber-300/80" style={{ animationDuration: '10s', animationDirection: 'reverse' }} />
-          <div className="absolute -translate-x-8 translate-y-3 rotate-[-10deg] rounded-[24px] border border-white/70 bg-white/80 p-4 shadow-lg backdrop-blur">
-            <div className="flex h-28 w-28 items-center justify-center rounded-[18px] bg-[linear-gradient(145deg,rgba(255,210,148,0.28),rgba(255,255,255,0.9),rgba(157,219,255,0.28))]">
-              <ImageIcon className="h-10 w-10 animate-pulse text-[var(--text-muted)]" />
-            </div>
-          </div>
-          <div className="absolute translate-x-10 -translate-y-4 rotate-[8deg] rounded-[24px] border border-white/70 bg-white/75 p-4 shadow-lg backdrop-blur">
-            <div className="h-28 w-28 rounded-[18px] bg-[linear-gradient(135deg,rgba(255,255,255,0.25),rgba(255,196,132,0.45),rgba(143,212,255,0.4))]">
-              <div className="flex h-full w-full items-end justify-between p-3">
-                {[0, 120, 240].map((delay) => (
-                  <span
-                    key={delay}
-                    className="h-3 w-3 animate-bounce rounded-full bg-white/90"
-                    style={{ animationDelay: `${delay}ms` }}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-          {[0, 1, 2, 3].map((i) => (
-            <Sparkles
-              key={i}
-              className="absolute h-4 w-4 animate-pulse text-amber-400"
-              style={{
-                top: `${18 + i * 18}%`,
-                left: i % 2 === 0 ? `${16 + i * 12}%` : undefined,
-                right: i % 2 === 1 ? `${14 + i * 10}%` : undefined,
-                animationDelay: `${i * 180}ms`,
-              }}
-            />
-          ))}
-        </div>
+        <ManifestationVisuals progress={progress} />
 
-        <div className="relative space-y-3">
+        <div className="relative mt-5 space-y-3">
           <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-[linear-gradient(90deg,#f59e0b,#fb7185,#38bdf8)]" />
+            <motion.div
+              className="h-full bg-[linear-gradient(90deg,#f59e0b,#fb7185,#38bdf8)] transition-all duration-300 ease-linear"
+              style={{ width: `${progress * 100}%` }}
+              animate={{
+                opacity: [0.8, 1, 0.8],
+              }}
+              transition={{ duration: 2, repeat: Infinity }}
+            />
           </div>
           <div className="flex items-center justify-between gap-3 text-xs text-[var(--text-subtle)]">
-            <span>Expanding prompt, testing providers, decoding the first valid image.</span>
+            <span>{progress < 0.3 ? 'Expanding prompt & testing providers...' : progress < 0.7 ? 'Coalescing visual structures...' : 'Finalizing grain and atmosphere...'}</span>
             <span className="font-medium text-[var(--text-muted)]">Working…</span>
           </div>
           {prompt ? (
@@ -182,7 +184,7 @@ function formatDuration(seconds: number): string {
   return `${mins}m ${secs.toString().padStart(2, '0')}s`;
 }
 
-function MessageActions({ content, tokens, duration }: { content: string; tokens?: TokenCount; duration?: number }) {
+function MessageActions({ content, tokens, duration, cost }: { content: string; tokens?: TokenCount; duration?: number; cost?: number }) {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -222,6 +224,11 @@ function MessageActions({ content, tokens, duration }: { content: string; tokens
       {showTokens ? (
         <span className="text-xs text-[var(--text-subtle)]">
           {(tokens.input ?? 0).toLocaleString()} in · {(tokens.output ?? 0).toLocaleString()} out · {(tokens.total ?? 0).toLocaleString()} total
+        </span>
+      ) : null}
+      {cost !== undefined && cost > 0 ? (
+        <span className="text-xs text-[var(--text-subtle)]">
+          ${cost.toFixed(4)}
         </span>
       ) : null}
     </div>
@@ -288,7 +295,13 @@ export function ChatFeed({
         if (msg.role === 'error') {
           return (
             <div key={msg.id} className="flex w-full justify-start">
-              <ErrorMessage content={msg.content} />
+              <ErrorMessage
+                content={msg.content}
+                errorType={msg.errorType}
+                retryable={msg.errorRetryable}
+                onRetry={msg.errorRetryable ? () => { /* retry handled by parent */ } : undefined}
+                onEditRetry={() => { /* edit retry handled by parent */ }}
+              />
             </div>
           );
         }
@@ -386,6 +399,13 @@ export function ChatFeed({
                   ))}
                 </div>
               )}
+              {msg.widgets && msg.widgets.length > 0 && (
+                <div className="mb-4 flex w-full max-w-3xl flex-col gap-3">
+                  {msg.widgets.map((widget, idx) => (
+                    <WidgetRenderer key={idx} widget={widget} />
+                  ))}
+                </div>
+              )}
               {msg.streamingContent ? (
                 <div className="w-full max-w-3xl whitespace-pre-wrap text-[18px] leading-relaxed text-[var(--text)]">
                   {msg.streamingContent}
@@ -409,7 +429,7 @@ export function ChatFeed({
               )}
             </ChatMessage>
             {!msg.isStreaming && msg.role === 'assistant' && (
-              <MessageActions content={msg.content} tokens={msg.tokens} duration={msg.duration} />
+              <MessageActions content={msg.content} tokens={msg.tokens} duration={msg.duration} cost={msg.cost} />
             )}
           </div>
         );

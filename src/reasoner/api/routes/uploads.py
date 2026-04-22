@@ -7,7 +7,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from reasoner.api.auth_deps import check_rate_limit, optional_auth
-from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file
+from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file, save_uploaded_files
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

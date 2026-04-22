@@ -516,10 +516,8 @@ def search_images(query: str, limit: int = 20) -> dict[str, Any]:
     results = []
     
     # Try SearXNG
-    searxng_urls = [
-        "http://localhost:8080/search",
-        "http://127.0.0.1:8080/search",
-    ]
+    from reasoner.core.search import get_searxng_urls
+    searxng_urls = get_searxng_urls()
     
     for url in searxng_urls:
         try:
@@ -558,10 +556,8 @@ def search_videos(query: str, limit: int = 20) -> dict[str, Any]:
     results = []
     
     # Try SearXNG
-    searxng_urls = [
-        "http://localhost:8080/search",
-        "http://127.0.0.1:8080/search",
-    ]
+    from reasoner.core.search import get_searxng_urls
+    searxng_urls = get_searxng_urls()
     
     for url in searxng_urls:
         try:

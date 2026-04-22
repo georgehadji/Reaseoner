@@ -255,7 +255,9 @@ class SearchMixin(PipelineMixinProtocol):
                     self._log("VETTING", f"Query failed '{q}': {exc}", state)
                     return []
 
-            results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries])
+            results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries], return_exceptions=True)
+            # Filter out exceptions from nested results
+            results_nested = [r for r in results_nested if not isinstance(r, Exception)]
 
             # Flatten, deduplicate (by normalised URL), and apply relevance gating
             dropped = 0
@@ -405,7 +407,9 @@ class SearchMixin(PipelineMixinProtocol):
             async with semaphore:
                 return await self._vet_single(state, r)
 
-        vetted_results = await asyncio.gather(*[_vet_with_limit(r) for r in results])
+        vetted_results = await asyncio.gather(*[_vet_with_limit(r) for r in results], return_exceptions=True)
+        # Filter out exceptions from vetted results
+        vetted_results = [r for r in vetted_results if not isinstance(r, Exception)]
 
         # Compute context quality for synthesis circuit breaker
         if not vetted_results:

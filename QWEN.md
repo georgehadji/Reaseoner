@@ -99,7 +99,7 @@ python main.py --problem "..." --output results.json
 
 ```bash
 uvicorn asgi:app --reload --port 8000
-# Open http://localhost:8000
+# Open http://localhost:8001 (default port, configurable via SERVER_PORT)
 ```
 
 ### Programmatic Usage

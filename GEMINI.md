@@ -41,7 +41,7 @@ To run the primary FastAPI application (defined in `asgi.py`):
 ```bash
 uvicorn asgi:app --reload --port 8000
 ```
-Then access `http://localhost:8000`.
+Then access `http://localhost:8001` (default port, configurable via `SERVER_PORT`).
 
 To run the API entry point (defined in `api.py`):
 ```bash

@@ -18,10 +18,10 @@ class SearchService:
         num_results: int = 10,
     ) -> list[dict[str, Any]]:
         """Execute a standalone web search (for /api/search and streaming)."""
-        from reasoner.core.search import get_discovery_client
+        from reasoner.core.search import get_search_client
 
         try:
-            client, _ = await get_discovery_client(source_type=source_type)
+            client, _ = await get_search_client(source_type=source_type)
             return await client.search(query, num_results=num_results, source_type=source_type)
         except Exception as exc:
             logger.warning("Search failed: %s", exc)
@@ -34,7 +34,11 @@ class SearchService:
         num_results: int = 10,
         cancel_event: Any | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Stream SearXNG web search results as a virtual single-phase pipeline."""
+        """Stream web search results as a virtual single-phase pipeline.
+
+        Results are fetched via the configured search client (Perplexity via
+        OpenRouter when OPENROUTER_API_KEY is set, otherwise SearXNG).
+        """
         from reasoner.api.serializers import _event
         import time
 

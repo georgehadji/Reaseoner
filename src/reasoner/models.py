@@ -297,6 +297,8 @@ class PipelineState:
     writing_state: dict[str, Any] = field(default_factory=dict)
     # PhaseSubAgent outputs (for transparency / resume / debugging)
     synthesis_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
+    # Neuro memory: recalled context chunks from long-term memory
+    memory_context: list[dict[str, Any]] = field(default_factory=list)
     critique_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
     decomposition_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
     enhancement_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
@@ -335,9 +337,22 @@ class PipelineState:
     # ─────────────────────────────────────────────────────────────────────
     attachments: list[dict[str, Any]] = field(default_factory=list)  # [{file_id, filename, mime_type, extracted_text}]
 
-    def log(self, phase: str, message: str) -> None:
+    def add_error(self, message: str) -> None:
+        """Atomic append to error list."""
+        if message and message not in self.errors:
+            self.errors.append(str(message))
+
+    def add_log(self, phase: str, message: str) -> None:
+        """Atomic log entry."""
         entry = f"[{phase}] {message}"
         self.phase_logs.append(entry)
+
+    def set_duration(self, phase: str, seconds: float) -> None:
+        """Safe update of phase durations."""
+        self.phase_durations[phase] = seconds
+
+    def log(self, phase: str, message: str) -> None:
+        self.add_log(phase, message)
 
     def to_context_dict(self, phase: str = "default", compression: str = "balanced", use_neuro: bool = False) -> dict[str, Any]:
         """
@@ -358,6 +373,7 @@ class PipelineState:
             "problem": self.problem,
             "task_type": (self.task_type.value if hasattr(self.task_type, 'value') else self.task_type) if self.task_type else None,
             "language": self.language,
+            "reflexion_memory": self.reflexion_memory,
         }
         
         # Include attachments as a distinct field so synthesis phases see them explicitly

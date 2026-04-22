@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
     const body = await readJsonBody(req);
     const payload = validateCalculateRequest(body);
 
-    const headers = sanitizeRequestHeaders(req.headers);
+    const headers = new Headers(sanitizeRequestHeaders(req.headers));
+    headers.set('Content-Type', 'application/json');
     const upstream = await fetch(`${apiBase}/api/calculate`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
 

@@ -16,13 +16,10 @@ export type Tier = 'budget' | 'premium';
 interface AppState {
   running: boolean;
   tier: Tier;
-  isSequential: boolean;
   isExpert: boolean;
-  isWebSearch: boolean;
-  isSmartSearch: boolean;
-  isEnhancePrompt: boolean;
   isImageMode: boolean;
   sidebarCollapsed: boolean;
+  neuroPanelOpen: boolean;
   composerText: string;
   attachments: ComposerAttachment[];
   history: Conversation[];
@@ -38,13 +35,10 @@ interface AppState {
   // Actions
   setRunning: (running: boolean) => void;
   toggleTier: () => void;
-  toggleSequential: () => void;
   toggleExpert: () => void;
-  toggleWebSearch: () => void;
-  toggleSmartSearch: () => void;
-  toggleEnhancePrompt: () => void;
   toggleImageMode: () => void;
   toggleSidebar: () => void;
+  toggleNeuroPanel: () => void;
   setComposerText: (text: string) => void;
   addAttachment: (file: File) => void;
   removeAttachment: (id: string) => void;
@@ -62,13 +56,10 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       running: false,
       tier: 'budget',
-      isSequential: false,
       isExpert: false,
-      isWebSearch: false,
-      isSmartSearch: true,
-      isEnhancePrompt: true,
       isImageMode: false,
       sidebarCollapsed: false,
+      neuroPanelOpen: false,
       composerText: '',
       attachments: [],
       history: [],
@@ -79,13 +70,10 @@ export const useAppStore = create<AppState>()(
       toggleTier: () =>
         set((state) => ({ tier: state.tier === 'budget' ? 'premium' : 'budget' })),
 
-      toggleSequential: () => set((state) => ({ isSequential: !state.isSequential })),
       toggleExpert: () => set((state) => ({ isExpert: !state.isExpert })),
-      toggleWebSearch: () => set((state) => ({ isWebSearch: !state.isWebSearch, isSmartSearch: state.isWebSearch ? false : true })),
-      toggleSmartSearch: () => set((state) => ({ isSmartSearch: !state.isSmartSearch })),
-      toggleEnhancePrompt: () => set((state) => ({ isEnhancePrompt: !state.isEnhancePrompt })),
       toggleImageMode: () => set((state) => ({ isImageMode: !state.isImageMode })),
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+      toggleNeuroPanel: () => set((state) => ({ neuroPanelOpen: !state.neuroPanelOpen })),
       setComposerText: (composerText) => set({ composerText }),
 
       addAttachment: (file) =>
@@ -149,9 +137,7 @@ export const useAppStore = create<AppState>()(
         const s = (persistedState || {}) as Record<string, unknown>;
         return {
           tier: s.tier === 'premium' ? 'premium' : 'budget',
-          isSequential: typeof s.isSequential === 'boolean' ? s.isSequential : false,
           isExpert: typeof s.isExpert === 'boolean' ? s.isExpert : false,
-          isEnhancePrompt: typeof s.isEnhancePrompt === 'boolean' ? s.isEnhancePrompt : true,
           sidebarCollapsed: typeof s.sidebarCollapsed === 'boolean' ? s.sidebarCollapsed : false,
           // Force image mode false on migration/load
           isImageMode: false,
@@ -160,9 +146,7 @@ export const useAppStore = create<AppState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         tier: state.tier,
-        isSequential: state.isSequential,
         isExpert: state.isExpert,
-        isEnhancePrompt: state.isEnhancePrompt,
         sidebarCollapsed: state.sidebarCollapsed,
         // Do not persist isImageMode so it defaults to false on next load
       }),

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useReducer } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { usePipelineStream } from '@/hooks/usePipelineStream';
+import { useWebSocketPipeline } from '@/hooks/useWebSocketPipeline';
 import { useServerStatus } from '@/hooks/useServerStatus';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useConversationHistory } from '@/hooks/useConversationHistory';
@@ -19,7 +20,119 @@ import { METHOD_PHASES } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
 import { conversationToMessages } from '@/lib/conversation-history';
-import { clearCache, searchWeb, uploadFiles, generateImage, generateImageEnhancement } from '@/lib/api-client';
+import { readSSEStream } from '@/lib/sse-reader';
+import { clearCache, uploadFiles, generateImage, generateImageEnhancement, resumePipelineStream } from '@/lib/api-client';
+
+// --- Reducer function for managing messages state ---
+type MessagesAction =
+  | { type: 'ADD_MESSAGES'; payload: ChatFeedMessage[] }
+  | { type: 'UPDATE_MESSAGE'; payload: { messageId: string; updates: Partial<ChatFeedMessage> } }
+  | { type: 'SET_MESSAGES'; payload: ChatFeedMessage[] }
+  | { type: 'ADD_STREAMING_CONTENT'; payload: { messageId: string; text: string } }
+  | { type: 'UPDATE_PHASE_DATA'; payload: { messageId: string; phaseIndex: number; data: unknown } }
+  | { type: 'UPDATE_PHASE_MODELS'; payload: { messageId: string; phaseIndex: number; models: string[] | undefined } }
+  | { type: 'ADD_ACTIVE_AGENT'; payload: { messageId: string; agent: { name: string; task: string } } }
+  | { type: 'REMOVE_ACTIVE_AGENT'; payload: { messageId: string; agentName: string } }
+  | { type: 'SET_CURRENT_PHASE'; payload: { phase?: number; phaseName?: string } }
+  | { type: 'SET_COMPLETED_PHASES'; payload: number[] }
+  | { type: 'SET_ERROR_PHASES'; payload: number[] }
+  | { type: 'SET_PHASE_DURATIONS'; payload: Record<number, number> }
+  | { type: 'SET_IS_STREAMING'; payload: boolean }
+  | { type: 'CLEAR_MESSAGES' }
+  | { type: 'RESET_STATE' };
+
+function messagesReducer(state: ChatFeedMessage[], action: MessagesAction): ChatFeedMessage[] {
+  switch (action.type) {
+    case 'ADD_MESSAGES':
+      return [...state, ...action.payload];
+    case 'UPDATE_MESSAGE': {
+      const { messageId, updates } = action.payload;
+      return state.map(msg =>
+        msg.id === messageId ? { ...msg, ...updates } : msg
+      );
+    }
+    case 'SET_MESSAGES':
+      return action.payload;
+    case 'ADD_STREAMING_CONTENT': {
+      const { messageId, text } = action.payload;
+      return state.map(msg =>
+        msg.id === messageId ? { ...msg, streamingContent: (msg.streamingContent || '') + text } : msg
+      );
+    }
+    case 'UPDATE_PHASE_DATA': {
+      const { messageId, phaseIndex, data } = action.payload;
+      return state.map(msg => {
+        if (msg.id === messageId && msg.phases) {
+          const phase = msg.phases[phaseIndex];
+          if (phase) {
+            const updatedPhase = { ...phase, data };
+            const updatedPhases = [...msg.phases];
+            updatedPhases[phaseIndex] = updatedPhase;
+            return { ...msg, phases: updatedPhases };
+          }
+        }
+        return msg;
+      });
+    }
+    case 'UPDATE_PHASE_MODELS': {
+      const { messageId, models } = action.payload;
+      return state.map(msg =>
+        msg.id === messageId ? { ...msg, phaseModels: models } : msg
+      );
+    }
+    case 'ADD_ACTIVE_AGENT': {
+      const { messageId, agent } = action.payload;
+      return state.map(msg => {
+        if (msg.id === messageId) {
+          const currentAgents = msg.activeAgents || [];
+          if (!currentAgents.find(a => a.name === agent.name)) {
+            return { ...msg, activeAgents: [...currentAgents, agent] };
+          }
+        }
+        return msg;
+      });
+    }
+    case 'REMOVE_ACTIVE_AGENT': {
+      const { messageId, agentName } = action.payload;
+      return state.map(msg => {
+        if (msg.id === messageId && msg.activeAgents) {
+          return { ...msg, activeAgents: msg.activeAgents.filter(a => a.name !== agentName) };
+        }
+        return msg;
+      });
+    }
+    case 'SET_CURRENT_PHASE': {
+      // This action is primarily managed by the parent component's state,
+      // but we can update the message if it represents the active streaming state.
+      // The actual state update is in the parent component.
+      // For simplicity here, we assume the parent updates its local state.
+      // If this reducer were to manage phase state directly, it would need more logic.
+      return state; // No direct state change in messages array for current phase number itself.
+    }
+    case 'SET_COMPLETED_PHASES': {
+      // This action is also managed by the parent component's state.
+      return state;
+    }
+    case 'SET_ERROR_PHASES': {
+      // This action is also managed by the parent component's state.
+      return state;
+    }
+    case 'SET_PHASE_DURATIONS': {
+      // This action is also managed by the parent component's state.
+      return state;
+    }
+    case 'SET_IS_STREAMING': {
+      // This action is also managed by the parent component's state.
+      return state;
+    }
+    case 'CLEAR_MESSAGES':
+      return [];
+    case 'RESET_STATE':
+      return []; // Resetting messages to empty array
+    default:
+      return state;
+  }
+}
 
 /** Resolve METHOD_PHASES by trying snake_case then kebab-case then fallback. */
 function getMethodPhases(method: string) {
@@ -30,6 +143,16 @@ function getMethodPhases(method: string) {
     METHOD_PHASES['multi-perspective'] ||
     []
   );
+}
+
+const IMAGE_PROMPT_MAX_CHARS = 2000;
+
+function clampImagePrompt(prompt: string) {
+  const trimmed = prompt.trim();
+  if (trimmed.length <= IMAGE_PROMPT_MAX_CHARS) {
+    return { prompt: trimmed, truncated: false };
+  }
+  return { prompt: trimmed.slice(0, IMAGE_PROMPT_MAX_CHARS), truncated: true };
 }
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -54,8 +177,6 @@ export default function Home() {
   const setComposerText = useAppStore((s) => s.setComposerText);
   const attachments = useAppStore((s) => s.attachments);
   const clearAttachments = useAppStore((s) => s.clearAttachments);
-  const isWebSearch = useAppStore((s) => s.isWebSearch);
-  const isSmartSearch = useAppStore((s) => s.isSmartSearch);
   const isImageMode = useAppStore((s) => s.isImageMode);
   const tier = useAppStore((s) => s.tier);
   const getAutoPreset = useAppStore((s) => s.getAutoPreset);
@@ -63,12 +184,15 @@ export default function Home() {
 
   const { history, refresh: refreshHistory, remove: removeHistory } = useConversationHistory();
   const { startRun, startFollowup, stopRun } = usePipelineStream();
+  const { connect: wsConnect, disconnect: wsDisconnect, sendStop: wsSendStop, status: wsStatus } = useWebSocketPipeline();
   const serverOnline = useServerStatus();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  const [messages, setMessages] = useState<ChatFeedMessage[]>([]);
+  // REFACTOR: Replace useState with useReducer for messages state
+  const [messages, dispatchMessages] = useReducer(messagesReducer, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const progressIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
+  const clientRunIdRef = useRef<string | null>(null);
 
   // Auto-selected method from HyperGate — populated from the 'start' SSE event.
   const [autoSelectedMethod, setAutoSelectedMethod] = useState<string>('multi_perspective');
@@ -95,7 +219,10 @@ export default function Home() {
     onToggleSidebar: toggleSidebar,
     onShowShortcuts: () => setShortcutsOpen(true),
     onStop: () => {
-      if (running) stopRun();
+      if (running) {
+        stopRun();
+        wsSendStop(clientRunIdRef.current || '');
+      }
       setRunning(false);
     },
   });
@@ -106,6 +233,7 @@ export default function Home() {
 
     setComposerText('');
     setRunning(true);
+    // Resetting state that's managed by the parent component's state, not in the reducer
     setCompletedPhases([]);
     setErrorPhases([]);
     setCurrentPhase(undefined);
@@ -158,124 +286,71 @@ export default function Home() {
       loadingKind: undefined,
       loadingPrompt: undefined,
     };
-    setMessages((prev) => (isImageMode ? [...prev, userMsg] : [...prev, userMsg, assistantMsg]));
+    // Dispatch action to add user message and initial assistant message
+    dispatchMessages({ type: 'ADD_MESSAGES', payload: isImageMode ? [userMsg] : [userMsg, assistantMsg] });
 
     const progressId = 'prog-' + Date.now();
     progressIdRef.current = progressId;
-
-    // ── Web Search mode (no LLM) ──
-    if (isWebSearch) {
-      const searchStart = performance.now();
-      try {
-        const data = await searchWeb(problem, 'general', 10, isSmartSearch);
-        const results = data?.results ?? [];
-        const hasGroups = results.some((r) => r.group);
-        let md = '';
-        if (hasGroups) {
-          const byGroup: Record<string, typeof results> = {};
-          results.forEach((r) => {
-            const g = r.group || 'Results';
-            byGroup[g] = byGroup[g] || [];
-            byGroup[g].push(r);
-          });
-          md = Object.entries(byGroup)
-            .map(([group, items]) => {
-              const list = items
-                .map((r, i) => {
-                  const title = r.title || 'Source';
-                  const url = r.url || '';
-                  const snippet = r.snippet || r.content || '';
-                  return `${i + 1}. [${title}](${url})\n   ${snippet}`;
-                })
-                .join('\n\n');
-              return `**${group}**\n\n${list}`;
-            })
-            .join('\n\n---\n\n');
-        } else {
-          md = results
-            .map((r, i) => {
-              const title = r.title || 'Source';
-              const url = r.url || '';
-              const snippet = r.snippet || r.content || '';
-              return `${i + 1}. [${title}](${url})\n   ${snippet}`;
-            })
-            .join('\n\n');
-        }
-        const searchDuration = (performance.now() - searchStart) / 1000;
-        const resultContent = md || '*No results found.*';
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = { ...next[idx], content: resultContent, isStreaming: false, duration: searchDuration };
-          }
-          return next;
-        });
-        await saveConversation({
-          id: assistantId,
-          conversation_id: assistantId,
-          turn_number: 1,
-          timestamp: new Date().toISOString(),
-          problem,
-          phases: [],
-          errors: [],
-          preset: 'web-search',
-          method: 'web_search',
-          total_tokens: null,
-          kind: 'search',
-          response_content: resultContent,
-          duration: searchDuration,
-        });
-        refreshHistory();
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'Search failed';
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = { ...next[idx], content: `**Search error:** ${msg}`, isStreaming: false };
-          }
-          return next;
-        });
-      } finally {
-        setRunning(false);
-        progressIdRef.current = null;
-      }
-      return;
-    }
 
     // ── Image Generation mode ──
     if (isImageMode) {
       const genStart = performance.now();
       try {
+        const basePrompt = clampImagePrompt(problem);
+        if (basePrompt.truncated) {
+          dispatchMessages({
+            type: 'ADD_MESSAGES',
+            payload: [{
+              id: 'info-trim-' + Date.now(),
+              role: 'info',
+              content: `Prompt truncated to ${IMAGE_PROMPT_MAX_CHARS} characters to fit image limits.`,
+            }],
+          });
+        }
         const referenceImages = await Promise.all(
           attachments
             .filter((attachment) => attachment.type.startsWith('image/'))
             .slice(0, 4)
             .map((attachment) => fileToDataUrl(attachment.file)),
         );
-        const enhancement = await generateImageEnhancement(problem, tier);
-        const enhancedPrompt = enhancement.enhanced_prompt || problem;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: 'info-enhanced-img-' + Date.now(),
-            role: 'info',
-            content:
-              enhancedPrompt === problem
-                ? `Prompt used for generation: “${enhancedPrompt}”`
-                : `Enhanced prompt: “${enhancedPrompt}”`,
-            meta: enhancedPrompt === problem ? undefined : { original: problem, enhanced: enhancedPrompt },
-          },
-          {
-            ...assistantMsg,
-            loadingKind: 'image-generation',
-            loadingPrompt:
-              referenceImages.length > 0
-                ? `${enhancedPrompt} [using ${referenceImages.length} reference image${referenceImages.length === 1 ? '' : 's'}]`
-                : enhancedPrompt,
-          },
-        ]);
+        const enhancement = await generateImageEnhancement(basePrompt.prompt, tier);
+        if (!enhancement.success) {
+          throw new Error(enhancement.error || 'Image prompt enhancement failed');
+        }
+        const enhancedBase = clampImagePrompt(enhancement.enhanced_prompt || basePrompt.prompt);
+        if (enhancedBase.truncated) {
+          dispatchMessages({
+            type: 'ADD_MESSAGES',
+            payload: [{
+              id: 'info-trim-enhanced-' + Date.now(),
+              role: 'info',
+              content: `Enhanced prompt truncated to ${IMAGE_PROMPT_MAX_CHARS} characters to fit image limits.`,
+            }],
+          });
+        }
+        const enhancedPrompt = enhancedBase.prompt;
+        dispatchMessages({
+          type: 'ADD_MESSAGES',
+          payload: [
+            {
+              id: 'info-enhanced-img-' + Date.now(),
+              role: 'info',
+              content:
+                enhancedPrompt === basePrompt.prompt
+                  ? `Prompt used for generation: “${enhancedPrompt}”`
+                  : `Enhanced prompt: “${enhancedPrompt}”`,
+              meta: enhancedPrompt === basePrompt.prompt ? undefined : { original: basePrompt.prompt, enhanced: enhancedPrompt },
+            },
+            {
+              ...assistantMsg,
+              loadingKind: 'image-generation',
+              loadingPrompt:
+                referenceImages.length > 0
+                  ? `${enhancedPrompt} [using ${referenceImages.length} reference image${referenceImages.length === 1 ? '' : 's'}]`
+                  : enhancedPrompt,
+            },
+          ],
+        });
 
         const result = await generateImage(enhancedPrompt, tier, false, referenceImages);
         const genDuration = (performance.now() - genStart) / 1000;
@@ -285,25 +360,18 @@ export default function Home() {
               data: img.image_data,
               model: img.model_used,
             })) || [];
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantId);
-            if (idx !== -1) {
-              next[idx] = {
-                ...next[idx],
-                content:
-                  formattedImages.length >= 2
-                    ? `Generated ${formattedImages.length} images`
-                    : `Generated image using **${formattedImages[0]?.model || 'model'}**`,
-                images: formattedImages,
-                isStreaming: false,
-                duration: genDuration,
-                loadingKind: undefined,
-                loadingPrompt: undefined,
-              };
-            }
-            return next;
-          });
+          // Update assistant message with generated images
+          dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: {
+            content:
+              formattedImages.length >= 2
+                ? `Generated ${formattedImages.length} images`
+                : `Generated image using **${formattedImages[0]?.model || 'model'}**`,
+            images: formattedImages,
+            isStreaming: false,
+            duration: genDuration,
+            loadingKind: undefined,
+            loadingPrompt: undefined,
+          }}});
           await saveConversation({
             id: assistantId,
             conversation_id: assistantId,
@@ -326,45 +394,23 @@ export default function Home() {
           });
           refreshHistory();
         } else {
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantId);
-            if (idx !== -1) {
-              next[idx] = {
-                ...next[idx],
-                content: `**Image generation failed:** ${result.error || 'Unknown error'}`,
-                isStreaming: false,
-                loadingKind: undefined,
-                loadingPrompt: undefined,
-              };
-            }
-            return next;
-          });
+          // Update assistant message with generation failure
+          dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: {
+            content: `**Image generation failed:** ${result.error || 'Unknown error'}`,
+            isStreaming: false,
+            loadingKind: undefined,
+            loadingPrompt: undefined,
+          }}});
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Image generation failed';
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = {
-              ...next[idx],
-              content: `**Error:** ${msg}`,
-              isStreaming: false,
-              loadingKind: undefined,
-              loadingPrompt: undefined,
-            };
-          } else {
-            next.push({
-              ...assistantMsg,
-              content: `**Error:** ${msg}`,
-              isStreaming: false,
-              loadingKind: undefined,
-              loadingPrompt: undefined,
-            });
-          }
-          return next;
-        });
+        // Update assistant message with error
+        dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: {
+          content: `**Error:** ${msg}`,
+          isStreaming: false,
+          loadingKind: undefined,
+          loadingPrompt: undefined,
+        }}});
       } finally {
         setRunning(false);
         progressIdRef.current = null;
@@ -383,197 +429,205 @@ export default function Home() {
     // Track the method discovered from the 'start' event within this run
     let runMethod = 'multi_perspective';
 
-    // Shared event handler
+    // Shared event handler for SSE stream processing
     const onEvent = (ev: PhaseEvent) => {
-      if (ev.type === 'start') {
-        // Capture which method the backend auto-selected
-        if (ev.auto_selected_method) {
-          runMethod = ev.auto_selected_method;
-          setAutoSelectedMethod(ev.auto_selected_method);
-        }
-      } else if (ev.type === 'prompt_enhanced' && ev.enhanced) {
-        setMessages((prev) => [
-          ...prev,
+      // Dispatch actions to the reducer based on event type
+      switch (ev.type) {
+        case 'start':
+          if (ev.auto_selected_method) {
+            runMethod = ev.auto_selected_method;
+            setAutoSelectedMethod(ev.auto_selected_method);
+          }
+          break;
+        case 'prompt_enhanced':
+          if (ev.enhanced) {
+            dispatchMessages({
+              type: 'ADD_MESSAGES',
+              payload: [{
+                id: 'info-enhance-' + Date.now(),
+                role: 'info',
+                content: `Prompt enhanced: "${ev.enhanced}"`,
+                meta: { original: ev.original, enhanced: ev.enhanced },
+              }],
+            });
+          }
+          break;
+        case 'phase_start':
+          if (typeof ev.phase === 'number') {
+            const methodPhases = getMethodPhases(runMethod);
+            const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
+            const startModels = Array.isArray(ev.models) ? (ev.models as string[]) : undefined;
+            phaseStartTimesRef.current[ev.phase] = performance.now();
+            setCurrentPhase(ev.phase);
+            // Update the assistant message to show current phase and models
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { currentPhaseName: displayName, phaseModels: startModels ?? (messages.find(m => m.id === assistantId)?.phaseModels) } } });
+          }
+          break;
+        case 'agent_start':
+          if (ev.agent) {
+            dispatchMessages({ type: 'ADD_ACTIVE_AGENT', payload: { messageId: assistantId, agent: { name: ev.agent, task: ev.task || ev.agent } } });
+          }
+          break;
+        case 'agent_complete':
+          if (ev.agent) {
+            dispatchMessages({ type: 'REMOVE_ACTIVE_AGENT', payload: { messageId: assistantId, agentName: ev.agent } });
+          }
+          break;
+        case 'text_chunk':
+          if (typeof ev.text === 'string') {
+            dispatchMessages({ type: 'ADD_STREAMING_CONTENT', payload: { messageId: assistantId, text: ev.text } });
+          }
+          break;
+        case 'phase_complete':
+          if (typeof ev.phase === 'number') {
+            const methodPhases = getMethodPhases(runMethod);
+            const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
+            const phaseNum = ev.phase;
+            const phaseData = ev.data ?? {};
+            const renderedPhase: RenderedPhase = {
+              index: phases.length,
+              phase: phaseNum,
+              name: displayName,
+              data: phaseData,
+            };
+            phases.push(renderedPhase);
+            const serverDuration = typeof (phaseData as Record<string, unknown>).duration === 'number'
+              ? (phaseData as Record<string, unknown>).duration as number
+              : undefined;
+            const durationMs = serverDuration !== undefined
+              ? serverDuration * 1000
+              : performance.now() - (phaseStartTimesRef.current[phaseNum] ?? performance.now());
+            setPhaseDurations((prev) => ({ ...prev, [phaseNum]: durationMs / 1000 }));
+            setCompletedPhases((prev) => (prev.includes(phaseNum) ? prev : [...prev, phaseNum]));
+            setCurrentPhase(undefined);
+
+            const phaseModels = (phaseData as Record<string, unknown>).models as string[] | undefined;
+            
+            // Update the assistant message with completed phase and markdown content
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: {
+              content: buildMarkdownFromPhases(phases),
+              phases: [...phases],
+              currentPhaseName: undefined,
+              streamingContent: displayName === 'Synthesis' ? undefined : (messages.find(m => m.id === assistantId)?.streamingContent), // Clear streaming if Synthesis completes
+              phaseModels: phaseModels ?? (messages.find(m => m.id === assistantId)?.phaseModels),
+            }}});
+          }
+          break;
+        case 'phase_error':
+          if (typeof ev.phase === 'number') {
+            setErrorPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
+            setCurrentPhase(undefined);
+          }
+          break;
+        case 'error':
+          // Add an error message and stop streaming
+          dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false, currentPhaseName: undefined } } });
+          dispatchMessages({ type: 'ADD_MESSAGES', payload: [{
+            id: 'err-' + Date.now(),
+            role: 'error',
+            content: ev.message || 'Pipeline error',
+            errorType: ev.error_type || null,
+            errorRetryable: ev.retryable ?? null,
+            errorRetryAfter: ev.retry_after ?? null,
+          }] });
+          setCurrentPhase(undefined);
+          break;
+        case 'widget':
           {
-            id: 'info-enhance-' + Date.now(),
-            role: 'info',
-            content: `Prompt enhanced: "${ev.enhanced}"`,
-            meta: { original: ev.original, enhanced: ev.enhanced },
-          },
-        ]);
-      } else if (ev.type === 'phase_start' && typeof ev.phase === 'number') {
-        const methodPhases = getMethodPhases(runMethod);
-        const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
-        const startModels = Array.isArray(ev.models) ? (ev.models as string[]) : undefined;
-        phaseStartTimesRef.current[ev.phase] = performance.now();
-        setCurrentPhase(ev.phase);
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = { ...next[idx], currentPhaseName: displayName, phaseModels: startModels ?? next[idx].phaseModels };
-          }
-          return next;
-        });
-      } else if (ev.type === 'agent_start' && ev.agent) {
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            const current = next[idx].activeAgents || [];
-            if (!current.find((a) => a.name === ev.agent)) {
-              next[idx] = {
-                ...next[idx],
-                activeAgents: [...current, { name: ev.agent!, task: ev.task || ev.agent! }],
-              };
-            }
-          }
-          return next;
-        });
-      } else if (ev.type === 'agent_complete' && ev.agent) {
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = {
-              ...next[idx],
-              activeAgents: (next[idx].activeAgents || []).filter((a) => a.name !== ev.agent),
+            const widgetData = {
+              widget_type: (ev.data?.widget_type as string) || '',
+              name: (ev.data?.name as string) || '',
+              result: (ev.data?.result as Record<string, unknown>) || {},
+              citations: (ev.data?.citations as string[]) || undefined,
             };
+            const existingMsg = messages.find((m) => m.id === assistantId);
+            const existingWidgets = existingMsg?.widgets || [];
+            dispatchMessages({
+              type: 'UPDATE_MESSAGE',
+              payload: {
+                messageId: assistantId,
+                updates: {
+                  widgets: [...existingWidgets, widgetData],
+                },
+              },
+            });
           }
-          return next;
-        });
-      } else if (ev.type === 'text_chunk' && typeof ev.text === 'string') {
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            const current = next[idx].streamingContent || '';
-            next[idx] = {
-              ...next[idx],
-              streamingContent: current + ev.text,
-            };
-          }
-          return next;
-        });
-      } else if (ev.type === 'phase_complete' && typeof ev.phase === 'number') {
-        const methodPhases = getMethodPhases(runMethod);
-        const displayName = ev.name || methodPhases.find((p) => p.id === ev.phase)?.name || '';
-        const phaseNum = ev.phase;
-        const phaseData = ev.data ?? {};
-        const renderedPhase: RenderedPhase = {
-          index: phases.length,
-          phase: phaseNum,
-          name: displayName,
-          data: phaseData,
-        };
-        phases.push(renderedPhase);
-        const serverDuration = typeof (phaseData as Record<string, unknown>).duration === 'number'
-          ? (phaseData as Record<string, unknown>).duration as number
-          : undefined;
-        const durationMs = serverDuration !== undefined
-          ? serverDuration * 1000
-          : performance.now() - (phaseStartTimesRef.current[phaseNum] ?? performance.now());
-        setPhaseDurations((prev) => ({ ...prev, [phaseNum]: durationMs / 1000 }));
-        setCompletedPhases((prev) => (prev.includes(phaseNum) ? prev : [...prev, phaseNum]));
-        setCurrentPhase(undefined);
+          break;
+        case 'cancelled':
+          // Add a cancellation message
+          dispatchMessages({ type: 'ADD_MESSAGES', payload: [{ id: 'info-' + Date.now(), role: 'error', content: ev.message || 'Stopped by user' }] });
+          setCurrentPhase(undefined);
+          break;
+        case 'done':
+          finalErrors = ev.errors || [];
+          finalTokens = ev.total_tokens || { input: 0, output: 0, total: 0 };
+          const totalDuration = ev.duration;
+          setCurrentPhase(undefined);
 
-        const phaseModels = (phaseData as Record<string, unknown>).models as string[] | undefined;
-
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = {
-              ...next[idx],
-              content: buildMarkdownFromPhases(phases),
-              phases: [...phases],
-              currentPhaseName: undefined,
-              // Clear streaming content when synthesis phase completes (structured card takes over)
-              streamingContent: displayName === 'Synthesis' ? undefined : next[idx].streamingContent,
-              phaseModels: phaseModels ?? next[idx].phaseModels,
-            };
-          }
-          return next;
-        });
-      } else if (ev.type === 'phase_error' && typeof ev.phase === 'number') {
-        setErrorPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
-        setCurrentPhase(undefined);
-      } else if (ev.type === 'error') {
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = { ...next[idx], isStreaming: false, currentPhaseName: undefined };
-          }
-          next.push({ id: 'err-' + Date.now(), role: 'error', content: ev.message || 'Pipeline error' });
-          return next;
-        });
-        setCurrentPhase(undefined);
-      } else if (ev.type === 'cancelled') {
-        setMessages((prev) => [
-          ...prev,
-          { id: 'info-' + Date.now(), role: 'error', content: ev.message || 'Stopped by user' },
-        ]);
-        setCurrentPhase(undefined);
-      } else if (ev.type === 'done') {
-        finalErrors = ev.errors || [];
-        finalTokens = ev.total_tokens || { input: 0, output: 0, total: 0 };
-        const totalDuration = ev.duration;
-        setCurrentPhase(undefined);
-
-        setMessages((prev) => {
-          const next = [...prev];
-          const idx = next.findIndex((m) => m.id === assistantId);
-          if (idx !== -1) {
-            next[idx] = {
-              ...next[idx],
-              content: buildMarkdownFromPhases(phases),
-              phases: [...phases],
-              isStreaming: false,
-              currentPhaseName: undefined,
-              tokens: finalTokens,
-              streamingContent: undefined,
-            };
-          }
+          // Final update to assistant message, clear streaming content, set tokens and duration
+          dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: {
+            content: buildMarkdownFromPhases(phases),
+            phases: [...phases],
+            isStreaming: false,
+            currentPhaseName: undefined,
+            tokens: finalTokens,
+            streamingContent: undefined,
+            duration: totalDuration,
+            cost: ev.total_cost_usd,
+          }}});
+          
           if (finalErrors.length > 0) {
-            next.push({ id: 'err-' + Date.now(), role: 'error', content: finalErrors.join('\n') });
+            // Add error messages if any
+            dispatchMessages({ type: 'ADD_MESSAGES', payload: finalErrors.map(err => ({ id: 'err-' + Date.now(), role: 'error', content: err })) });
           }
-          return next;
-        });
 
-        const convId = conversationIdRef.current || assistantId;
-        const historyTurns: ConversationTurn[] = messages
-          .filter((m): m is ChatFeedMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role, content: m.content || '' }));
-        const turnNumber = Math.max(1, (historyTurns.length / 2) + 1);
+          // Save conversation to DB
+          const convId = conversationIdRef.current || assistantId;
+          const historyTurns: ConversationTurn[] = messages
+            .filter((m): m is ChatFeedMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
+            .map((m) => ({ role: m.role, content: m.content || '' }));
+          const turnNumber = Math.max(1, (historyTurns.length / 2) + 1);
 
-        const conv: Conversation = {
-          id: assistantId,
-          conversation_id: convId,
-          turn_number: Math.floor(turnNumber),
-          timestamp: new Date().toISOString(),
-          problem,
-          phases: phases.map((p) => ({ phase: p.phase, name: p.name, data: p.data })),
-          errors: finalErrors,
-          preset: getAutoPreset(),
-          method: runMethod,
-          total_tokens: finalTokens,
-          duration: totalDuration,
-          kind: 'pipeline',
-          response_content: buildMarkdownFromPhases(phases),
-        };
-        saveConversation(conv).then(refreshHistory).catch(console.error);
+          const conv: Conversation = {
+            id: assistantId,
+            conversation_id: convId,
+            turn_number: Math.floor(turnNumber),
+            timestamp: new Date().toISOString(),
+            problem,
+            phases: phases.map((p) => ({ phase: p.phase, name: p.name, data: p.data })),
+            errors: finalErrors,
+            preset: getAutoPreset(),
+            method: runMethod,
+            total_tokens: finalTokens,
+            duration: totalDuration,
+            kind: 'pipeline',
+            response_content: buildMarkdownFromPhases(phases),
+            pipeline_id: clientRunIdRef.current || undefined,
+          };
+          saveConversation(conv).then(refreshHistory).catch(console.error);
+          break;
       }
     };
 
+    // Generate a client-side run ID so WebSocket can subscribe to the same pipeline
+    const clientRunId = 'run-' + crypto.randomUUID();
+    clientRunIdRef.current = clientRunId;
+
     try {
+      const state = useAppStore.getState();
+      // Connect WebSocket before starting the stream (additive transport)
+      wsConnect(clientRunId, onEvent);
+
       if (isFollowup) {
         const followupReq: RunFollowupRequest = {
           question: problem,
           preset: getAutoPreset(),
           top_k: 2,
           sequential: false,
-          enhance_prompt: useAppStore.getState().isEnhancePrompt,
+          enhance_prompt: true,
+          expert: state.isExpert,
+          web_search: false,
+          smart_search: true,
           conversation_id: conversationIdRef.current || lastAssistantMsg.id,
           history: messages
             .filter((m): m is ChatFeedMessage & { role: 'user' | 'assistant' } => m.role === 'user' || m.role === 'assistant')
@@ -581,6 +635,7 @@ export default function Home() {
           previous_synthesis: lastAssistantMsg.content || '',
           agent_model: null,
           attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          client_run_id: clientRunId,
         };
         await startFollowup(followupReq, onEvent);
       } else {
@@ -591,24 +646,24 @@ export default function Home() {
           preset: getAutoPreset(),
           top_k: 2,
           sequential: false,
-          enhance_prompt: useAppStore.getState().isEnhancePrompt,
+          enhance_prompt: true,
+          expert: state.isExpert,
+          web_search: false,
+          smart_search: true,
           attachments: uploadedAttachments.length > 0 ? uploadedAttachments : undefined,
+          client_run_id: clientRunId,
         };
         await startRun(req, onEvent);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Connection error';
-      setMessages((prev) => {
-        const next = [...prev];
-        const idx = next.findIndex((m) => m.id === assistantId);
-        if (idx !== -1) {
-          next[idx] = { ...next[idx], isStreaming: false };
-        }
-        next.push({ id: 'err-' + Date.now(), role: 'error', content: msg });
-        return next;
-      });
+      // Update assistant message with connection error
+      dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false } } });
+      dispatchMessages({ type: 'ADD_MESSAGES', payload: [{ id: 'err-' + Date.now(), role: 'error', content: msg }] });
       setCurrentPhase(undefined);
     } finally {
+      wsDisconnect();
+      clientRunIdRef.current = null;
       progressIdRef.current = null;
       setRunning(false);
       clearAttachments();
@@ -622,7 +677,8 @@ export default function Home() {
   }
 
   function handleNew() {
-    setMessages([]);
+    // Dispatch action to clear messages and reset other states managed by parent
+    dispatchMessages({ type: 'CLEAR_MESSAGES' });
     setComposerText('');
     setCompletedPhases([]);
     setErrorPhases([]);
@@ -634,6 +690,82 @@ export default function Home() {
     conversationIdRef.current = null;
   }
 
+  async function handleResume(pipelineId: string) {
+    if (running) return;
+    setRunning(true);
+    setCompletedPhases([]);
+    setErrorPhases([]);
+    setCurrentPhase(undefined);
+    setPhaseDurations({});
+
+    const assistantId = 'a-resume-' + Date.now();
+    const assistantMsg: ChatFeedMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      phases: [],
+      isStreaming: true,
+    };
+    dispatchMessages({ type: 'ADD_MESSAGES', payload: [assistantMsg] });
+
+    const resumePhases: RenderedPhase[] = [];
+    let resumeErrors: string[] = [];
+
+    const onResumeEvent = (ev: PhaseEvent) => {
+      switch (ev.type) {
+        case 'phase_start':
+          if (typeof ev.phase === 'number') {
+            setCurrentPhase(ev.phase);
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { currentPhaseName: ev.name } } });
+          }
+          break;
+        case 'phase_complete':
+          if (typeof ev.phase === 'number') {
+            const renderedPhase: RenderedPhase = {
+              index: resumePhases.length,
+              phase: ev.phase,
+              name: ev.name || '',
+              data: ev.data ?? {},
+            };
+            resumePhases.push(renderedPhase);
+            setCompletedPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
+            setCurrentPhase(undefined);
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { content: buildMarkdownFromPhases(resumePhases), phases: [...resumePhases], currentPhaseName: undefined } } });
+          }
+          break;
+        case 'phase_error':
+          if (typeof ev.phase === 'number') {
+            setErrorPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
+            setCurrentPhase(undefined);
+          }
+          break;
+        case 'error':
+          dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false } } });
+          dispatchMessages({ type: 'ADD_MESSAGES', payload: [{ id: 'err-' + Date.now(), role: 'error', content: ev.message || 'Resume error' }] });
+          break;
+        case 'done':
+          resumeErrors = ev.errors || [];
+          dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { content: buildMarkdownFromPhases(resumePhases), phases: [...resumePhases], isStreaming: false, currentPhaseName: undefined } } });
+          if (resumeErrors.length > 0) {
+            dispatchMessages({ type: 'ADD_MESSAGES', payload: resumeErrors.map((err) => ({ id: 'err-' + Date.now(), role: 'error', content: err })) });
+          }
+          break;
+      }
+    };
+
+    try {
+      const body = await resumePipelineStream(pipelineId);
+      await readSSEStream(body, onResumeEvent);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Resume failed';
+      dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false } } });
+      dispatchMessages({ type: 'ADD_MESSAGES', payload: [{ id: 'err-' + Date.now(), role: 'error', content: msg }] });
+    } finally {
+      setRunning(false);
+      setCurrentPhase(undefined);
+    }
+  }
+
   function handleLoad(conv: Conversation) {
     conversationIdRef.current = conv.conversation_id || conv.id;
     const renderedPhases: RenderedPhase[] = conv.phases.map((p, idx) => ({
@@ -642,8 +774,10 @@ export default function Home() {
       name: p.name,
       data: p.data,
     }));
-    const loaded = conversationToMessages(conv, buildMarkdownFromPhases) as ChatFeedMessage[];
-    setMessages(loaded);
+    const loadedMessages = conversationToMessages(conv, buildMarkdownFromPhases) as ChatFeedMessage[];
+    // Dispatch action to set loaded messages
+    dispatchMessages({ type: 'SET_MESSAGES', payload: loadedMessages });
+    
     // Restore the method so PhaseTimeline shows the right phases for loaded conversations
     setAutoSelectedMethod(conv.method || 'multi_perspective');
     setCompletedPhases(renderedPhases.map((p) => p.phase));
@@ -670,6 +804,10 @@ export default function Home() {
         onDelete={removeHistory}
         onClear={handleClearCache}
         onNew={handleNew}
+        onResume={handleResume}
+        conversationId={conversationIdRef.current}
+        lastUserPrompt={messages.filter((m) => m.role === 'user').at(-1)?.content}
+        lastAssistantResponse={messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1)?.content}
       />
 
       <div className="relative flex flex-1 flex-col sm:ml-0">
@@ -686,11 +824,29 @@ export default function Home() {
               }`}
               title={serverOnline === true ? 'Online' : serverOnline === false ? 'Offline' : 'Checking…'}
             />
+            {wsStatus !== 'idle' && (
+              <div className="flex items-center gap-1.5">
+                <div
+                  className={`h-2 w-2 rounded-full ${
+                    wsStatus === 'connected'
+                      ? 'bg-blue-500'
+                      : wsStatus === 'reconnecting'
+                      ? 'bg-amber-500 animate-pulse'
+                      : 'bg-gray-400'
+                  }`}
+                  aria-label={`WebSocket ${wsStatus}`}
+                  title={`WebSocket: ${wsStatus}`}
+                />
+                <span className="hidden text-[10px] text-[var(--text-muted)] sm:inline">
+                  {wsStatus === 'connected' ? 'Live' : wsStatus}
+                </span>
+              </div>
+            )}
           </div>
           <ThemeToggle />
         </header>
 
-        {hasMessages && activeAssistantMsg && !isWebSearch && (
+        {hasMessages && activeAssistantMsg && (
           <PhaseTimeline
             method={autoSelectedMethod}
             currentPhase={currentPhase}

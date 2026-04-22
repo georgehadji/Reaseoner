@@ -24,10 +24,11 @@ export async function POST(req: NextRequest) {
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const body = await readJsonBody(req);
 
-    const headers = sanitizeRequestHeaders(req.headers);
+    const headers = new Headers(sanitizeRequestHeaders(req.headers));
+    headers.set('Content-Type', 'application/json');
     const upstream = await fetch(`${apiBase}/api/generate-image`, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(body),
     });
 
@@ -39,7 +40,6 @@ export async function POST(req: NextRequest) {
     if (err instanceof ValidationError) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
-    // eslint-disable-next-line no-console
     console.error('Generate image proxy error:', err);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

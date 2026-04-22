@@ -1,9 +1,10 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { EXAMPLE_PROMPTS } from '@/lib/config';
 import { cn } from '@/lib/utils';
+import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon } from 'lucide-react';
 
 interface ComposerProps {
@@ -44,6 +45,38 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   const isImageMode = useAppStore((s) => s.isImageMode);
   const toggleImageMode = useAppStore((s) => s.toggleImageMode);
   const hasContent = composerText.trim().length > 0 || attachments.length > 0;
+
+  const [estimate, setEstimate] = useState<{ tokens: number; cost: string; duration: number } | null>(null);
+
+  const fetchEstimate = useCallback(async (text: string, preset: string) => {
+    if (!text.trim() || text.trim().length < 3) {
+      setEstimate(null);
+      return;
+    }
+    try {
+      const resp = await fetch('/api/estimate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ problem: text, preset }),
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      setEstimate({
+        tokens: (data.estimated_tokens_input || 0) + (data.estimated_tokens_output || 0),
+        cost: data.estimated_cost_usd?.toFixed(3) || '0.000',
+        duration: data.estimated_duration_seconds || 0,
+      });
+    } catch {
+      setEstimate(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isEnabled('cost-transparency')) return;
+    const preset = tier === 'premium' ? 'auto-premium' : 'auto-budget';
+    const timer = setTimeout(() => fetchEstimate(composerText, preset), 400);
+    return () => clearTimeout(timer);
+  }, [composerText, tier, fetchEstimate]);
 
   function autoResize() {
     const el = textareaRef.current;
@@ -323,6 +356,11 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
           {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
         </div>
+        {isEnabled('cost-transparency') && estimate && (
+          <div className="mt-1 text-center text-[10px] text-[var(--text-subtle)]">
+            ~{estimate.tokens.toLocaleString()} tokens · ~${estimate.cost} · ~{estimate.duration}s
+          </div>
+        )}
 
         <input
           ref={fileInputRef}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -10,7 +10,7 @@ import { Check, Copy } from 'lucide-react';
 import { TIMING } from '@/lib/config';
 import { copyToClipboard } from '@/lib/utils';
 
-export function MarkdownRenderer({ children }: { children: string }) {
+const MarkdownRendererComponent = ({ children }: { children: string }) => {
   const { theme } = useTheme();
   const isDark = theme === 'dark';
 
@@ -20,16 +20,16 @@ export function MarkdownRenderer({ children }: { children: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           h1({ children }) {
-            return <Heading level={1} children={children} />;
+            return <Heading level={1}>{children}</Heading>;
           },
           h2({ children }) {
-            return <Heading level={2} children={children} />;
+            return <Heading level={2}>{children}</Heading>;
           },
           h3({ children }) {
-            return <Heading level={3} children={children} />;
+            return <Heading level={3}>{children}</Heading>;
           },
           h4({ children }) {
-            return <Heading level={4} children={children} />;
+            return <Heading level={4}>{children}</Heading>;
           },
           a({ href, children, ...rest }) {
             return (
@@ -64,7 +64,9 @@ export function MarkdownRenderer({ children }: { children: string }) {
       </ReactMarkdown>
     </div>
   );
-}
+};
+
+export const MarkdownRenderer = memo(MarkdownRendererComponent);
 
 function Heading({ level, children }: { level: 1 | 2 | 3 | 4; children: React.ReactNode }) {
   const text = extractText(children);

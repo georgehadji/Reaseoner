@@ -342,8 +342,13 @@ class AnthropicReasoning(ReasoningProvider):
 
 class OpenRouterReasoning(ReasoningProvider):
     async def generate(self, prompt: str, system: str = "", max_tokens: int = DEFAULT_MAX_TOKENS) -> str:
-        headers = {"Authorization": f"Bearer {self.config.api_key}", "Content-Type": "application/json",
-                   "HTTP-Referer": "https://github.com/Reasoner", "X-Title": "Neuro Layer"}
+        from reasoner.core.settings import settings
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": settings.OPENROUTER_HTTP_REFERER,
+            "X-Title": settings.OPENROUTER_APP_TITLE,
+        }
         messages = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -366,6 +371,30 @@ class OpenRouterEmbedding(EmbeddingProvider):
         base = self.config.api_base or _OPENROUTER_BASE_URL
         resp = await self._get_client().post(f"{base}/embeddings", headers=headers,
                                              json={"model": self.config.model, "input": text})
+        resp.raise_for_status()
+        return resp.json()["data"][0]["embedding"]
+
+    async def health_check(self) -> bool:
+        return bool(self.config.api_key)
+
+
+class PerplexityEmbedding(EmbeddingProvider):
+    """Perplexity pplx-embed-v1 via native API.
+
+    Optimized for web-scale dense retrieval. 32K context, $0.004/1M tokens.
+    """
+
+    async def embed(self, text: str) -> list[float]:
+        headers = {
+            "Authorization": f"Bearer {self.config.api_key}",
+            "Content-Type": "application/json",
+        }
+        base = self.config.api_base or "https://api.perplexity.ai"
+        resp = await self._get_client().post(
+            f"{base}/embeddings",
+            headers=headers,
+            json={"model": self.config.model, "input": text},
+        )
         resp.raise_for_status()
         return resp.json()["data"][0]["embedding"]
 
@@ -435,7 +464,7 @@ REASONING_MAP = {
 EMBEDDING_MAP = {
     "ollama": OllamaEmbedding, "openai": OpenAIEmbedding,
     "huggingface": HuggingFaceEmbedding, "google": GoogleEmbedding,
-    "openrouter": OpenRouterEmbedding,
+    "openrouter": OpenRouterEmbedding, "perplexity": PerplexityEmbedding,
 }
 
 

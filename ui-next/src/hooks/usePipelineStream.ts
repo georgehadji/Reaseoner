@@ -2,11 +2,12 @@
 
 import { useRef, useCallback } from 'react';
 import { fetchWithCsrf } from '@/lib/security-client';
+import { readSSEStream } from '@/lib/sse-reader';
 import { PhaseEvent, RunRequest, RunFollowupRequest } from '@/lib/types';
 
 function getDevErrorMessage(status: number, text: string): string {
   if (status === 504) {
-    return 'Backend unreachable (port 8001). Run: uvicorn asgi:app --port 8001';
+    return 'Backend unreachable. Run: uvicorn asgi:app --reload';
   }
   return `HTTP ${status}: ${text.slice(0, 200)}`;
 }
@@ -38,45 +39,7 @@ export function usePipelineStream() {
       }
       if (!resp.body) throw new Error('No response body');
 
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() ?? '';
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const ev: PhaseEvent = JSON.parse(line.slice(6));
-                onEvent(ev);
-              } catch {
-                // ignore malformed sse lines
-              }
-            }
-          }
-        }
-        // Flush any bytes the decoder held for multi-byte sequences, then
-        // process whatever partial line remained in the buffer (e.g. the
-        // 'done' event when the server closes before the trailing newline).
-        buffer += decoder.decode();
-        for (const line of buffer.split('\n')) {
-          if (line.startsWith('data: ')) {
-            try {
-              const ev: PhaseEvent = JSON.parse(line.slice(6));
-              onEvent(ev);
-            } catch {
-              // ignore malformed sse lines
-            }
-          }
-        }
-      } finally {
-        reader.releaseLock();
-      }
+      await readSSEStream(resp.body, onEvent, abortControllerRef.current.signal);
     },
     []
   );

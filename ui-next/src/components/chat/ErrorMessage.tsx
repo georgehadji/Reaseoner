@@ -1,22 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { X, Copy, Check, AlertTriangle, AlertCircle } from 'lucide-react';
+import { X, Copy, Check, AlertTriangle, AlertCircle, RotateCcw, Pencil } from 'lucide-react';
 import { TIMING } from '@/lib/config';
 import { copyToClipboard } from '@/lib/utils';
+import { isEnabled } from '@/hooks/useFeatureFlags';
 
 interface ErrorMessageProps {
   content: string;
+  errorType?: string | null;
+  retryable?: boolean | null;
+  onRetry?: () => void;
+  onEditRetry?: () => void;
 }
 
 function isWarningContent(content: string): boolean {
   return /warning|citation integrity|vetting flags|skipped|ignored/i.test(content);
 }
 
-export function ErrorMessage({ content }: ErrorMessageProps) {
+export function ErrorMessage({ content, errorType, retryable, onRetry, onEditRetry }: ErrorMessageProps) {
   const [dismissed, setDismissed] = useState(false);
   const [copied, setCopied] = useState(false);
   const isWarning = isWarningContent(content);
+  const showRetry = isEnabled('retry-ui') && retryable && onRetry;
+  const showEditRetry = isEnabled('retry-ui') && onEditRetry;
 
   async function handleCopy() {
     const ok = await copyToClipboard(content);
@@ -44,7 +51,7 @@ export function ErrorMessage({ content }: ErrorMessageProps) {
         )}
         <div className="min-w-0 flex-1">
           <div className="whitespace-pre-wrap">{content}</div>
-          <div className="mt-2 flex items-center gap-3">
+          <div className="mt-2 flex flex-wrap items-center gap-3">
             <button
               type="button"
               onClick={handleCopy}
@@ -60,6 +67,24 @@ export function ErrorMessage({ content }: ErrorMessageProps) {
                 </>
               )}
             </button>
+            {showRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="flex items-center gap-1 text-xs opacity-80 transition-opacity hover:opacity-100"
+              >
+                <RotateCcw className="h-3.5 w-3.5" /> Retry
+              </button>
+            )}
+            {showEditRetry && (
+              <button
+                type="button"
+                onClick={onEditRetry}
+                className="flex items-center gap-1 text-xs opacity-80 transition-opacity hover:opacity-100"
+              >
+                <Pencil className="h-3.5 w-3.5" /> Edit & Retry
+              </button>
+            )}
             {isWarning && (
               <button
                 type="button"

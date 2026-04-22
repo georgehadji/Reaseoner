@@ -312,10 +312,16 @@ def _apply_defaults(cfg: NeuroConfig) -> NeuroConfig:
         e.provider = "openrouter"
     if not e.model:
         e.model = "qwen/qwen3-embedding-8b"
-    if not e.api_base and e.provider == "openrouter":
-        e.api_base = "https://openrouter.ai/api/v1"
+    if not e.api_base:
+        if e.provider == "openrouter":
+            e.api_base = "https://openrouter.ai/api/v1"
+        elif e.provider == "perplexity":
+            e.api_base = "https://api.perplexity.ai"
     if not e.api_key:
-        e.api_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if e.provider == "perplexity":
+            e.api_key = os.environ.get("PERPLEXITY_API_KEY", "")
+        else:
+            e.api_key = os.environ.get("OPENROUTER_API_KEY", "")
 
     # Embedding fallbacks (value-for-money, cross-provider redundancy)
     if not cfg.embedding.fallbacks:

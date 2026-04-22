@@ -64,9 +64,13 @@ class RunRequest(BaseModel):
     no_cache: bool = False
     force_pipeline: bool = False
     enhance_prompt: bool = False
+    expert: bool = False
+    web_search: bool = False
+    smart_search: bool = True
     source_type: str = DEFAULT_SOURCE_TYPE
     domain: str | None = None
     attachments: list[AttachmentRef] = []
+    client_run_id: str | None = None
 
     @field_validator("problem")
     @classmethod
@@ -152,11 +156,15 @@ class FollowupRequest(BaseModel):
     top_k: int = DEFAULT_TOP_K
     sequential: bool = DEFAULT_SEQUENTIAL
     enhance_prompt: bool = False
+    expert: bool = False
+    web_search: bool = False
+    smart_search: bool = True
     conversation_id: str
     history: list[dict[str, str]]
     previous_synthesis: str
     agent_model: str | None = None
     attachments: list[AttachmentRef] = []
+    client_run_id: str | None = None
 
     @field_validator("question")
     @classmethod
@@ -188,7 +196,8 @@ class GenerateImageRequest(BaseModel):
         if not v:
             raise ValueError("Prompt cannot be empty")
         if len(v) > 2000:
-            raise ValueError("Prompt too long (max 2000 characters)")
+            # Enforce a hard limit to avoid request rejection downstream.
+            v = v[:2000]
         return v
 
     @field_validator("preset")

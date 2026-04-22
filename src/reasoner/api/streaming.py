@@ -22,6 +22,7 @@ from reasoner.models import PipelineState
 from reasoner.pipeline import ARAPipeline
 from reasoner.application.services.preset_service import PresetService
 from reasoner.application.services.search_service import SearchService
+from reasoner.exceptions import classify_error, is_retryable
 from reasoner.presets import (
     build_auto_preset,
     get_method_from_preset,
@@ -59,6 +60,38 @@ def _get_phase_subagents(state: PipelineState, phase_name: str) -> list[dict[str
         if isinstance(outputs, list):
             return outputs
     return []
+
+
+async def _emit_widget_event(
+    widget_result: dict[str, Any],
+) -> str:
+    """Emit a widget event into the SSE stream.
+
+    Usage: yield await _emit_widget_event({...})
+    """
+    return _event({
+        "type": "widget",
+        "data": {
+            "widget_type": widget_result.get("widget_type", ""),
+            "name": widget_result.get("name", ""),
+            "result": widget_result.get("data", {}),
+            "citations": widget_result.get("citations", []),
+        },
+    })
+
+
+async def _broadcast_ws(run_id: str, payload: dict[str, Any]) -> None:
+    """Broadcast an event to WebSocket subscribers for this run.
+
+    Fire-and-forget: never blocks the SSE stream on WS delivery.
+    """
+    try:
+        from reasoner.infrastructure.websocket import get_websocket_manager
+
+        manager = get_websocket_manager()
+        await manager.broadcast_event(payload, run_id)
+    except Exception:
+        pass
 
 
 # Creative-writing model tiers with 2 fallbacks each.
@@ -252,10 +285,46 @@ async def _stream_web_search_results(
         yield chunk
 
 
+async def _recall_neuro_context(problem: str, agent_id: str | None = None) -> list[dict[str, Any]]:
+    """Fetch relevant past context from Neuro memory."""
+    try:
+        import httpx
+
+        from reasoner.core.settings import settings
+
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(
+                f"{settings.internal_api_base_url}/neuro/recall",
+                json={
+                    "prompt": problem,
+                    "agent_id": agent_id,
+                    "max_results": 5,
+                    "compression": "none",
+                },
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return [
+                    {"content": c["content"], "source": c["source"], "relevance": c["relevance"]}
+                    for c in data.get("chunks", [])
+                ]
+    except Exception as exc:
+        logger.debug("Neuro recall failed, proceeding without memory: %s", exc)
+    return []
+
+
 async def run_stream(req: RunRequest, initial_state: PipelineState | None = None) -> AsyncGenerator[str, None]:
-    run_id = str(uuid.uuid4())
+    run_id = req.client_run_id or str(uuid.uuid4())
     cancel_event = await _run_store.add(run_id)
     try:
+        # ── Neuro Recall ──
+        recalled_chunks: list[dict[str, Any]] = []
+        if not req.no_cache:
+            conversation_id = initial_state.conversation_id if initial_state else None
+            recalled_chunks = await _recall_neuro_context(req.problem, agent_id=conversation_id)
+            if recalled_chunks:
+                logger.info("Neuro recall returned %d chunks", len(recalled_chunks))
+
         raw_preset = req.preset or "auto-budget"
         gate_preset_name, is_auto, auto_tier = _preset_service.resolve(raw_preset)
         auto_selected_method: str | None = None
@@ -302,14 +371,20 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             source_type=req.source_type,
             domain=req.domain,
             enhance_prompt=req.enhance_prompt,
+            expert=req.expert,
+            web_search=req.web_search,
+            smart_search=req.smart_search,
             attachments=getattr(req, "attachments", []) or [],
         )
         state = initial_state or PipelineState(problem=req.problem, preset_name=effective_preset_name)
+        if recalled_chunks:
+            state.memory_context = recalled_chunks
 
         logger.info(f"Pipeline start with routing: {router.describe()}")
         start_payload: dict = {"type": "start", "preset": effective_preset_name}
         if auto_selected_method:
             start_payload["auto_selected_method"] = auto_selected_method
+        await _broadcast_ws(run_id, start_payload)
         yield _event(start_payload)
 
         if req.enhance_prompt and not state.enhanced_problem:
@@ -424,6 +499,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             start_payload: dict[str, Any] = {"type": "phase_start", "phase": num, "name": name}
             if phase_start_models:
                 start_payload["models"] = phase_start_models
+            await _broadcast_ws(run_id, start_payload)
             yield _event(start_payload)
             phase_start = time.monotonic()
             try:
@@ -439,6 +515,20 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                 logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
                 err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
                 state.errors.append(err_msg)
+                err_type = classify_error(exc)
+                err_payload = {
+                    "type": "error",
+                    "error_type": err_type,
+                    "message": err_msg,
+                    "retryable": is_retryable(exc),
+                    "retry_after": getattr(exc, 'retry_after', None),
+                    "phase": num,
+                    "phase_name": name,
+                }
+                await _broadcast_ws(run_id, err_payload)
+                yield _event(err_payload)
+                # Keep emitting legacy phase_error for backwards compatibility
+                await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
                 yield _event({"type": "phase_error", "phase": num, "error": err_msg})
                 if name in CRITICAL_PHASES:
                     break
@@ -481,12 +571,14 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                         }
                         for s in subagent_outputs
                     ]
-            yield _event({
+            phase_complete_payload = {
                 "type": "phase_complete",
                 "phase": num,
                 "name": name,
                 "data": data,
-            })
+            }
+            await _broadcast_ws(run_id, phase_complete_payload)
+            yield _event(phase_complete_payload)
 
         token_source = state.detailed_token_usage if state.detailed_token_usage else state.phase_tokens
         total_input = sum(t.get("input", 0) for t in token_source.values())
@@ -520,16 +612,21 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
         except Exception as e:
             logger.warning(f"Failed to save history: {e}")
 
-        yield _event({
+        done_payload = {
             "type": "done",
             "errors": state.errors,
             "total_tokens": {"input": total_input, "output": total_output, "total": total_tokens},
             "duration": time.monotonic() - run_start,
-        })
+            "total_cost_usd": getattr(state, 'total_cost_usd', 0.0),
+            "phase_costs": getattr(state, 'phase_costs', {}),
+        }
+        await _broadcast_ws(run_id, done_payload)
+        yield _event(done_payload)
     except Exception as exc:
         import traceback
 
         print(f"Pipeline error: {str(exc)}\n{traceback.format_exc()}")
+        await _broadcast_ws(run_id, {"type": "done", "errors": [f"Pipeline processing error: {str(exc)}"]})
         yield _event({"type": "done", "errors": [f"Pipeline processing error: {str(exc)}"]})
     finally:
         await _run_store.remove(run_id)
@@ -559,7 +656,11 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
         top_k=req.top_k,
         sequential=req.sequential,
         enhance_prompt=req.enhance_prompt,
+        expert=req.expert,
+        web_search=req.web_search,
+        smart_search=req.smart_search,
         attachments=getattr(req, "attachments", []) or [],
+        client_run_id=req.client_run_id,
     )
     async for chunk in run_stream(run_req, initial_state=state):
         yield chunk
@@ -567,9 +668,11 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
     try:
         import httpx
 
+        from reasoner.core.settings import settings
+
         async with httpx.AsyncClient() as client:
             await client.post(
-                "http://127.0.0.1:50001/neuro/learn",
+                f"{settings.internal_api_base_url}/neuro/learn",
                 json={
                     "prompt": req.question,
                     "response": (

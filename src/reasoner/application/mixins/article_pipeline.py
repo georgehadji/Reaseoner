@@ -193,7 +193,13 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             data = {}
 
         subquestions = []
-        for sq in data.get("subquestions", []):
+        raw_sqs = data.get("subquestions", [])
+        if not isinstance(raw_sqs, list):
+            raw_sqs = []
+
+        for sq in raw_sqs:
+            if not isinstance(sq, dict):
+                continue
             subquestions.append(SubQuestion(
                 id=sq.get("id", f"Q{len(subquestions)+1}"),
                 question=sq.get("question", ""),

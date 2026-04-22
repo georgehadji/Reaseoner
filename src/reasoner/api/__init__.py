@@ -6,6 +6,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -15,6 +17,8 @@ from reasoner.core.constants import (
     TRUNCATION,
 )
 from fastapi.security import HTTPBearer
+from pydantic import BaseModel
+from datetime import datetime, timezone
 import logging
 
 # Setup logger
@@ -29,7 +33,40 @@ from reasoner.auth import get_auth_manager, AuthenticationError
 
 from reasoner.api.middleware import SecurityHeadersMiddleware
 
-app = FastAPI(title="ARA v2.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan: startup and shutdown orchestration."""
+    # ── Startup ──
+    from reasoner.application.event_bus.bus import init_default_subscribers
+    init_default_subscribers()
+
+    from reasoner.infrastructure.websocket import setup_event_bus_integration
+    await setup_event_bus_integration()
+
+    from reasoner.core.health_validator import validate_all
+    await validate_all()
+
+    logger.info("Reasoner startup complete")
+    logger.info(f"Web UI: http://{settings.SERVER_HOST}:{settings.SERVER_PORT}")
+    logger.info(f"API Docs: http://{settings.SERVER_HOST}:{settings.SERVER_PORT}/docs")
+    logger.info(f"WebSocket: ws://{settings.SERVER_HOST}:{settings.SERVER_PORT}/ws")
+    logger.info(f"Memory limit: {MEMORY_LIMIT_MB}MB (warning at {MEMORY_WARNING_MB}MB)")
+    logger.info(f"Request timeout: {REQUEST_TIMEOUT_SECONDS}s")
+
+    yield
+
+    # ── Shutdown ──
+    global _event_store
+    if _event_store and hasattr(_event_store, 'close'):
+        _event_store.close()
+
+    from reasoner.llm import OpenAICompatibleProvider
+    await OpenAICompatibleProvider.close_shared_pool()
+
+    logger.info("Reasoner shutdown complete")
+
+
+app = FastAPI(title="ARA v2.0", lifespan=lifespan)
 
 # Add security middleware
 app.add_middleware(SecurityHeadersMiddleware)
@@ -37,7 +74,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 # Add CORS middleware with restrictive defaults
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000", "http://localhost:8001", "http://127.0.0.1:8001"],  # Restrict to known origins
+    allow_origins=settings.cors_origins_list,  # Configurable via CORS_ORIGINS env var
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
@@ -323,18 +360,6 @@ from reasoner.api.routes.images import router as images_router
 app.include_router(images_router)
 
 
-@app.get("/api/presets")
-async def api_presets():
-    # SECURITY: Do not expose preset names, descriptions, or key requirements
-    return {}
-
-
-@app.get("/api/models")
-async def api_models():
-    # SECURITY: Do not expose available models or provider configuration
-    return []
-
-
 # ─────────────────────────────────────────────────────────────────────
 # EXTERNAL CONTEXT INTEGRATION
 # ─────────────────────────────────────────────────────────────────────
@@ -423,6 +448,94 @@ async def root():
 
 
 # ─────────────────────────────────────────────────────────────────────
+# COST ESTIMATE ENDPOINT
+# ─────────────────────────────────────────────────────────────────────
+
+@app.post("/api/estimate")
+async def estimate_cost(req: RunRequest):
+    """
+    Estimate tokens, cost, and duration for a pipeline run without executing it.
+    """
+    from reasoner.pricing import calculate_model_cost, get_pricing
+    from reasoner.presets import get_preset_tier
+    from reasoner.application.services.preset_service import PresetService
+
+    _preset_service = PresetService()
+    raw_preset = req.preset or "auto-budget"
+    gate_preset_name, is_auto, auto_tier = _preset_service.resolve(raw_preset)
+    tier = get_preset_tier(gate_preset_name)
+
+    # Rough token estimation based on prompt length + heuristic overhead
+    prompt_tokens = len(req.problem.split()) + 50  # words → tokens approx
+    num_phases = 8  # average phases per run
+    tokens_per_phase_input = 500
+    tokens_per_phase_output = 800
+
+    if tier == "premium":
+        tokens_per_phase_input = 1000
+        tokens_per_phase_output = 1500
+
+    estimated_input = prompt_tokens + (num_phases * tokens_per_phase_input)
+    estimated_output = num_phases * tokens_per_phase_output
+
+    # Get primary model pricing
+    primary_id = _REGISTRY.get(gate_preset_name, {}).get("primary", "openrouter/openai/gpt-4o-mini")
+    pricing = get_pricing(primary_id)
+    estimated_cost = calculate_model_cost(primary_id, estimated_input, estimated_output)
+
+    # Heuristic duration (seconds)
+    base_duration = 8 if tier == "budget" else 20
+    estimated_duration = base_duration + (len(req.problem.split()) / 50)
+
+    return {
+        "estimated_tokens_input": estimated_input,
+        "estimated_tokens_output": estimated_output,
+        "estimated_cost_usd": round(estimated_cost, 4),
+        "estimated_duration_seconds": round(estimated_duration, 1),
+        "preset": gate_preset_name,
+        "tier": tier,
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# FEEDBACK ENDPOINT
+# ─────────────────────────────────────────────────────────────────────
+
+import json as _json
+from pathlib import Path as _Path
+
+_FEEDBACK_FILE = _Path(__file__).parent.parent.parent / "feedback" / "feedback.jsonl"
+_FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+
+class FeedbackRequest(BaseModel):
+    conversation_id: str
+    message_id: str
+    rating: str  # "up" | "down"
+    reason: str | None = None
+    comment: str | None = None
+
+
+@app.post("/api/feedback")
+async def submit_feedback(req: FeedbackRequest):
+    """
+    Submit user feedback for a specific message.
+    Appends to a local JSONL file for later analysis.
+    """
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "conversation_id": req.conversation_id,
+        "message_id": req.message_id,
+        "rating": req.rating,
+        "reason": req.reason,
+        "comment": req.comment,
+    }
+    with open(_FEEDBACK_FILE, "a", encoding="utf-8") as f:
+        f.write(_json.dumps(entry) + "\n")
+    return {"status": "received"}
+
+
+# ─────────────────────────────────────────────────────────────────────
 # HEALTH CHECK ENDPOINT
 # ─────────────────────────────────────────────────────────────────────
 
@@ -481,42 +594,5 @@ async def health_check():
         health["status"] = "degraded"
     
     return health
-
-
-# ─────────────────────────────────────────────────────────────────────
-# STARTUP EVENTS
-# ─────────────────────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize components on startup."""
-    # Initialize event bus subscribers
-    from reasoner.application.event_bus.bus import init_default_subscribers
-    init_default_subscribers()
-
-    # Lazy initialization - components will be initialized on first use
-    # This prevents startup failures due to missing dependencies
-    logger.info("Reasoner startup complete")
-    logger.info("Web UI: http://localhost:8001")
-    logger.info("API Docs: http://localhost:8001/docs")
-    logger.info("WebSocket: ws://localhost:8001/ws")
-    
-    # Log memory limits
-    logger.info(f"Memory limit: {MEMORY_LIMIT_MB}MB (warning at {MEMORY_WARNING_MB}MB)")
-    logger.info(f"Request timeout: {REQUEST_TIMEOUT_SECONDS}s")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup on shutdown."""
-    global _event_store
-    if _event_store and hasattr(_event_store, 'close'):
-        _event_store.close()
-
-    # Close shared HTTP connection pool to prevent resource leaks
-    from reasoner.llm import OpenAICompatibleProvider
-    await OpenAICompatibleProvider.close_shared_pool()
-
-    logger.info("Reasoner shutdown complete")
 
 

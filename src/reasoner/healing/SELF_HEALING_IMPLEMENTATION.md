@@ -350,7 +350,7 @@ pytest healing/smoke_tests/ -v
 
 # Step 5: Deploy with health checks
 uvicorn asgi:app --reload --port 8000
-curl http://localhost:8000/healthz
+curl http://localhost:8001/healthz
 ```
 
 ### Run Healing Loop 3 (Evolutionary)

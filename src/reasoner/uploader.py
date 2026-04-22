@@ -5,6 +5,7 @@ Handles file uploads and text extraction from PDF, TXT, DOCX files.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -219,6 +220,17 @@ async def save_uploaded_file(content: bytes, filename: str) -> dict[str, Any]:
         # Extract text
         text_content = await extract_text(content, filename)
 
+        # Background: index for semantic retrieval if enabled
+        if file_id and text_content and len(text_content) > 0:
+            try:
+                from reasoner.core.settings import settings
+                if settings.DOCUMENT_SEMANTIC_RETRIEVAL_ENABLED:
+                    from reasoner.documents.vector_store import DocumentVectorStore
+                    store = DocumentVectorStore()
+                    asyncio.create_task(store.index_file(file_id, text_content))
+            except Exception as e:
+                logger.warning("Background document indexing failed for %s: %s", file_id, e)
+
         # Detect mime type for the response
         mime_type = {
             ".txt": "text/plain",
@@ -278,28 +290,39 @@ async def get_file_text(file_id: str) -> Optional[str]:
 
 def delete_file(file_id: str) -> bool:
     """
-    Delete an uploaded file.
-    
+    Delete an uploaded file and its vector sidecar.
+
     Args:
         file_id: The file ID to delete
-        
+
     Returns:
         True if deleted, False if not found
     """
     # Validate file_id to prevent glob injection
     if not file_id or not re.match(r'^[a-f0-9-]+$', file_id):
         return False
-    
+
+    deleted = False
     # Look for exact file by known extensions instead of globbing
     for ext in SUPPORTED_EXTENSIONS:
         f = UPLOAD_DIR / f"{file_id}{ext}"
         if f.exists():
             try:
                 f.unlink()
-                return True
+                deleted = True
             except Exception as e:
                 logger.error(f"Failed to delete file {file_id}: {e}")
-    return False
+
+    # Clean up vector sidecar if present
+    if deleted:
+        try:
+            from reasoner.documents.vector_store import DocumentVectorStore
+            store = DocumentVectorStore()
+            store.delete_index(file_id)
+        except Exception as e:
+            logger.warning(f"Failed to delete vector sidecar for {file_id}: {e}")
+
+    return deleted
 
 
 def list_uploads() -> list[dict[str, Any]]:

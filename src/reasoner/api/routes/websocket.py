@@ -21,8 +21,8 @@ async def websocket_connect(
     WebSocket endpoint for real-time pipeline updates.
 
     Usage:
-        ws://localhost:8000/ws
-        ws://localhost:8000/ws?pipeline_id=xxx
+        ws://<host>:<port>/ws
+        ws://<host>:<port>/ws?pipeline_id=xxx
 
     Messages:
         - subscribe: {"type": "subscribe", "pipeline_id": "xxx"}

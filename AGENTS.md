@@ -349,7 +349,7 @@ Copy `.env.example` to `.env` and fill in:
 - **Circuit Breaker:** Automatic fallback when providers fail (`circuit_breaker.py`)
 - **CSRF Protection:** CSRF token endpoints for state-changing operations
 - **Security Headers:** X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS (production)
-- **CORS:** Restricted to known origins (`localhost:8000/8001`)
+- **CORS:** Restricted to known origins (configurable via `CORS_ORIGINS` env var)
 
 ---
 

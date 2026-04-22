@@ -140,24 +140,44 @@ class ResumePipelineCommandHandler:
         self.llm_router = llm_router
         self.event_bus = get_event_bus()
     
-    async def handle(self, command: ResumePipelineCommand) -> PipelineAggregate:
-        """Resume pipeline from event history."""
+    async def handle(self, command: ResumePipelineCommand) -> dict[str, Any]:
+        """Resume pipeline from event history.
+
+        Reconstructs aggregate state from stored events and returns
+        the current status. Full execution resumption requires the
+        caller to re-submit a run request with the recovered context.
+        """
         # Load event history
         history = await self.event_store.get_events(command.pipeline_id)
-        
+        if not history:
+            raise ValueError(f"No pipeline found with ID: {command.pipeline_id}")
+
         # Rebuild aggregate
         aggregate = PipelineAggregate(aggregate_id=command.pipeline_id)
         aggregate.load_from_history(history)
-        
+
         # Check if can resume
         if not aggregate.can_resume():
-            raise ValueError(f"Pipeline {command.pipeline_id} cannot be resumed")
-        
-        # Resume from last phase — not supported by legacy pipeline
-        raise NotImplementedError(
-            "ResumePipelineCommand is not supported. "
-            "The new pipeline architecture has been removed."
-        )
+            raise ValueError(f"Pipeline {command.pipeline_id} cannot be resumed (status: {aggregate.state_data.status})")
+
+        last_phase = aggregate.get_last_phase()
+        synthesis_text = ""
+        if aggregate.state_data.synthesis and isinstance(aggregate.state_data.synthesis, dict):
+            synthesis_text = aggregate.state_data.synthesis.get("core_solution", "") or ""
+
+        return {
+            "pipeline_id": command.pipeline_id,
+            "status": aggregate.state_data.status,
+            "can_resume": True,
+            "last_phase": last_phase,
+            "phases_completed": [p["phase"] for p in aggregate.state_data.phase_results],
+            "total_tokens": aggregate.state_data.total_tokens,
+            "errors": aggregate.state_data.errors,
+            "problem": aggregate.state_data.problem,
+            "preset": aggregate.state_data.preset,
+            "method": aggregate.state_data.method,
+            "previous_synthesis": synthesis_text,
+        }
 
 
 class StopPipelineCommandHandler:
@@ -363,8 +383,6 @@ class ListPresetsQueryHandler:
             return "budget"
         elif "premium" in preset_name:
             return "premium"
-        elif "balanced" in preset_name:
-            return "balanced"
         else:
             return "standard"
 

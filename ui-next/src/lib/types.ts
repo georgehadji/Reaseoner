@@ -19,7 +19,7 @@ export interface TokenCount {
 }
 
 export interface PhaseEvent {
-  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk';
+  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk' | 'widget';
   phase?: number;
   name?: string;
   data?: Record<string, unknown>;
@@ -41,6 +41,13 @@ export interface PhaseEvent {
   error?: string | null;
   /** Streaming text chunk */
   text?: string;
+  /** Structured error fields */
+  error_type?: string;
+  retryable?: boolean;
+  retry_after?: number;
+  /** Cost transparency fields on done event */
+  total_cost_usd?: number;
+  phase_costs?: Record<string, number>;
 }
 
 export interface Attachment {
@@ -58,6 +65,13 @@ export interface ConversationTurn {
   attachments?: Attachment[];
 }
 
+export interface WidgetData {
+  widget_type: string;
+  name: string;
+  result: Record<string, unknown>;
+  citations?: string[];
+}
+
 export interface Conversation {
   id: string;
   conversation_id: string;
@@ -73,7 +87,10 @@ export interface Conversation {
   kind?: 'pipeline' | 'search' | 'image';
   response_content?: string;
   images?: Array<{ data: string; model?: string }>;
+  widgets?: WidgetData[];
   prompt_meta?: { original?: string; enhanced?: string };
+  /** Pipeline aggregate ID for resume functionality */
+  pipeline_id?: string;
 }
 
 export interface AttachmentRef {
@@ -90,7 +107,11 @@ export interface RunRequest {
   top_k: number;
   sequential: boolean;
   enhance_prompt: boolean;
+  expert?: boolean;
+  web_search?: boolean;
+  smart_search?: boolean;
   attachments?: AttachmentRef[];
+  client_run_id?: string;
 }
 
 export interface RunFollowupRequest {
@@ -99,6 +120,10 @@ export interface RunFollowupRequest {
   top_k: number;
   sequential: boolean;
   enhance_prompt: boolean;
+  expert?: boolean;
+  web_search?: boolean;
+  smart_search?: boolean;
+  client_run_id?: string;
   conversation_id: string;
   history: ConversationTurn[];
   previous_synthesis: string;

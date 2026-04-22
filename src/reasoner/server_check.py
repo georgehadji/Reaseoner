@@ -142,9 +142,10 @@ def main():
         print("  To start the server:")
         print("    python start_all.py")
         print("  Or:")
-        print("    python -m uvicorn asgi:app --host 0.0.0.0 --port 8001")
+        from reasoner.core.settings import settings
+        print(f"    python -m uvicorn asgi:app --host {settings.UVICORN_HOST} --port {settings.SERVER_PORT}")
         print()
-        print("  Then open: http://localhost:8001")
+        print(f"  Then open: http://{settings.SERVER_HOST}:{settings.SERVER_PORT}")
         print("=" * 60)
         return 0
     else:

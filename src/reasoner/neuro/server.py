@@ -22,6 +22,8 @@ from reasoner.neuro.providers import create_resilient_reasoning, create_resilien
 from reasoner.neuro.cache import L1Cache, L2Index, l3_scan, ContextChunk
 from reasoner.neuro.sessions import SessionManager, SessionConfig
 from reasoner.neuro.compression import smart_compress
+from reasoner.core.rerank import rerank_memory_chunks
+from reasoner.core.settings import settings
 
 log = logging.getLogger("neuro.api")
 
@@ -240,6 +242,15 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
         if remaining > 0:
             all_chunks.extend(l2.search(query_embedding, top_k=remaining, persona=persona))
 
+        # Optional: cross-encoder rerank for higher precision
+        if len(all_chunks) > 1 and settings.COHERE_RERANK_ENABLED:
+            try:
+                all_chunks = await rerank_memory_chunks(
+                    req.prompt, all_chunks, top_k=req.max_results
+                )
+            except Exception as exc:
+                log.warning("Memory rerank failed in recall: %s", exc)
+
         # Apply compression if requested (results are cached by content hash + level)
         if req.compression != "none":
             for chunk in all_chunks:
@@ -295,5 +306,16 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
             status="learned", session_id=result["session_id"],
             entry_number=result["entry_number"], agent_id=req.agent_id,
         )
+
+    @router.get("/sessions")
+    async def list_sessions(
+        agent_id: Optional[str] = None,
+        limit: int = 20,
+        offset: int = 0,
+    ):
+        """List recent session entries for browsing memory."""
+        tenant = await tenants.get(agent_id)
+        entries = tenant["sessions"].list_recent_entries(limit=limit, offset=offset)
+        return {"entries": entries, "total": len(entries)}
 
     return router

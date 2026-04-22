@@ -13,7 +13,6 @@ if "%1"=="--quiet" set SHOW_PORTS=0
 
 if %SHOW_PORTS%==1 (
     echo [INFO] Checking ports...
-    powershell -NoProfile -Command "try { $c = Get-NetTCPConnection -LocalPort 8000 -ErrorAction Stop; $p = Get-Process -Id $c[0].OwningProcess; Write-Host ('  Port 8000 in use by: ' + $p.ProcessName + ' (PID ' + $p.Id + ')') } catch { Write-Host '  Port 8000: free' }"
     powershell -NoProfile -Command "try { $c = Get-NetTCPConnection -LocalPort 8001 -ErrorAction Stop; $p = Get-Process -Id $c[0].OwningProcess; Write-Host ('  Port 8001 in use by: ' + $p.ProcessName + ' (PID ' + $p.Id + ')') } catch { Write-Host '  Port 8001: free' }"
     powershell -NoProfile -Command "try { $c = Get-NetTCPConnection -LocalPort 3000 -ErrorAction Stop; $p = Get-Process -Id $c[0].OwningProcess; Write-Host ('  Port 3000 in use by: ' + $p.ProcessName + ' (PID ' + $p.Id + ')') } catch { Write-Host '  Port 3000: free' }"
     echo.

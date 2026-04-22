@@ -32,17 +32,17 @@ export async function POST(req: NextRequest) {
     const body = await readJsonBody(req);
     const payload = validateRunRequest(body);
 
-    const headers = sanitizeRequestHeaders(req.headers);
+    const headers = new Headers(sanitizeRequestHeaders(req.headers));
+    headers.set('Content-Type', 'application/json');
     const upstream = await fetch(upstreamUrl, {
       method: 'POST',
-      headers: { ...headers, 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(payload),
     });
 
     if (upstream.status === 422) {
       const clone = upstream.clone();
       const text = await clone.text().catch(() => '');
-      // eslint-disable-next-line no-console
       console.error('Upstream 422 response body:', text);
     }
 
@@ -59,7 +59,6 @@ export async function POST(req: NextRequest) {
     const errName = err instanceof Error ? err.constructor.name : 'Unknown';
 
     // Log connection details for debugging
-    // eslint-disable-next-line no-console
     console.error(`Proxy error [${errName}] upstream=${upstreamUrl || 'N/A'}:`, msg);
 
     // Connection-level errors (network, DNS, timeout) → 504 Gateway Timeout

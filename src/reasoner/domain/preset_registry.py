@@ -5,7 +5,8 @@ from __future__ import annotations
 from reasoner.core.constants import (
     IMAGE_GEN_BUDGET_PRESET,
     IMAGE_GEN_PREMIUM_PRESET,
-    MODEL_GEMINI_FLASH_IMAGE,
+    MODEL_FLUX_2_FLEX,
+    MODEL_FLUX_2_PRO,
     MODEL_GEMINI_PRO_IMAGE,
 )
 from reasoner.domain.preset_core import PipelinePreset
@@ -1353,20 +1354,22 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": IMAGE_GEN_BUDGET_PRESET,
         "name": "Image Generation (Budget)",
-        "description": "Generate images using the cheapest capable multimodal models. Gemini 2.5 Flash Image primary, GPT-5 Image Mini fallback.",
-        "primary_id": MODEL_GEMINI_FLASH_IMAGE,
+        "description": "Generate images using Flux 2 Flex and Riverflow v2 Fast Preview as primary models, with Seedream 4.5, Flux 2 Pro, and Riverflow v2 Standard Preview as fallbacks.",
+        "primary_id": MODEL_FLUX_2_FLEX,
         "routing": {},
         "fallback_routing": {},
         "notes": [
-            "Gemini 2.5 Flash Image: $0.30/M input, $2.50/M output — best value-for-money",
-            "GPT-5 Image Mini fallback: fast with good text rendering",
-            "Gemini 3.1 Flash Image Preview final fallback: Pro-level quality at flash speed",
+            "Flux 2 Flex: efficient open‑source image model, fast and cost‑effective",
+            "Riverflow v2 Fast Preview: optimized for speed with good quality",
+            "Seedream 4.5 fallback: ByteDance's capable image model",
+            "Flux 2 Pro fallback: higher quality with more detail",
+            "Riverflow v2 Standard Preview fallback: balanced quality and speed",
         ],
     },
     {
         "id": IMAGE_GEN_PREMIUM_PRESET,
         "name": "Image Generation (Premium)",
-        "description": "Generate images using top-tier multimodal models. Gemini 3 Pro Image (Nano Banana Pro) primary, GPT-5 Image fallback.",
+        "description": "Generate images using Flux 2 Pro and Riverflow v2 Pro as primary models, with Flux 2 Max, Riverflow v2 Max Preview, and Seedream 4.5 as fallbacks.",
         "primary_id": MODEL_GEMINI_PRO_IMAGE,
         "routing": {},
         "fallback_routing": {},

@@ -73,13 +73,15 @@ export async function generateSignedCsrfToken(): Promise<string> {
   return signCsrfToken(generateCsrfToken());
 }
 
+import { REASONER_API_BASE } from './server-config';
+
 export function getApiBaseUrl(): string {
   if (process.env.API_BASE_URL) return process.env.API_BASE_URL;
   if (process.env.NEXT_PUBLIC_API_BASE_URL) {
     console.warn('SECURITY: Using NEXT_PUBLIC_API_BASE_URL. Prefer API_BASE_URL (server-only).');
     return process.env.NEXT_PUBLIC_API_BASE_URL;
   }
-  return 'http://127.0.0.1:8001';
+  return REASONER_API_BASE;
 }
 
 export function validateUpstreamUrl(url: string): string {
@@ -119,6 +121,7 @@ export function sanitizeRequestHeaders(headers: Headers): Record<string, string>
     'authorization',
     'accept',
     'accept-language',
+    'content-type',
     CSRF_HEADER,
   ]);
   const out: Record<string, string> = {};

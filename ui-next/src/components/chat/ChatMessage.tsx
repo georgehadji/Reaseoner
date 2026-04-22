@@ -1,13 +1,13 @@
 'use client';
 
-
+import { memo } from 'react';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
   children: React.ReactNode;
 }
 
-export function ChatMessage({ role, children }: ChatMessageProps) {
+const ChatMessageComponent = ({ role, children }: ChatMessageProps) => {
   const isUser = role === 'user';
 
   return (
@@ -23,7 +23,9 @@ export function ChatMessage({ role, children }: ChatMessageProps) {
       </div>
     </div>
   );
-}
+};
+
+export const ChatMessage = memo(ChatMessageComponent);
 
 import { TIMING } from '@/lib/config';
 

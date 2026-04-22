@@ -307,8 +307,8 @@ async def websocket_endpoint(
     WebSocket endpoint for real-time updates.
     
     Usage:
-        ws://localhost:8000/ws
-        ws://localhost:8000/ws?pipeline_id=xxx
+        ws://<host>:<port>/ws
+        ws://<host>:<port>/ws?pipeline_id=xxx
     """
     manager = get_websocket_manager()
     
@@ -379,6 +379,19 @@ async def handle_websocket_message(
         if pipeline_id:
             await manager.unsubscribe(connection_id, pipeline_id)
     
+    elif msg_type == 'stop':
+        pipeline_id = message.get('pipeline_id')
+        if pipeline_id:
+            from reasoner.api.run_state import _run_store
+            await _run_store.request_cancel(pipeline_id)
+            await manager.send_to_connection(
+                connection_id,
+                WebSocketMessage(
+                    type='stopped',
+                    data={'pipeline_id': pipeline_id},
+                ),
+            )
+
     elif msg_type == 'ping':
         await manager.send_to_connection(
             connection_id,

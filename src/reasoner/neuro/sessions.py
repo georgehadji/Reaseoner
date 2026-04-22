@@ -440,6 +440,31 @@ class SessionManager:
 
         return "\n".join(lines)
 
+    def list_recent_entries(self, limit: int = 20, offset: int = 0) -> list[dict]:
+        """Return recent exchange entries across hot sessions, paginated.
+
+        Results are sorted by timestamp descending (newest first).
+        """
+        all_exchanges: list[dict] = []
+        for session_file in sorted(self.hot_dir.glob("*.jsonl"), reverse=True):
+            if len(all_exchanges) >= limit + offset:
+                break
+            entries = self._read_jsonl(session_file)
+            exchanges = [e for e in entries if e.get("_type") == "exchange"]
+            all_exchanges.extend(exchanges)
+
+        all_exchanges.sort(key=lambda e: e.get("timestamp", ""), reverse=True)
+        page = all_exchanges[offset:offset + limit]
+        return [
+            {
+                "timestamp": e.get("timestamp", ""),
+                "prompt_preview": str(e.get("prompt", ""))[:200],
+                "response_preview": str(e.get("response", ""))[:200],
+                "session_id": e.get("metadata", {}).get("session_id", ""),
+            }
+            for e in page
+        ]
+
     @property
     def stats(self) -> dict:
         """Get session storage stats."""

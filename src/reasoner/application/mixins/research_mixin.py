@@ -74,7 +74,8 @@ class ResearchMixin(PipelineMixinProtocol):
                     self._log("RESEARCH", f"Query failed '{q}': {exc}", state)
                     return []
                     
-            results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries])
+            results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries], return_exceptions=True)
+            results_nested = [r for r in results_nested if not isinstance(r, Exception)]
             
             # Flatten and deduplicate
             new_results = []

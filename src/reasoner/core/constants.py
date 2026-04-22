@@ -125,6 +125,7 @@ OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
 GOOGLE_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
+PERPLEXITY_BASE_URL: str = "https://api.perplexity.ai"
 
 # ═════════════════════════════════════════════════════════════════════
 # MODEL ALIASES
@@ -219,16 +220,16 @@ IMAGE_GEN_REMOTE_TIMEOUT_SECONDS: float = 20.0
 IMAGE_GEN_COMPLETION_TIMEOUT_SECONDS: float = 90.0
 IMAGE_GEN_ENHANCEMENT_MODEL: str = MODEL_GEMINI_FLASH
 IMAGE_GEN_PRESETS: dict[str, list[str]] = {
-    "budget": [MODEL_GEMINI_FLASH_IMAGE, MODEL_GPT5_IMAGE_MINI],
-    "premium": [MODEL_GEMINI_PRO_IMAGE, MODEL_GPT5_IMAGE],
-    IMAGE_GEN_BUDGET_PRESET: [MODEL_GEMINI_FLASH_IMAGE, MODEL_GPT5_IMAGE_MINI],
-    IMAGE_GEN_PREMIUM_PRESET: [MODEL_GEMINI_PRO_IMAGE, MODEL_GPT5_IMAGE],
+    "budget": ["flux.2-flex", "riverflow-v2-fast-preview"],
+    "premium": ["flux.2-pro", "riverflow-v2-pro"],
+    IMAGE_GEN_BUDGET_PRESET: ["flux.2-flex", "riverflow-v2-fast-preview"],
+    IMAGE_GEN_PREMIUM_PRESET: ["flux.2-pro", "riverflow-v2-pro"],
 }
 IMAGE_GEN_FALLBACKS: dict[str, list[str]] = {
-    "budget": [MODEL_GEMINI_31_FLASH_IMAGE_PREVIEW, MODEL_FLUX_2_FLEX],
-    "premium": [MODEL_GPT5_IMAGE_MINI, MODEL_FLUX_2_PRO, MODEL_FLUX_2_FLEX],
-    IMAGE_GEN_BUDGET_PRESET: [MODEL_GEMINI_31_FLASH_IMAGE_PREVIEW, MODEL_FLUX_2_FLEX],
-    IMAGE_GEN_PREMIUM_PRESET: [MODEL_GPT5_IMAGE_MINI, MODEL_FLUX_2_PRO, MODEL_FLUX_2_FLEX],
+    "budget": ["seedream-4.5", "flux.2-pro", "riverflow-v2-standard-preview"],
+    "premium": ["flux.2-max", "riverflow-v2-max-preview", "seedream-4.5"],
+    IMAGE_GEN_BUDGET_PRESET: ["seedream-4.5", "flux.2-pro", "riverflow-v2-standard-preview"],
+    IMAGE_GEN_PREMIUM_PRESET: ["flux.2-max", "riverflow-v2-max-preview", "seedream-4.5"],
 }
 IMAGE_GEN_ENHANCEMENT_SYSTEM_PROMPT: str = (
     "You are an expert image-generation prompt engineer for DALL-E 3, Midjourney, and Flux. "

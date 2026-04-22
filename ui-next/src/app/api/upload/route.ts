@@ -50,7 +50,6 @@ export async function POST(req: NextRequest) {
     const msg = err instanceof Error ? err.message : 'Proxy error';
     const errName = err instanceof Error ? err.constructor.name : 'Unknown';
 
-    // eslint-disable-next-line no-console
     console.error(`Upload proxy error [${errName}] upstream=${upstreamUrl || 'N/A'}:`, msg);
 
     const isConnectionError =

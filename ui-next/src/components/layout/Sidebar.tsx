@@ -3,7 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Conversation } from '@/lib/types';
-import { Plus, PanelLeft, Trash2 } from 'lucide-react';
+import { Plus, PanelLeft, Trash2, Brain, History, Play } from 'lucide-react';
+import { NeuroPanel } from './NeuroPanel';
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -11,6 +12,13 @@ interface SidebarProps {
   onDelete: (id: string) => void;
   onClear: () => void;
   onNew: () => void;
+  onResume?: (pipelineId: string) => void;
+  /** Current conversation ID for Neuro tenant isolation */
+  conversationId?: string | null;
+  /** Last user prompt for manual Neuro Learn */
+  lastUserPrompt?: string;
+  /** Last assistant response for manual Neuro Learn */
+  lastAssistantResponse?: string;
 }
 
 function formatDateGroup(dateStr: string): string {
@@ -33,9 +41,42 @@ function formatDateGroup(dateStr: string): string {
   return 'Older';
 }
 
-export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew }: SidebarProps) {
+function MemoryStatus() {
+  const [status, setStatus] = useState<'ok' | 'degraded' | 'unknown'>('unknown');
+
+  useMemo(() => {
+    fetch('/api/neuro/health')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((d) => setStatus(d.status === 'ok' ? 'ok' : 'degraded'))
+      .catch(() => setStatus('unknown'));
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)]">
+      <Brain className="h-3.5 w-3.5" />
+      <span>Memory</span>
+      <span
+        className={`ml-auto h-2 w-2 rounded-full ${
+          status === 'ok'
+            ? 'bg-green-500'
+            : status === 'degraded'
+            ? 'bg-amber-500'
+            : 'bg-gray-400'
+        }`}
+        title={status === 'ok' ? 'Healthy' : status === 'degraded' ? 'Degraded' : 'Unavailable'}
+      />
+    </div>
+  );
+}
+
+export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onResume, conversationId, lastUserPrompt, lastAssistantResponse }: SidebarProps) {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const neuroPanelOpen = useAppStore((s) => s.neuroPanelOpen);
+  const toggleNeuroPanel = useAppStore((s) => s.toggleNeuroPanel);
   const [query, setQuery] = useState('');
   const [activeTag, setActiveTag] = useState<string | null>(null);
 
@@ -118,123 +159,178 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew }: Sid
         <div className="mx-3 h-px bg-[var(--border)]" />
 
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-3">
-          <input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search conversations"
-            className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
-          />
-
-          {(methodTags.length > 0 || presetTags.length > 0) && (
-            <div className="flex flex-wrap gap-1">
-              {activeTag && (
-                <button
-                  type="button"
-                  onClick={() => setActiveTag(null)}
-                  className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
-                >
-                  Clear
-                </button>
-              )}
-              {methodTags.slice(0, 4).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setActiveTag(tag === activeTag ? null : tag)}
-                  className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-                    activeTag === tag
-                      ? 'bg-[var(--accent)] text-[var(--accent-text)]'
-                      : 'border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
-                  }`}
-                >
-                  {String(tag)}
-                </button>
-              ))}
-              {presetTags.slice(0, 4).map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onClick={() => setActiveTag(tag === activeTag ? null : tag)}
-                  className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-                    activeTag === tag
-                      ? 'bg-[var(--accent)] text-[var(--accent-text)]'
-                      : 'border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
-                  }`}
-                >
-                  {String(tag)}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {filtered.length === 0 && (
-            <div className="py-4 text-sm text-[var(--text-muted)]">No history yet</div>
-          )}
-
-          <div className="flex flex-col gap-4">
-            {grouped.map(({ group, items }) => (
-              <div key={group} className="flex flex-col gap-1">
-                <div className="px-2 text-xs font-medium text-[var(--text-subtle)]">
-                  {group}
-                </div>
-                {items.map((conv) => {
-                  const title =
-                    conv.problem.length > 45 ? conv.problem.slice(0, 45) + '…' : conv.problem;
-                  const tokens = conv.total_tokens?.total ?? 0;
-
-                  return (
-                    <div
-                      key={conv.id}
-                      className="group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--surface-2)]"
-                      onClick={() => onLoad(conv)}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm text-[var(--text-2)]" title={conv.problem}>
-                          {title}
-                        </div>
-                        <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                          {conv.method && conv.method !== 'multi_perspective' && (
-                            <span className="text-[10px] text-[var(--text-muted)]">
-                              {conv.method.replace(/_/g, '-')}
-                            </span>
-                          )}
-                          {conv.preset && (
-                            <span className="rounded border border-[var(--border)] px-1 text-[10px] text-[var(--text-subtle)]">
-                              {conv.preset}
-                            </span>
-                          )}
-                          {tokens > 0 && (
-                            <span className="text-[10px] text-[var(--text-subtle)]">
-                              {tokens.toLocaleString()} tokens
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDelete(conv.id);
-                        }}
-                        className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-colors hover:bg-[var(--surface-3)] hover:text-red-500 group-hover:opacity-100"
-                        aria-label="Delete conversation"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+          {/* Tab switcher */}
+          <div className="flex gap-1">
+            <button
+              type="button"
+              onClick={() => neuroPanelOpen && toggleNeuroPanel()}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                !neuroPanelOpen
+                  ? 'bg-[var(--surface-2)] text-[var(--text)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
+              }`}
+            >
+              <History className="h-3.5 w-3.5" />
+              History
+            </button>
+            <button
+              type="button"
+              onClick={() => !neuroPanelOpen && toggleNeuroPanel()}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium transition-colors ${
+                neuroPanelOpen
+                  ? 'bg-[var(--surface-2)] text-[var(--text)]'
+                  : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
+              }`}
+            >
+              <Brain className="h-3.5 w-3.5" />
+              Memory
+            </button>
           </div>
+
+          {neuroPanelOpen ? (
+            <NeuroPanel
+              conversationId={conversationId}
+              lastUserPrompt={lastUserPrompt}
+              lastAssistantResponse={lastAssistantResponse}
+            />
+          ) : (
+            <>
+              <input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search conversations"
+                className="h-9 rounded-lg border border-[var(--border)] bg-[var(--bg)] px-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] focus:border-[var(--border-strong)] focus:outline-none"
+              />
+
+              {(methodTags.length > 0 || presetTags.length > 0) && (
+                <div className="flex flex-wrap gap-1">
+                  {activeTag && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTag(null)}
+                      className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+                    >
+                      Clear
+                    </button>
+                  )}
+                  {methodTags.slice(0, 4).map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setActiveTag(tag === activeTag ? null : tag)}
+                      className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
+                        activeTag === tag
+                          ? 'bg-[var(--accent)] text-[var(--accent-text)]'
+                          : 'border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {String(tag)}
+                    </button>
+                  ))}
+                  {presetTags.slice(0, 4).map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => setActiveTag(tag === activeTag ? null : tag)}
+                      className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
+                        activeTag === tag
+                          ? 'bg-[var(--accent)] text-[var(--accent-text)]'
+                          : 'border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text-muted)] hover:text-[var(--text)]'
+                      }`}
+                    >
+                      {String(tag)}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {filtered.length === 0 && (
+                <div className="py-4 text-sm text-[var(--text-muted)]">No history yet</div>
+              )}
+
+              <div className="flex flex-col gap-4">
+                {grouped.map(({ group, items }) => (
+                  <div key={group} className="flex flex-col gap-1">
+                    <div className="px-2 text-xs font-medium text-[var(--text-subtle)]">
+                      {group}
+                    </div>
+                    {items.map((conv) => {
+                      const title =
+                        conv.problem.length > 45 ? conv.problem.slice(0, 45) + '…' : conv.problem;
+                      const tokens = conv.total_tokens?.total ?? 0;
+
+                      return (
+                        <div
+                          key={conv.id}
+                          className="group flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-[var(--surface-2)]"
+                          onClick={() => onLoad(conv)}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm text-[var(--text-2)]" title={conv.problem}>
+                              {title}
+                            </div>
+                            <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                              {conv.method && conv.method !== 'multi_perspective' && (
+                                <span className="text-[10px] text-[var(--text-muted)]">
+                                  {conv.method.replace(/_/g, '-')}
+                                </span>
+                              )}
+                              {conv.preset && (
+                                <span className="rounded border border-[var(--border)] px-1 text-[10px] text-[var(--text-subtle)]">
+                                  {conv.preset}
+                                </span>
+                              )}
+                              {tokens > 0 && (
+                                <span className="text-[10px] text-[var(--text-subtle)]">
+                                  {tokens.toLocaleString()} tokens
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {onResume && conv.pipeline_id && conv.kind === 'pipeline' && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onResume(conv.pipeline_id!);
+                                }}
+                                className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)] group-hover:opacity-100"
+                                aria-label="Resume pipeline"
+                                title="Resume pipeline"
+                              >
+                                <Play className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDelete(conv.id);
+                              }}
+                              className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-colors hover:bg-[var(--surface-3)] hover:text-red-500 group-hover:opacity-100"
+                              aria-label="Delete conversation"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         <div className="border-t border-[var(--border)] p-3">
+          <MemoryStatus />
           <button
             type="button"
             onClick={onClear}
-            className="w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+            className="mt-2 w-full rounded-lg px-3 py-2 text-left text-sm text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
           >
             Clear cache
           </button>

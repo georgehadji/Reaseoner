@@ -32,7 +32,7 @@ from reasoner.core.constants import DEFAULT_SEARXNG_URL
 # ─────────────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
-MAIN_SERVER_CMD = [sys.executable, "-m", "uvicorn", "asgi:app", "--host", "0.0.0.0", "--port", "8001"]
+MAIN_SERVER_CMD = [sys.executable, "-m", "uvicorn", "asgi:app", "--host", settings.UVICORN_HOST, "--port", "8001"]
 NEURO_SERVER_CMD = [sys.executable, "-m", "reasoner.neuro.cli", "start"]
 FRONTEND_DIR = REPO_ROOT / "ui-next"
 FRONTEND_CMD = ["npm", "run", "dev"]

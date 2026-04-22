@@ -617,6 +617,11 @@ async def _generate_image_with_images_api(
     """Fallback to the dedicated images API when chat completions returns no image."""
     if reference_images:
         return None
+    # OpenRouter does not support the /images/generations endpoint;
+    # image generation works through chat.completions.create instead.
+    base_url = str(getattr(client, "base_url", "") or "")
+    if "openrouter.ai" in base_url:
+        return None
     kwargs: dict[str, Any] = {
         "model": model_id,
         "prompt": prompt,
@@ -699,7 +704,7 @@ async def generate_image_with_model(
 
     modalities = _get_modalities(model_id)
 
-    if _should_prefer_images_api(model_id) and not reference_images:
+    if _should_prefer_images_api(model_id) and not reference_images and "openrouter.ai" not in str(client.base_url or ""):
         image_candidate = await _generate_image_with_images_api(
             client,
             model_id,
@@ -857,8 +862,18 @@ async def generate_images(
         }
     """
     tier = preset if preset in IMAGE_GEN_PRESETS else "budget"
-    model_aliases = IMAGE_GEN_PRESETS[tier]
-    fallback_aliases = IMAGE_GEN_FALLBACKS.get(tier, [])
+    # When reference images are provided we need multimodal models that accept
+    # image input (Flux/Riverflow are text-to-image only).
+    if reference_images:
+        if tier in ("budget", IMAGE_GEN_BUDGET_PRESET):
+            model_aliases = ["gemini-flash-image", "gpt-5-image-mini"]
+            fallback_aliases = ["gemini-3.1-flash-image-preview", "gemini-pro-image"]
+        else:
+            model_aliases = ["gemini-pro-image", "gpt-5-image"]
+            fallback_aliases = ["gemini-3.1-flash-image-preview", "gemini-flash-image"]
+    else:
+        model_aliases = IMAGE_GEN_PRESETS[tier]
+        fallback_aliases = IMAGE_GEN_FALLBACKS.get(tier, [])
     required_image_count = 2
 
     # 1. Optional prompt enhancement

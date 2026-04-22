@@ -10,6 +10,7 @@ import { SynthesisCard } from './SynthesisCard';
 import { ClassificationCard } from './ClassificationCard';
 import { CritiqueCard } from './CritiqueCard';
 import { buildMarkdownFromPhase } from '@/lib/markdown';
+import { copyToClipboard } from '@/lib/utils';
 
 function isSynthesisPhase(name: string): boolean {
   return /synthesis|report|theory|conclusion|verdict|redesign|aufhebung|transfer/i.test(name);
@@ -20,6 +21,7 @@ interface PhaseRendererProps {
   onComplete?: () => void;
   animationKey?: string;
   animated?: boolean;
+  forceOpen?: boolean | null;
 }
 
 function getTokens(data: unknown): { input?: number; output?: number } | null {
@@ -64,12 +66,52 @@ function getDuration(data: unknown): number | undefined {
   return typeof duration === 'number' ? duration : undefined;
 }
 
-export function PhaseRenderer({ phase, onComplete, animationKey, animated = true }: PhaseRendererProps) {
+function getSynthesisSections(data: unknown): {
+  criticalInsights: string[];
+  actionBlueprint: Array<string | { step?: string; action?: string }>;
+  openQuestions: string[];
+  sources: Array<{ title?: string; url?: string }>;
+} | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  return {
+    criticalInsights: Array.isArray(d.critical_insights) ? (d.critical_insights as string[]) : [],
+    actionBlueprint: Array.isArray(d.action_blueprint) ? (d.action_blueprint as Array<string | { step?: string; action?: string }>) : [],
+    openQuestions: Array.isArray(d.open_questions) ? (d.open_questions as string[]) : [],
+    sources: Array.isArray(d.sources) ? (d.sources as Array<{ title?: string; url?: string }>) : [],
+  };
+}
+
+function getSynthesisHighlights(data: unknown): Array<{ label: string; value: number }> | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const highlights = [
+    { label: 'insights', value: Array.isArray(d.critical_insights) ? d.critical_insights.length : 0 },
+    { label: 'actions', value: Array.isArray(d.action_blueprint) ? d.action_blueprint.length : 0 },
+    { label: 'questions', value: Array.isArray(d.open_questions) ? d.open_questions.length : 0 },
+    { label: 'sources', value: Array.isArray(d.sources) ? d.sources.length : 0 },
+  ].filter((item) => item.value > 0);
+  return highlights.length > 0 ? highlights : null;
+}
+
+function getVettedContext(data: unknown): Array<Record<string, unknown>> {
+  if (!data || typeof data !== 'object') return [];
+  const d = data as Record<string, unknown>;
+  const context = d.vetted_context;
+  if (!Array.isArray(context)) return [];
+  return context.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
+}
+
+export function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
   const subagents = getSubagents(data);
   const duration = getDuration(data);
+  const synthesisHighlights = getSynthesisHighlights(data);
+  const synthesisSections = getSynthesisSections(data);
+  const vettedContext = getVettedContext(data);
+  const defaultOpen = isSynthesisPhase(name) || phaseNum === 0;
 
   // Direct Response / Web Search: render inline without a phase card
   if (name === 'Direct Response' || name === 'Web Search') {
@@ -89,7 +131,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
     ('task_type' in data || 'rationale' in data)
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
         <ClassificationCard data={data} />
         {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
@@ -106,7 +148,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
     scoresArray.length > 0
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
         <CritiqueCard data={data} />
         {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
@@ -121,7 +163,8 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+        {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
         ) : (
@@ -139,7 +182,8 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+        {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
         ) : (
@@ -160,7 +204,8 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+        {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
         ) : (
@@ -177,9 +222,89 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
     typeof data === 'object' &&
     ('core_solution' in data || 'action_blueprint' in data)
   ) {
-    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data, {
+      omitSections: ['critical_insights', 'action_blueprint', 'open_questions', 'sources'],
+    });
     return (
-      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} highlights={synthesisHighlights} defaultOpen>
+        {synthesisSections && (
+          <div className="mb-4 grid gap-4">
+            {synthesisSections.criticalInsights.length > 0 && (
+              <section id="critical-insights" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Critical Insights</h3>
+                <ol className="list-decimal space-y-1 pl-5 text-[15px] text-[var(--text)]">
+                  {synthesisSections.criticalInsights.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ol>
+              </section>
+            )}
+            {synthesisSections.actionBlueprint.length > 0 && (
+              <section id="action-blueprint" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-[var(--text)]">Action Blueprint</h3>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const lines = synthesisSections.actionBlueprint.map((item, i) => {
+                        if (typeof item === 'string') return `- ${item}`;
+                        const step = item.step || `Step ${i + 1}`;
+                        const action = item.action || '';
+                        return `- ${step}: ${action}`;
+                      });
+                      copyToClipboard(lines.join('\n'));
+                    }}
+                    className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]"
+                  >
+                    Copy actions
+                  </button>
+                </div>
+                <ul className="space-y-1 text-[15px] text-[var(--text)]">
+                  {synthesisSections.actionBlueprint.map((item, i) => {
+                    if (typeof item === 'string') {
+                      return <li key={i}>• {item}</li>;
+                    }
+                    const step = item.step || `Step ${i + 1}`;
+                    const action = item.action || '';
+                    return (
+                      <li key={i}>
+                        <span className="font-semibold">{step}:</span> {action}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </section>
+            )}
+            {synthesisSections.openQuestions.length > 0 && (
+              <section id="open-questions" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Open Questions</h3>
+                <ul className="space-y-1 text-[15px] text-[var(--text)]">
+                  {synthesisSections.openQuestions.map((item, i) => (
+                    <li key={i}>• {item}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+            {synthesisSections.sources.length > 0 && (
+              <section id="sources" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+                <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Sources</h3>
+                <ul className="space-y-1 text-[15px] text-[var(--text)]">
+                  {synthesisSections.sources.map((source, i) => (
+                    <li key={i}>
+                      {source.url ? (
+                        <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline">
+                          {source.title || source.url}
+                        </a>
+                      ) : (
+                        source.title || 'Source'
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+        )}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
         ) : (
@@ -190,15 +315,60 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   }
 
   // Fallback to markdown for everything else
-  const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+  const md = buildMarkdownFromPhase(index, phaseNum, name, data, {
+    omitSections: isSynthesisPhase(name) ? ['critical_insights', 'action_blueprint', 'open_questions', 'sources'] : undefined,
+  });
   return (
-    <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
       {animated ? (
         <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
       ) : (
         <MarkdownRenderer>{md}</MarkdownRenderer>
       )}
     </PhaseCard>
+  );
+}
+
+function VettedContextBlock({ items }: { items: Array<Record<string, unknown>> }) {
+  return (
+    <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Vetted Context</h4>
+        <span className="text-[10px] text-[var(--text-subtle)]">{items.length} source{items.length === 1 ? '' : 's'}</span>
+      </div>
+      <div className="space-y-3">
+        {items.map((item, idx) => {
+          const title = typeof item.title === 'string' ? item.title : 'Source';
+          const url = typeof item.url === 'string' ? item.url : '';
+          const date = typeof item.date === 'string' ? item.date : typeof item.published === 'string' ? item.published : '';
+          const summary = typeof item.summary === 'string' ? item.summary : typeof item.snippet === 'string' ? item.snippet : '';
+          const keyFacts = Array.isArray(item.key_facts) ? item.key_facts : [];
+          return (
+            <div key={idx} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3 text-sm text-[var(--text)]">
+              <div className="flex flex-wrap items-center gap-2">
+                {url ? (
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="font-semibold underline">
+                    {title}
+                  </a>
+                ) : (
+                  <span className="font-semibold">{title}</span>
+                )}
+                {date ? <span className="text-xs text-[var(--text-subtle)]">{date}</span> : null}
+              </div>
+              {summary ? <p className="mt-2 text-[15px] text-[var(--text)]">{summary}</p> : null}
+              {keyFacts.length > 0 && (
+                <ul className="mt-2 space-y-1 text-[14px] text-[var(--text-subtle)]">
+                  {keyFacts.slice(0, 4).map((fact, i) => (
+                    <li key={i}>• {fact}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

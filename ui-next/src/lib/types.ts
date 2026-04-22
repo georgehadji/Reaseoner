@@ -70,6 +70,10 @@ export interface Conversation {
   method: string;
   total_tokens: TokenCount | null;
   duration?: number;
+  kind?: 'pipeline' | 'search' | 'image';
+  response_content?: string;
+  images?: Array<{ data: string; model?: string }>;
+  prompt_meta?: { original?: string; enhanced?: string };
 }
 
 export interface AttachmentRef {

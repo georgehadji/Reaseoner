@@ -237,7 +237,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           </div>
 
           <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-            {isImageMode ? 'Enter to generate image · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
+            {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
           </div>
 
           <input
@@ -275,7 +275,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
               autoResize();
             }}
             onKeyDown={handleKeyDown}
-            placeholder='Ask anything...'
+            placeholder={isImageMode ? 'Describe the new image and optionally attach reference photos...' : 'Ask anything...'}
             rows={1}
             className="w-full resize-none bg-transparent px-1 py-2 text-[17px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
             style={{ minHeight: 28 }}
@@ -321,7 +321,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         </div>
 
         <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-          {isImageMode ? 'Enter to generate image · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
+          {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
         </div>
 
         <input

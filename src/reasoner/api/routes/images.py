@@ -44,6 +44,7 @@ async def generate_image_endpoint(
             enhance=body.enhance,
             aspect_ratio=body.aspect_ratio,
             resolution=body.resolution,
+            reference_images=body.reference_images,
         )
         if not result.get("success"):
             logger.error("Image generation failed: %s", result.get("error"))

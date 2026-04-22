@@ -545,6 +545,7 @@ async def _run_generation_attempts(
     aspect_ratio: str,
     resolution: str,
     required_image_count: int = 2,
+    reference_images: list[str] | None = None,
 ) -> tuple[list[dict[str, str]], list[str]]:
     """Run primary and fallback models until the required image count is met or exhausted."""
     attempted_aliases = list(model_aliases)
@@ -556,6 +557,7 @@ async def _run_generation_attempts(
                 api_key,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
+                reference_images=reference_images,
             ),
             name=alias,
         )
@@ -591,6 +593,7 @@ async def _run_generation_attempts(
                 api_key,
                 aspect_ratio=aspect_ratio,
                 resolution=resolution,
+                reference_images=reference_images,
             )
             if result.get("success"):
                 images.append({
@@ -609,8 +612,11 @@ async def _generate_image_with_images_api(
     prompt: str,
     extra_body: dict[str, Any],
     resolution: str,
+    reference_images: list[str] | None = None,
 ) -> str | None:
     """Fallback to the dedicated images API when chat completions returns no image."""
+    if reference_images:
+        return None
     kwargs: dict[str, Any] = {
         "model": model_id,
         "prompt": prompt,
@@ -647,6 +653,7 @@ async def generate_image_with_model(
     max_tokens: int = 2048,
     aspect_ratio: str = IMAGE_GEN_DEFAULT_ASPECT_RATIO,
     resolution: str = IMAGE_GEN_DEFAULT_RESOLUTION,
+    reference_images: list[str] | None = None,
 ) -> dict[str, Any]:
     """Generate a single image with a specific model alias.
 
@@ -692,13 +699,14 @@ async def generate_image_with_model(
 
     modalities = _get_modalities(model_id)
 
-    if _should_prefer_images_api(model_id):
+    if _should_prefer_images_api(model_id) and not reference_images:
         image_candidate = await _generate_image_with_images_api(
             client,
             model_id,
             prompt,
             extra_body,
             resolution,
+            reference_images=reference_images,
         )
         if image_candidate:
             return {
@@ -712,7 +720,16 @@ async def generate_image_with_model(
         # For image generation models, use the content array format which is more reliable
         kwargs: dict[str, Any] = {
             "model": model_id,
-            "messages": [{"role": "user", "content": [{"type": "text", "text": prompt}]}],
+            "messages": [{
+                "role": "user",
+                "content": (
+                    [{"type": "text", "text": prompt}]
+                    + [
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                        for image_url in (reference_images or [])
+                    ]
+                ),
+            }],
             "max_tokens": max_tokens,
             "extra_body": extra_body,
         }
@@ -745,6 +762,7 @@ async def generate_image_with_model(
             prompt,
             extra_body,
             resolution,
+            reference_images=reference_images,
         )
         if image_candidate:
             return {
@@ -781,6 +799,7 @@ async def generate_image_with_model(
         prompt,
         extra_body,
         resolution,
+        reference_images=reference_images,
     )
     if image_candidate:
         return {
@@ -816,6 +835,7 @@ async def generate_images(
     enhance: bool = True,
     aspect_ratio: str = IMAGE_GEN_DEFAULT_ASPECT_RATIO,
     resolution: str = IMAGE_GEN_DEFAULT_RESOLUTION,
+    reference_images: list[str] | None = None,
 ) -> dict[str, Any]:
     """Generate images in parallel with 2 models + optional prompt enhancement.
 
@@ -857,6 +877,7 @@ async def generate_images(
         aspect_ratio,
         resolution,
         required_image_count=required_image_count,
+        reference_images=reference_images,
     )
 
     rewritten_prompt: str | None = None
@@ -872,6 +893,7 @@ async def generate_images(
                 aspect_ratio,
                 resolution,
                 required_image_count=required_image_count,
+                reference_images=reference_images,
             )
             if len(retry_images) >= len(images):
                 images = retry_images
@@ -891,6 +913,7 @@ async def generate_images(
                 aspect_ratio,
                 resolution,
                 required_image_count=required_image_count,
+                reference_images=reference_images,
             )
             if len(retry_images) >= len(images):
                 images = retry_images
@@ -924,6 +947,7 @@ async def _generate_image_guarded(
     api_key: str | None,
     aspect_ratio: str = IMAGE_GEN_DEFAULT_ASPECT_RATIO,
     resolution: str = IMAGE_GEN_DEFAULT_RESOLUTION,
+    reference_images: list[str] | None = None,
 ) -> dict[str, Any]:
     """Wrapper that catches exceptions and returns a dict."""
     try:
@@ -932,7 +956,8 @@ async def _generate_image_guarded(
             model_alias, 
             api_key=api_key,
             aspect_ratio=aspect_ratio,
-            resolution=resolution
+            resolution=resolution,
+            reference_images=reference_images,
         )
     except Exception as exc:
         return {"success": False, "error": str(exc)}

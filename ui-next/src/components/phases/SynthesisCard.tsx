@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Sparkles, Bot } from 'lucide-react';
+import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks } from 'lucide-react';
 
 interface SubagentInfo {
   name: string;
@@ -23,6 +23,7 @@ interface SynthesisCardProps {
   models?: string[] | null;
   subagents?: SubagentInfo[] | null;
   duration?: number;
+  highlights?: Array<{ label: string; value: number }> | null;
 }
 
 function formatModelLabel(model: string) {
@@ -46,6 +47,7 @@ export function SynthesisCard({
   models,
   subagents,
   duration,
+  highlights,
 }: SynthesisCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -66,27 +68,47 @@ export function SynthesisCard({
           onClick={() => setOpen((v) => !v)}
           className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--surface-3)]"
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-2 py-0.5 text-xs font-medium text-[var(--accent-text)]">
-              <Sparkles className="h-3 w-3" />
-              Phase {index + 1}
-            </span>
-            <span className="text-sm font-semibold text-[var(--text)]">{name}</span>
-            <span className="text-xs text-[var(--text-subtle)]">
-              {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
-              {duration !== undefined && duration > 0 ? (
-                <span className="ml-2">· {duration.toFixed(1)}s</span>
-              ) : null}
-            </span>
-            {subagents && subagents.length > 0 ? (
-              <span
-                className="inline-flex items-center gap-1 rounded-md bg-[var(--surface)] px-2 py-0.5 text-xs text-[var(--text-subtle)]"
-                title={subagentTooltip}
-              >
-                <Bot className="h-3 w-3" />
-                {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="flex items-center gap-1.5 rounded-md bg-[var(--accent)] px-2 py-0.5 text-xs font-medium text-[var(--accent-text)]">
+                <Sparkles className="h-3 w-3" />
+                Phase {index + 1}
               </span>
-            ) : null}
+              <span className="text-sm font-semibold text-[var(--text)]">{name}</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-subtle)]">
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                <Boxes className="h-3 w-3" />
+                {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
+              </span>
+              {duration !== undefined && duration > 0 ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1">
+                  <Timer className="h-3 w-3" />
+                  {duration.toFixed(1)}s
+                </span>
+              ) : null}
+              {models && models.length > 0
+                ? models.map((model) => (
+                    <span
+                      key={model}
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
+                      title={model}
+                    >
+                      <Cpu className="h-3 w-3" />
+                      {formatModelLabel(model)}
+                    </span>
+                  ))
+                : null}
+              {subagents && subagents.length > 0 ? (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
+                  title={subagentTooltip}
+                >
+                  <Bot className="h-3 w-3" />
+                  {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+                </span>
+              ) : null}
+            </div>
           </div>
           <ChevronDown
             className={cn(
@@ -96,6 +118,49 @@ export function SynthesisCard({
           />
         </button>
         <div className="px-4 pb-4 pt-1" style={{ display: open ? 'block' : 'none' }}>
+          {highlights && highlights.length > 0 && (
+            <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+              <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Synthesis Highlights</p>
+              <div className="flex flex-wrap gap-2">
+                {highlights.map((highlight) => (
+                  <div
+                    key={highlight.label}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-xs text-[var(--text)]"
+                  >
+                    <ListChecks className="h-3 w-3 text-[var(--accent)]" />
+                    {highlight.value} {highlight.label}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {highlights && highlights.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-[var(--text-subtle)]">
+              <span className="text-[11px] font-medium uppercase tracking-[0.16em] text-[var(--text-muted)]">Jump to</span>
+              {highlights.map((highlight) => {
+                const anchor =
+                  highlight.label === 'insights'
+                    ? 'critical-insights'
+                    : highlight.label === 'actions'
+                    ? 'action-blueprint'
+                    : highlight.label === 'questions'
+                    ? 'open-questions'
+                    : highlight.label === 'sources'
+                    ? 'sources'
+                    : '';
+                if (!anchor) return null;
+                return (
+                  <a
+                    key={highlight.label}
+                    href={`#${anchor}`}
+                    className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+                  >
+                    {highlight.label}
+                  </a>
+                );
+              })}
+            </div>
+          )}
           {subagents && subagents.length > 0 && (
             <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
               <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>

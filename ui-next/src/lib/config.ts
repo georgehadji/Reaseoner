@@ -211,7 +211,7 @@ export const API = {
 export const DEFAULTS = {
   tier: 'budget' as 'budget' | 'premium',
   topK: 2,
-  typewriterWordsPerSecond: 15,
+  typewriterWordsPerSecond: 20,
 };
 
 export const TIMING = {

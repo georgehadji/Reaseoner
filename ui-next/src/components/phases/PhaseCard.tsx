@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Bot } from 'lucide-react';
+import { ChevronDown, Bot, Timer, Cpu, Boxes } from 'lucide-react';
 
 interface SubagentInfo {
   name: string;
@@ -19,6 +19,7 @@ interface PhaseCardProps {
   name: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
+  forceOpen?: boolean | null;
   className?: string;
   tokens?: { input?: number; output?: number } | null;
   models?: string[] | null;
@@ -43,6 +44,7 @@ export function PhaseCard({
   name,
   children,
   defaultOpen = true,
+  forceOpen = null,
   className,
   tokens,
   models,
@@ -50,6 +52,11 @@ export function PhaseCard({
   duration,
 }: PhaseCardProps) {
   const [open, setOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    if (forceOpen === null) return;
+    setOpen(forceOpen);
+  }, [forceOpen]);
 
   const subagentTooltip = subagents
     ? subagents
@@ -72,26 +79,46 @@ export function PhaseCard({
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--surface-2)]"
       >
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-md bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-            Phase {index + 1}
-          </span>
-          <span className="text-sm font-medium text-[var(--text)]">{name}</span>
-          <span className="text-xs text-[var(--text-subtle)]">
-            {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
-            {duration !== undefined && duration > 0 ? (
-              <span className="ml-2">· {duration.toFixed(1)}s</span>
-            ) : null}
-          </span>
-          {subagents && subagents.length > 0 ? (
-            <span
-              className="inline-flex items-center gap-1 rounded-md bg-[var(--surface-2)] px-2 py-0.5 text-xs text-[var(--text-subtle)]"
-              title={subagentTooltip}
-            >
-              <Bot className="h-3 w-3" />
-              {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+        <div className="flex min-w-0 flex-1 flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+              Phase {index + 1}
             </span>
-          ) : null}
+            <span className="text-sm font-medium text-[var(--text)]">{name}</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-subtle)]">
+            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
+              <Boxes className="h-3 w-3" />
+              {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
+            </span>
+            {duration !== undefined && duration > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
+                <Timer className="h-3 w-3" />
+                {duration.toFixed(1)}s
+              </span>
+            ) : null}
+            {models && models.length > 0
+              ? models.map((model) => (
+                  <span
+                    key={model}
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
+                    title={model}
+                  >
+                    <Cpu className="h-3 w-3" />
+                    {formatModelLabel(model)}
+                  </span>
+                ))
+              : null}
+            {subagents && subagents.length > 0 ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
+                title={subagentTooltip}
+              >
+                <Bot className="h-3 w-3" />
+                {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+              </span>
+            ) : null}
+          </div>
         </div>
         <ChevronDown
           className={cn(

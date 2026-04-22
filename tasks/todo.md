@@ -1,4 +1,8 @@
 # Project Tasks
+- Reasoner UI and image workflow enhancement plan:
+    - [done] Create a thorough implementation plan covering image UX, result presentation, safety controls, testing, rollout, and rollback.
+    - Review:
+      - Detailed plan written to `tasks/reasoner-ui-enhancements-plan.md`.
 - Article-writing context contamination review:
     - [done] Trace article-writing workflow, follow-up context assembly, and search query generation for leaked prior prompt content.
     - [done] Prevent follow-up assistant/synthesis text from being injected as user-authored prompt content.

@@ -18,6 +18,7 @@ import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '
 import { METHOD_PHASES } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
+import { conversationToMessages } from '@/lib/conversation-history';
 import { clearCache, searchWeb, uploadFiles, generateImage, generateImageEnhancement } from '@/lib/api-client';
 
 /** Resolve METHOD_PHASES by trying snake_case then kebab-case then fallback. */
@@ -29,6 +30,21 @@ function getMethodPhases(method: string) {
     METHOD_PHASES['multi-perspective'] ||
     []
   );
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error(`Failed to read ${file.name}`));
+    };
+    reader.onerror = () => reject(reader.error || new Error(`Failed to read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
 }
 
 export default function Home() {
@@ -61,6 +77,7 @@ export default function Home() {
   const [errorPhases, setErrorPhases] = useState<number[]>([]);
   const [currentPhase, setCurrentPhase] = useState<number | undefined>(undefined);
   const [phaseDurations, setPhaseDurations] = useState<Record<number, number>>({});
+  const [phaseOpenMode, setPhaseOpenMode] = useState<'auto' | 'expand' | 'collapse'>('auto');
   const phaseStartTimesRef = useRef<Record<number, number>>({});
 
   const isContinuation = (text: string) =>
@@ -94,11 +111,12 @@ export default function Home() {
     setCurrentPhase(undefined);
     setPhaseDurations({});
     setAutoSelectedMethod('multi_perspective');
+    setPhaseOpenMode('auto');
     phaseStartTimesRef.current = {};
 
     // Upload attachments before running
     let uploadedAttachments: { file_id: string; filename: string; mime_type: string; extracted_text: string; size: number }[] = [];
-    if (attachments.length > 0) {
+    if (attachments.length > 0 && !isImageMode) {
       try {
         const uploadResult = await uploadFiles(attachments.map((a) => a.file));
         uploadedAttachments = (uploadResult.files || [])
@@ -204,6 +222,9 @@ export default function Home() {
           preset: 'web-search',
           method: 'web_search',
           total_tokens: null,
+          kind: 'search',
+          response_content: resultContent,
+          duration: searchDuration,
         });
         refreshHistory();
       } catch (err) {
@@ -227,6 +248,12 @@ export default function Home() {
     if (isImageMode) {
       const genStart = performance.now();
       try {
+        const referenceImages = await Promise.all(
+          attachments
+            .filter((attachment) => attachment.type.startsWith('image/'))
+            .slice(0, 4)
+            .map((attachment) => fileToDataUrl(attachment.file)),
+        );
         const enhancement = await generateImageEnhancement(problem, tier);
         const enhancedPrompt = enhancement.enhanced_prompt || problem;
         setMessages((prev) => [
@@ -243,22 +270,25 @@ export default function Home() {
           {
             ...assistantMsg,
             loadingKind: 'image-generation',
-            loadingPrompt: enhancedPrompt,
+            loadingPrompt:
+              referenceImages.length > 0
+                ? `${enhancedPrompt} [using ${referenceImages.length} reference image${referenceImages.length === 1 ? '' : 's'}]`
+                : enhancedPrompt,
           },
         ]);
 
-        const result = await generateImage(enhancedPrompt, tier, false);
+        const result = await generateImage(enhancedPrompt, tier, false, referenceImages);
         const genDuration = (performance.now() - genStart) / 1000;
         if (result.success && result.images && result.images.length > 0) {
+          const formattedImages =
+            result.images?.map((img) => ({
+              data: img.image_data,
+              model: img.model_used,
+            })) || [];
           setMessages((prev) => {
             const next = [...prev];
             const idx = next.findIndex((m) => m.id === assistantId);
             if (idx !== -1) {
-              const formattedImages =
-                result.images?.map((img) => ({
-                  data: img.image_data,
-                  model: img.model_used,
-                })) || [];
               next[idx] = {
                 ...next[idx],
                 content:
@@ -274,6 +304,27 @@ export default function Home() {
             }
             return next;
           });
+          await saveConversation({
+            id: assistantId,
+            conversation_id: assistantId,
+            turn_number: 1,
+            timestamp: new Date().toISOString(),
+            problem,
+            phases: [],
+            errors: [],
+            preset: tier,
+            method: 'image',
+            total_tokens: null,
+            duration: genDuration,
+            kind: 'image',
+            response_content:
+              formattedImages.length >= 2
+                ? `Generated ${formattedImages.length} images`
+                : `Generated image using **${formattedImages[0]?.model || 'model'}**`,
+            images: formattedImages,
+            prompt_meta: { original: problem, enhanced: enhancedPrompt },
+          });
+          refreshHistory();
         } else {
           setMessages((prev) => {
             const next = [...prev];
@@ -508,6 +559,8 @@ export default function Home() {
           method: runMethod,
           total_tokens: finalTokens,
           duration: totalDuration,
+          kind: 'pipeline',
+          response_content: buildMarkdownFromPhases(phases),
         };
         saveConversation(conv).then(refreshHistory).catch(console.error);
       }
@@ -576,6 +629,7 @@ export default function Home() {
     setCurrentPhase(undefined);
     setPhaseDurations({});
     setAutoSelectedMethod('multi_perspective');
+    setPhaseOpenMode('auto');
     phaseStartTimesRef.current = {};
     conversationIdRef.current = null;
   }
@@ -588,21 +642,7 @@ export default function Home() {
       name: p.name,
       data: p.data,
     }));
-    const loaded: ChatFeedMessage[] = [
-      { id: 'u-' + conv.id, role: 'user', content: conv.problem },
-      {
-        id: 'a-' + conv.id,
-        role: 'assistant',
-        content: buildMarkdownFromPhases(conv.phases),
-        phases: renderedPhases,
-        tokens: conv.total_tokens ?? undefined,
-        duration: conv.duration,
-        animated: false,
-      },
-    ];
-    if (conv.errors.length > 0) {
-      loaded.push({ id: 'err-' + conv.id, role: 'error', content: conv.errors.join('\n') });
-    }
+    const loaded = conversationToMessages(conv, buildMarkdownFromPhases) as ChatFeedMessage[];
     setMessages(loaded);
     // Restore the method so PhaseTimeline shows the right phases for loaded conversations
     setAutoSelectedMethod(conv.method || 'multi_perspective');
@@ -657,6 +697,8 @@ export default function Home() {
             completedPhases={completedPhases}
             errorPhases={errorPhases}
             phaseDurations={phaseDurations}
+            onExpandAll={() => setPhaseOpenMode('expand')}
+            onCollapseAll={() => setPhaseOpenMode('collapse')}
           />
         )}
 
@@ -667,6 +709,7 @@ export default function Home() {
                 messages={messages}
                 onScrollToBottom={dismissIndicator}
                 showNewContentIndicator={showNewContentIndicator}
+                phaseOpenMode={phaseOpenMode}
               />
             </>
           ) : (

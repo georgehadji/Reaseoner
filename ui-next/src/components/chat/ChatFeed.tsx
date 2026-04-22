@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2 } from 'lucide-react';
+import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2, Download, X } from 'lucide-react';
 import { ChatMessage } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
@@ -42,6 +42,7 @@ interface ChatFeedProps {
   messages: ChatFeedMessage[];
   onScrollToBottom?: () => void;
   showNewContentIndicator?: boolean;
+  phaseOpenMode?: 'auto' | 'expand' | 'collapse';
 }
 
 function PhaseIndicator({
@@ -231,7 +232,9 @@ export function ChatFeed({
   messages,
   onScrollToBottom,
   showNewContentIndicator,
+  phaseOpenMode = 'auto',
 }: ChatFeedProps) {
+  const [selectedImage, setSelectedImage] = useState<{ data: string; model?: string; alt: string } | null>(null);
   // Track how many phases are allowed to render for each assistant message.
   // Key: message id, Value: number of visible phases (default 1 so first phase shows immediately)
   const [visiblePhaseCounts, setVisiblePhaseCounts] = useState<Record<string, number>>({});
@@ -245,6 +248,11 @@ export function ChatFeed({
       }
       return prev;
     });
+  }, []);
+
+  const getDownloadName = useCallback((model?: string) => {
+    const suffix = (model || 'generated-image').replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase();
+    return `${suffix || 'generated-image'}.png`;
   }, []);
 
   return (
@@ -316,6 +324,7 @@ export function ChatFeed({
         const visibleCount = visiblePhaseCounts[msg.id] ?? 1;
         const phases = msg.phases || [];
         const visiblePhases = phases.slice(0, visibleCount);
+        const forceOpen = phaseOpenMode === 'expand' ? true : phaseOpenMode === 'collapse' ? false : null;
 
         return (
           <div key={msg.id} className="flex w-full flex-col items-center">
@@ -346,17 +355,33 @@ export function ChatFeed({
                       key={idx}
                       className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow)]"
                     >
-                      <img
-                        src={img.data}
-                        alt={`Generated image ${idx + 1}`}
-                        className="h-full w-full max-h-[520px] object-contain"
-                        loading="lazy"
-                      />
-                      {img.model ? (
-                        <figcaption className="border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-subtle)]">
-                          LLM model: {img.model}
-                        </figcaption>
-                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setSelectedImage({ data: img.data, model: img.model, alt: `Generated image ${idx + 1}` })}
+                        className="block w-full cursor-zoom-in bg-black/5"
+                        aria-label={`Open generated image ${idx + 1}`}
+                      >
+                        <img
+                          src={img.data}
+                          alt={`Generated image ${idx + 1}`}
+                          className="h-full w-full max-h-[520px] object-contain"
+                          loading="lazy"
+                        />
+                      </button>
+                      <figcaption className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-subtle)]">
+                        <span className="truncate">
+                          LLM model used: <span className="font-medium text-[var(--text)]">{img.model || 'unknown'}</span>
+                        </span>
+                        <a
+                          href={img.data}
+                          download={getDownloadName(img.model)}
+                          onClick={(event) => event.stopPropagation()}
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface)]"
+                        >
+                          <Download className="h-3 w-3" />
+                          Download
+                        </a>
+                      </figcaption>
                     </figure>
                   ))}
                 </div>
@@ -375,6 +400,7 @@ export function ChatFeed({
                       onComplete={() => handlePhaseComplete(msg.id, idx)}
                       animationKey={`${msg.id}-${phase.index}`}
                       animated={msg.animated !== false}
+                      forceOpen={forceOpen}
                     />
                   ))}
                 </div>
@@ -388,6 +414,50 @@ export function ChatFeed({
           </div>
         );
       })}
+
+      {selectedImage ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+          onClick={() => setSelectedImage(null)}
+        >
+          <div
+            className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[var(--surface)] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+              <div className="min-w-0">
+                <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Generated Image</div>
+                <div className="truncate text-sm text-[var(--text)]">LLM model used: {selectedImage.model || 'unknown'}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href={selectedImage.data}
+                  download={getDownloadName(selectedImage.model)}
+                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Download
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setSelectedImage(null)}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+                  aria-label="Close image preview"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-center bg-black/20 p-4">
+              <img
+                src={selectedImage.data}
+                alt={selectedImage.alt}
+                className="max-h-[78vh] w-auto max-w-full object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {showNewContentIndicator && (
         <button

@@ -179,6 +179,7 @@ class GenerateImageRequest(BaseModel):
     resolution: str = IMAGE_GEN_DEFAULT_RESOLUTION
     enhance: bool = True
     preview_only: bool = False
+    reference_images: list[str] = []
 
     @field_validator("prompt")
     @classmethod
@@ -204,6 +205,16 @@ class GenerateImageRequest(BaseModel):
         allowed = set(IMAGE_GEN_ALLOWED_ASPECT_RATIOS)
         if v not in allowed:
             raise ValueError(f"Invalid aspect ratio: {v}. Allowed: {allowed}")
+        return v
+
+    @field_validator("reference_images")
+    @classmethod
+    def validate_reference_images(cls, v: list[str]) -> list[str]:
+        if len(v) > 4:
+            raise ValueError("At most 4 reference images are allowed")
+        for image in v:
+            if not isinstance(image, str) or not image.startswith("data:image/"):
+                raise ValueError("Reference images must be image data URLs")
         return v
 
 

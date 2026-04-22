@@ -19,6 +19,18 @@ export function MarkdownRenderer({ children }: { children: string }) {
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          h1({ children }) {
+            return <Heading level={1} children={children} />;
+          },
+          h2({ children }) {
+            return <Heading level={2} children={children} />;
+          },
+          h3({ children }) {
+            return <Heading level={3} children={children} />;
+          },
+          h4({ children }) {
+            return <Heading level={4} children={children} />;
+          },
           a({ href, children, ...rest }) {
             return (
               <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
@@ -52,6 +64,36 @@ export function MarkdownRenderer({ children }: { children: string }) {
       </ReactMarkdown>
     </div>
   );
+}
+
+function Heading({ level, children }: { level: 1 | 2 | 3 | 4; children: React.ReactNode }) {
+  const text = extractText(children);
+  const id = text ? slugify(text) : undefined;
+  const Tag = `h${level}` as const;
+  return (
+    <Tag id={id} className="scroll-mt-24">
+      {children}
+    </Tag>
+  );
+}
+
+function extractText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node);
+  if (Array.isArray(node)) return node.map(extractText).join('');
+  if (node && typeof node === 'object' && 'props' in node) {
+    const props = (node as { props?: { children?: React.ReactNode } }).props;
+    return extractText(props?.children);
+  }
+  return '';
+}
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
 }
 
 function CodeBlock({ code, language, isDark }: { code: string; language: string; isDark?: boolean }) {

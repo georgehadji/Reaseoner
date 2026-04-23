@@ -324,6 +324,11 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             recalled_chunks = await _recall_neuro_context(req.problem, agent_id=conversation_id)
             if recalled_chunks:
                 logger.info("Neuro recall returned %d chunks", len(recalled_chunks))
+                yield _event({
+                    "type": "recall_used",
+                    "memory_count": len(recalled_chunks),
+                    "memory_ids": [c.get("source", "") for c in recalled_chunks if c.get("source")],
+                })
 
         raw_preset = req.preset or "auto-budget"
         gate_preset_name, is_auto, auto_tier = _preset_service.resolve(raw_preset)

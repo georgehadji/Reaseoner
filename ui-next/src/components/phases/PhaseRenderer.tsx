@@ -11,6 +11,7 @@ import { ClassificationCard } from './ClassificationCard';
 import { CritiqueCard } from './CritiqueCard';
 import { buildMarkdownFromPhase } from '@/lib/markdown';
 import { copyToClipboard } from '@/lib/utils';
+import { isEnabled } from '@/hooks/useFeatureFlags';
 
 function isSynthesisPhase(name: string): boolean {
   return /synthesis|report|theory|conclusion|verdict|redesign|aufhebung|transfer/i.test(name);
@@ -22,6 +23,7 @@ interface PhaseRendererProps {
   animationKey?: string;
   animated?: boolean;
   forceOpen?: boolean | null;
+  errorPhases?: number[];
 }
 
 function getTokens(data: unknown): { input?: number; output?: number } | null {
@@ -102,7 +104,7 @@ function getVettedContext(data: unknown): Array<Record<string, unknown>> {
   return context.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
 }
 
-export function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null }: PhaseRendererProps) {
+export function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null, errorPhases = [] }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
@@ -111,6 +113,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   const synthesisHighlights = getSynthesisHighlights(data);
   const synthesisSections = getSynthesisSections(data);
   const vettedContext = getVettedContext(data);
+  const isCompact = isEnabled('compact-phases') && !isSynthesisPhase(name) && phaseNum !== 0;
   const defaultOpen = isSynthesisPhase(name) || phaseNum === 0;
 
   // Direct Response / Web Search: render inline without a phase card
@@ -131,7 +134,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
     ('task_type' in data || 'rationale' in data)
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         <ClassificationCard data={data} />
         {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
@@ -148,7 +151,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
     scoresArray.length > 0
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         <CritiqueCard data={data} />
         {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
@@ -163,7 +166,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
@@ -182,7 +185,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
@@ -204,7 +207,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
           <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
@@ -226,7 +229,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
       omitSections: ['critical_insights', 'action_blueprint', 'open_questions', 'sources'],
     });
     return (
-      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} highlights={synthesisHighlights} defaultOpen>
+      <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} highlights={synthesisHighlights} sources={synthesisSections?.sources} defaultOpen>
         {synthesisSections && (
           <div className="mb-4 grid gap-4">
             {synthesisSections.criticalInsights.length > 0 && (
@@ -319,7 +322,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
     omitSections: isSynthesisPhase(name) ? ['critical_insights', 'action_blueprint', 'open_questions', 'sources'] : undefined,
   });
   return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
       {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
       {animated ? (
         <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />

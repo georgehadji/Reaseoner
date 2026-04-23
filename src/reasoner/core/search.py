@@ -655,7 +655,17 @@ async def smart_search(
 def get_searxng_urls() -> list[str]:
     """Return the list of SearXNG URLs to try, respecting SEARXNG_URL env var."""
     base = os.environ.get("SEARXNG_URL", DEFAULT_SEARXNG_URL).rstrip("/")
-    return [f"{base}/search"]
+    urls = [f"{base}/search"]
+    # Always include fallback to 127.0.0.1:8888 (default SearXNG port)
+    # If base already uses localhost, also include IP version
+    if "localhost" in base:
+        ip_base = base.replace("localhost", "127.0.0.1")
+        urls.append(f"{ip_base}/search")
+    else:
+        # Include default IP fallback regardless of custom URL
+        fallback_base = DEFAULT_SEARXNG_URL.replace("localhost", "127.0.0.1")
+        urls.append(f"{fallback_base}/search")
+    return urls
 
 
 def get_searxng_base_url() -> str:

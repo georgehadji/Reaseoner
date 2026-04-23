@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2, Download, X } from 'lucide-react';
-import { ChatMessage } from './ChatMessage';
+import { ChatMessage, MemoryBadge } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
 import { ErrorMessage } from './ErrorMessage';
@@ -44,6 +44,7 @@ export interface ChatFeedMessage {
   errorType?: string | null;
   errorRetryable?: boolean | null;
   errorRetryAfter?: number | null;
+  memoryCount?: number;
 }
 
 interface ChatFeedProps {
@@ -51,6 +52,7 @@ interface ChatFeedProps {
   onScrollToBottom?: () => void;
   showNewContentIndicator?: boolean;
   phaseOpenMode?: 'auto' | 'expand' | 'collapse';
+  errorPhases?: number[];
 }
 
 function PhaseIndicator({
@@ -240,6 +242,7 @@ export function ChatFeed({
   onScrollToBottom,
   showNewContentIndicator,
   phaseOpenMode = 'auto',
+  errorPhases = [],
 }: ChatFeedProps) {
   const [selectedImage, setSelectedImage] = useState<{ data: string; model?: string; alt: string } | null>(null);
   // Track how many phases are allowed to render for each assistant message.
@@ -342,6 +345,9 @@ export function ChatFeed({
         return (
           <div key={msg.id} className="flex w-full flex-col items-center">
             <ChatMessage role="assistant">
+              {msg.memoryCount !== undefined && msg.memoryCount > 0 && (
+                <MemoryBadge count={msg.memoryCount} />
+              )}
               {msg.loadingKind === 'image-generation' ? (
                 <ImageGenerationIndicator prompt={msg.loadingPrompt} />
               ) : msg.isStreaming && (
@@ -421,6 +427,7 @@ export function ChatFeed({
                       animationKey={`${msg.id}-${phase.index}`}
                       animated={msg.animated !== false}
                       forceOpen={forceOpen}
+                      errorPhases={errorPhases}
                     />
                   ))}
                 </div>

@@ -19,7 +19,7 @@ export interface TokenCount {
 }
 
 export interface PhaseEvent {
-  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk' | 'widget';
+  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk' | 'widget' | 'recall_used';
   phase?: number;
   name?: string;
   data?: Record<string, unknown>;
@@ -48,6 +48,9 @@ export interface PhaseEvent {
   /** Cost transparency fields on done event */
   total_cost_usd?: number;
   phase_costs?: Record<string, number>;
+  /** Memory recall fields */
+  memory_count?: number;
+  memory_ids?: string[];
 }
 
 export interface Attachment {

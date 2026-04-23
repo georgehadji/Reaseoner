@@ -25,6 +25,8 @@ interface PhaseCardProps {
   models?: string[] | null;
   subagents?: SubagentInfo[] | null;
   duration?: number;
+  compact?: boolean;
+  status?: 'idle' | 'active' | 'completed' | 'error';
 }
 
 function formatModelLabel(model: string) {
@@ -50,6 +52,8 @@ export function PhaseCard({
   models,
   subagents,
   duration,
+  compact = false,
+  status = 'idle',
 }: PhaseCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -77,48 +81,73 @@ export function PhaseCard({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-[var(--surface-2)]"
+        className={cn(
+          'flex w-full items-center justify-between text-left hover:bg-[var(--surface-2)]',
+          compact && !open ? 'px-3 py-2' : 'px-4 py-3'
+        )}
       >
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-              Phase {index + 1}
-            </span>
-            <span className="text-sm font-medium text-[var(--text)]">{name}</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-subtle)]">
-            <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
-              <Boxes className="h-3 w-3" />
-              {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
-            </span>
-            {duration !== undefined && duration > 0 ? (
-              <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
-                <Timer className="h-3 w-3" />
-                {duration.toFixed(1)}s
-              </span>
-            ) : null}
-            {models && models.length > 0
-              ? models.map((model) => (
-                  <span
-                    key={model}
-                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
-                    title={model}
-                  >
-                    <Cpu className="h-3 w-3" />
-                    {formatModelLabel(model)}
-                  </span>
-                ))
-              : null}
-            {subagents && subagents.length > 0 ? (
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          {compact && !open ? (
+            <>
               <span
-                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
-                title={subagentTooltip}
-              >
-                <Bot className="h-3 w-3" />
-                {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
-              </span>
-            ) : null}
-          </div>
+                className={cn(
+                  'h-2 w-2 shrink-0 rounded-full',
+                  status === 'error' ? 'bg-red-500' :
+                  status === 'active' ? 'bg-[var(--accent)] animate-pulse' :
+                  status === 'completed' ? 'bg-green-500' :
+                  'bg-[var(--border-strong)]'
+                )}
+              />
+              <span className="text-xs font-medium text-[var(--text)]">{name}</span>
+              {duration !== undefined && duration > 0 ? (
+                <span className="text-[10px] text-[var(--text-subtle)]">
+                  <Timer className="inline h-3 w-3" /> {duration.toFixed(1)}s
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <div className="flex min-w-0 flex-1 flex-col gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
+                  Phase {index + 1}
+                </span>
+                <span className="text-sm font-medium text-[var(--text)]">{name}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-subtle)]">
+                <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
+                  <Boxes className="h-3 w-3" />
+                  {(tokens?.input ?? 0).toLocaleString()} in · {(tokens?.output ?? 0).toLocaleString()} out
+                </span>
+                {duration !== undefined && duration > 0 ? (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">
+                    <Timer className="h-3 w-3" />
+                    {duration.toFixed(1)}s
+                  </span>
+                ) : null}
+                {models && models.length > 0
+                  ? models.map((model) => (
+                      <span
+                        key={model}
+                        className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
+                        title={model}
+                      >
+                        <Cpu className="h-3 w-3" />
+                        {formatModelLabel(model)}
+                      </span>
+                    ))
+                  : null}
+                {subagents && subagents.length > 0 ? (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
+                    title={subagentTooltip}
+                  >
+                    <Bot className="h-3 w-3" />
+                    {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          )}
         </div>
         <ChevronDown
           className={cn(

@@ -5,7 +5,7 @@ import { useAppStore } from '@/stores/app-store';
 import { EXAMPLE_PROMPTS } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
-import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon } from 'lucide-react';
+import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon, Upload } from 'lucide-react';
 
 interface ComposerProps {
   running: boolean;
@@ -47,6 +47,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   const hasContent = composerText.trim().length > 0 || attachments.length > 0;
 
   const [estimate, setEstimate] = useState<{ tokens: number; cost: string; duration: number } | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   const fetchEstimate = useCallback(async (text: string, preset: string) => {
     if (!text.trim() || text.trim().length < 3) {
@@ -95,10 +96,8 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
     }
   }
 
-  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
+  function processFiles(files: FileList | null) {
     if (!files) return;
-
     for (const file of Array.from(files)) {
       if (attachments.length >= 5) {
         alert('Maximum 5 files allowed per message.');
@@ -114,10 +113,65 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       }
       addAttachment(file);
     }
+  }
 
-    // Reset input so the same file can be selected again
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    processFiles(e.target.files);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (!isEnabled('drag-drop')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    if (!isEnabled('drag-drop')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    if (!isEnabled('drag-drop')) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    processFiles(e.dataTransfer.files);
+  }
+
+  function handlePaste(e: React.ClipboardEvent) {
+    if (!isEnabled('drag-drop')) return;
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const files: File[] = [];
+    for (const item of Array.from(items)) {
+      if (item.kind === 'file') {
+        const file = item.getAsFile();
+        if (file) files.push(file);
+      }
+    }
+    if (files.length > 0) {
+      e.preventDefault();
+      for (const file of files) {
+        if (attachments.length >= 5) {
+          alert('Maximum 5 files allowed per message.');
+          break;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+          alert(`File "${file.name}" exceeds 10MB limit.`);
+          continue;
+        }
+        if (!ALLOWED_TYPES.includes(file.type)) {
+          alert(`File type "${file.type}" not supported.`);
+          continue;
+        }
+        addAttachment(file);
+      }
     }
   }
 
@@ -215,20 +269,34 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
             What would you like to solve?
           </h1>
 
-          <div className="relative rounded-3xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)] transition-shadow focus-within:shadow-[var(--shadow-lg)]">
-            <textarea
-              ref={textareaRef}
-              value={composerText}
-              onChange={(e) => {
-                setComposerText(e.target.value);
-                autoResize();
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={isImageMode ? 'Describe the image you want to generate...' : 'Ask anything...'}
-              rows={1}
-              className="w-full resize-none bg-transparent px-1 py-3 text-[17px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
-              style={{ minHeight: 120 }}
-            />
+          <div
+          className="relative rounded-3xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)] transition-shadow focus-within:shadow-[var(--shadow-lg)]"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onPaste={handlePaste}
+        >
+          {isDragging && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/5">
+              <div className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
+                <Upload className="h-5 w-5" />
+                Drop files here
+              </div>
+            </div>
+          )}
+          <textarea
+            ref={textareaRef}
+            value={composerText}
+            onChange={(e) => {
+              setComposerText(e.target.value);
+              autoResize();
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={isImageMode ? 'Describe the image you want to generate...' : 'Ask anything...'}
+            rows={1}
+            className="w-full resize-none bg-transparent px-1 py-3 text-[17px] text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
+            style={{ minHeight: 120 }}
+          />
 
             {/* Attachment chips — centered layout */}
             {attachments.length > 0 && (
@@ -299,7 +367,21 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
             </span>
           </div>
         )}
-        <div className="relative rounded-3xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)] transition-shadow focus-within:shadow-[var(--shadow-lg)]">
+        <div
+          className="relative rounded-3xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 shadow-[var(--shadow)] transition-shadow focus-within:shadow-[var(--shadow-lg)]"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onPaste={handlePaste}
+        >
+          {isDragging && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent)]/5">
+              <div className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
+                <Upload className="h-5 w-5" />
+                Drop files here
+              </div>
+            </div>
+          )}
           <textarea
             ref={textareaRef}
             value={composerText}

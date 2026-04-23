@@ -532,6 +532,19 @@ export default function Home() {
           }] });
           setCurrentPhase(undefined);
           break;
+        case 'recall_used':
+          if (ev.memory_count && ev.memory_count > 0) {
+            dispatchMessages({
+              type: 'UPDATE_MESSAGE',
+              payload: {
+                messageId: assistantId,
+                updates: {
+                  memoryCount: ev.memory_count,
+                },
+              },
+            });
+          }
+          break;
         case 'widget':
           {
             const widgetData = {
@@ -866,6 +879,7 @@ export default function Home() {
                 onScrollToBottom={dismissIndicator}
                 showNewContentIndicator={showNewContentIndicator}
                 phaseOpenMode={phaseOpenMode}
+                errorPhases={errorPhases}
               />
             </>
           ) : (

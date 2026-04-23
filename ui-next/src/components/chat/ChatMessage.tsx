@@ -1,6 +1,8 @@
 'use client';
 
 import { memo } from 'react';
+import { Brain } from 'lucide-react';
+import { isEnabled } from '@/hooks/useFeatureFlags';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -26,6 +28,16 @@ const ChatMessageComponent = ({ role, children }: ChatMessageProps) => {
 };
 
 export const ChatMessage = memo(ChatMessageComponent);
+
+export function MemoryBadge({ count }: { count: number }) {
+  if (!isEnabled('memory-badge') || count <= 0) return null;
+  return (
+    <div className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[11px] font-medium text-[var(--text-muted)]">
+      <Brain className="h-3 w-3" />
+      Uses {count} memory{count > 1 ? 'ies' : 'y'}
+    </div>
+  );
+}
 
 import { TIMING } from '@/lib/config';
 

@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
-import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks } from 'lucide-react';
+import { isEnabled } from '@/hooks/useFeatureFlags';
+import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks, ExternalLink } from 'lucide-react';
 
 interface SubagentInfo {
   name: string;
@@ -11,6 +12,14 @@ interface SubagentInfo {
   tokens_out?: number;
   duration_ms?: number;
   error?: string | null;
+}
+
+interface SourceItem {
+  title?: string;
+  url?: string;
+  snippet?: string;
+  date?: string;
+  domain?: string;
 }
 
 interface SynthesisCardProps {
@@ -24,6 +33,7 @@ interface SynthesisCardProps {
   subagents?: SubagentInfo[] | null;
   duration?: number;
   highlights?: Array<{ label: string; value: number }> | null;
+  sources?: SourceItem[] | null;
 }
 
 function formatModelLabel(model: string) {
@@ -37,6 +47,41 @@ function formatDurationMs(ms: number) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
+function SourcesPanel({ sources }: { sources: SourceItem[] }) {
+  if (!sources.length) return null;
+  return (
+    <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+      <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Sources</p>
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {sources.map((source, i) => (
+          <a
+            key={i}
+            href={source.url || '#'}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs transition-colors hover:bg-[var(--surface-3)]"
+            title={source.snippet || source.title}
+          >
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-[var(--accent-text)]">
+              {i + 1}
+            </span>
+            <div className="flex flex-col">
+              <span className="max-w-[180px] truncate font-medium text-[var(--text)]">
+                {source.title || 'Source'}
+              </span>
+              {source.domain && (
+                <span className="flex items-center gap-0.5 text-[10px] text-[var(--text-subtle)]">
+                  {source.domain} <ExternalLink className="h-2.5 w-2.5" />
+                </span>
+              )}
+            </div>
+          </a>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function SynthesisCard({
   index,
   phase,
@@ -48,6 +93,7 @@ export function SynthesisCard({
   subagents,
   duration,
   highlights,
+  sources,
 }: SynthesisCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -161,6 +207,7 @@ export function SynthesisCard({
               })}
             </div>
           )}
+          {isEnabled('sources-panel') && sources && sources.length > 0 && <SourcesPanel sources={sources} />}
           {subagents && subagents.length > 0 && (
             <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
               <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>

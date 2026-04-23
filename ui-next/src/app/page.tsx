@@ -11,6 +11,7 @@ import { useScrollAnchor } from '@/hooks/useScrollAnchor';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Composer } from '@/components/layout/Composer';
 import { ShortcutModal } from '@/components/layout/ShortcutModal';
+import { CommandPalette } from '@/components/layout/CommandPalette';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
 
@@ -21,7 +22,7 @@ import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
 import { conversationToMessages } from '@/lib/conversation-history';
 import { readSSEStream } from '@/lib/sse-reader';
-import { clearCache, uploadFiles, generateImage, generateImageEnhancement, resumePipelineStream } from '@/lib/api-client';
+import { clearCache, uploadFiles, generateImage, generateImageEnhancement, resumePipelineStream, submitFeedback } from '@/lib/api-client';
 
 // --- Reducer function for managing messages state ---
 type MessagesAction =
@@ -181,12 +182,17 @@ export default function Home() {
   const tier = useAppStore((s) => s.tier);
   const getAutoPreset = useAppStore((s) => s.getAutoPreset);
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
+  const toggleNeuroPanel = useAppStore((s) => s.toggleNeuroPanel);
+  const toggleTier = useAppStore((s) => s.toggleTier);
+  const recentCommands = useAppStore((s) => s.recentCommands);
+  const addRecentCommand = useAppStore((s) => s.addRecentCommand);
 
   const { history, refresh: refreshHistory, remove: removeHistory } = useConversationHistory();
   const { startRun, startFollowup, stopRun } = usePipelineStream();
   const { connect: wsConnect, disconnect: wsDisconnect, sendStop: wsSendStop, status: wsStatus } = useWebSocketPipeline();
   const serverOnline = useServerStatus();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   // REFACTOR: Replace useState with useReducer for messages state
   const [messages, dispatchMessages] = useReducer(messagesReducer, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -225,6 +231,16 @@ export default function Home() {
       }
       setRunning(false);
     },
+    onClearComposer: () => setComposerText(''),
+    onFocusComposer: () => {
+      const textarea = document.querySelector('textarea');
+      textarea?.focus();
+    },
+    onCopyLastResponse: () => {
+      const last = messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1);
+      if (last?.content) navigator.clipboard.writeText(last.content);
+    },
+    onCommandPalette: () => setCommandPaletteOpen((v) => !v),
   });
 
   async function handleSubmit(providedText?: string) {
@@ -809,6 +825,25 @@ export default function Home() {
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
   const followupAgentBadge = lastAssistantMsg ? 'Follow-up mode active' : null;
 
+  async function handleFeedback(messageId: string, rating: 'up' | 'down') {
+    try {
+      await submitFeedback({
+        conversation_id: conversationIdRef.current || messageId,
+        message_id: messageId,
+        rating,
+      });
+    } catch (err) {
+      console.error('Feedback submission failed:', err);
+    }
+  }
+
+  function handleContinueGenerating() {
+    if (lastAssistantMsg) {
+      setComposerText('Continue');
+      handleSubmit('Continue');
+    }
+  }
+
   return (
     <div className="flex h-screen w-full bg-[var(--bg)] text-[var(--text)]">
       <Sidebar
@@ -880,6 +915,8 @@ export default function Home() {
                 showNewContentIndicator={showNewContentIndicator}
                 phaseOpenMode={phaseOpenMode}
                 errorPhases={errorPhases}
+                onFeedback={handleFeedback}
+                onContinueGenerating={handleContinueGenerating}
               />
             </>
           ) : (
@@ -905,6 +942,23 @@ export default function Home() {
       </div>
 
       <ShortcutModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onNew={handleNew}
+        onClearComposer={() => setComposerText('')}
+        onToggleTheme={() => document.documentElement.classList.toggle('dark')}
+        onToggleSidebar={toggleSidebar}
+        onToggleNeuro={toggleNeuroPanel}
+        onToggleTier={toggleTier}
+        tier={tier}
+        onCopyLastResponse={() => {
+          const last = messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1);
+          if (last?.content) navigator.clipboard.writeText(last.content);
+        }}
+        recentCommands={recentCommands}
+        onRecordCommand={addRecentCommand}
+      />
     </div>
   );
 }

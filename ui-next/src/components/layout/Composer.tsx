@@ -223,21 +223,34 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   /** Tier toggle button — shared between centered and non-centered layouts */
   function TierToggle() {
     const isPremium = tier === 'premium';
+    const tooltipText = estimate
+      ? isPremium
+        ? `Premium: ~$${estimate.cost} · Budget would be ~$${(parseFloat(estimate.cost) * 0.15).toFixed(3)}`
+        : `Budget: ~$${estimate.cost} · Premium would be ~$${(parseFloat(estimate.cost) * 6.5).toFixed(3)}`
+      : isPremium
+        ? 'Premium mode active — click to switch to Budget'
+        : 'Budget mode active — click to switch to Premium';
+
     return (
-      <button
-        type="button"
-        onClick={toggleTier}
-        className={cn(
-          'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-          isPremium
-            ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-            : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-        )}
-        title={isPremium ? 'Premium mode active — click to switch to Budget' : 'Budget mode active — click to switch to Premium'}
-      >
-        <Sparkles className="h-3.5 w-3.5" />
-        <span>Premium</span>
-      </button>
+      <div className="group relative">
+        <button
+          type="button"
+          onClick={toggleTier}
+          className={cn(
+            'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+            isPremium
+              ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
+              : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+          )}
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          <span>Premium</span>
+        </button>
+        <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-muted)] opacity-0 shadow-[var(--shadow)] transition-opacity group-hover:opacity-100">
+          {tooltipText}
+          <div className="absolute left-1/2 top-full -mt-0.5 h-2 w-2 -translate-x-1/2 rotate-45 border-b border-r border-[var(--border)] bg-[var(--surface)]" />
+        </div>
+      </div>
     );
   }
 

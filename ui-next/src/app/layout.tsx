@@ -15,7 +15,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body className="h-full overflow-hidden bg-[var(--bg)] text-[var(--text)]">
-        <Providers>{children}</Providers>
+        <a href="#main-content" className="skip-link">Skip to main content</a>
+        <main id="main-content" className="h-full">
+          <Providers>{children}</Providers>
+        </main>
       </body>
     </html>
   );

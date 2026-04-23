@@ -72,7 +72,11 @@
       "Bash(python -m pytest tests/test_cohere_rerank.py -v)",
       "Bash(python -m pytest tests/test_e2e_comprehensive.py::TestAPISearch::test_api_search_returns_results -v --tb=long)",
       "Bash(python -m pytest tests/test_e2e_comprehensive.py::TestAPISearch::test_api_search_returns_results -v)",
-      "Bash(python -m pytest tests/test_searxng_startup.py -v --tb=short)"
+      "Bash(python -m pytest tests/test_searxng_startup.py -v --tb=short)",
+      "Bash(python -m pytest tests/test_searxng_startup.py::TestSearXNGUrlHelpers::test_get_searxng_urls_default -v)",
+      "Bash(python -m pytest tests/test_searxng_startup.py::TestSearXNGUrlHelpers::test_get_searxng_urls_from_env -v)",
+      "Bash(python -m pytest tests/test_regression_bugs.py::test_clear_cache_clears_memory_and_disk -v --tb=long)",
+      "Bash(python -m pytest tests/test_regression_bugs.py::test_clear_cache_clears_memory_and_disk -v -s --tb=short)"
     ]
   },
   "enableAllProjectMcpServers": true,

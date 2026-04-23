@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, memo } from 'react';
 import { motion } from 'framer-motion';
-import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2, Download, X } from 'lucide-react';
+import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2, Download, X, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
 import { ChatMessage, MemoryBadge } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
@@ -10,7 +10,8 @@ import { ErrorMessage } from './ErrorMessage';
 import { WidgetRenderer } from '@/components/widgets/WidgetRenderer';
 import { TokenCount, Attachment } from '@/lib/types';
 import { TIMING } from '@/lib/config';
-import { copyToClipboard } from '@/lib/utils';
+import { copyToClipboard, cn } from '@/lib/utils';
+import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ManifestationVisuals } from './ManifestationVisuals';
 
 export interface RenderedPhase {
@@ -53,6 +54,8 @@ interface ChatFeedProps {
   showNewContentIndicator?: boolean;
   phaseOpenMode?: 'auto' | 'expand' | 'collapse';
   errorPhases?: number[];
+  onFeedback?: (messageId: string, rating: 'up' | 'down') => void;
+  onContinueGenerating?: () => void;
 }
 
 function PhaseIndicator({
@@ -186,8 +189,23 @@ function formatDuration(seconds: number): string {
   return `${mins}m ${secs.toString().padStart(2, '0')}s`;
 }
 
-function MessageActions({ content, tokens, duration, cost }: { content: string; tokens?: TokenCount; duration?: number; cost?: number }) {
+function MessageActions({
+  content,
+  tokens,
+  duration,
+  cost,
+  messageId,
+  onFeedback,
+}: {
+  content: string;
+  tokens?: TokenCount;
+  duration?: number;
+  cost?: number;
+  messageId?: string;
+  onFeedback?: (messageId: string, rating: 'up' | 'down') => void;
+}) {
   const [copied, setCopied] = useState(false);
+  const [feedbackGiven, setFeedbackGiven] = useState<'up' | 'down' | null>(null);
 
   async function handleCopy() {
     const ok = await copyToClipboard(content);
@@ -197,7 +215,14 @@ function MessageActions({ content, tokens, duration, cost }: { content: string; 
     }
   }
 
+  function handleFeedback(rating: 'up' | 'down') {
+    if (!messageId || !onFeedback) return;
+    setFeedbackGiven(rating);
+    onFeedback(messageId, rating);
+  }
+
   const showTokens = tokens && (tokens.total ?? 0) > 0;
+  const showFeedback = isEnabled('feedback-loop') && messageId && onFeedback;
 
   return (
     <div className="mt-2 flex items-center justify-center gap-3">
@@ -233,16 +258,66 @@ function MessageActions({ content, tokens, duration, cost }: { content: string; 
           ${cost.toFixed(4)}
         </span>
       ) : null}
+      {showFeedback && (
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => handleFeedback('up')}
+            className={cn(
+              'rounded-full p-1 text-xs transition-colors',
+              feedbackGiven === 'up'
+                ? 'bg-green-500/10 text-green-500'
+                : 'text-[var(--text-subtle)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+            )}
+            aria-label="Thumbs up"
+            disabled={feedbackGiven !== null}
+          >
+            <ThumbsUp className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => handleFeedback('down')}
+            className={cn(
+              'rounded-full p-1 text-xs transition-colors',
+              feedbackGiven === 'down'
+                ? 'bg-red-500/10 text-red-500'
+                : 'text-[var(--text-subtle)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+            )}
+            aria-label="Thumbs down"
+            disabled={feedbackGiven !== null}
+          >
+            <ThumbsDown className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-export function ChatFeed({
+function ContinueButton({ onContinue }: { onContinue?: () => void }) {
+  if (!isEnabled('continue-generating') || !onContinue) return null;
+  return (
+    <div className="mt-3 flex justify-center">
+      <button
+        type="button"
+        onClick={onContinue}
+        className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]"
+      >
+        <ChevronDown className="h-3.5 w-3.5" />
+        Continue generating…
+      </button>
+    </div>
+  );
+}
+
+function ChatFeedComponent({
   messages,
   onScrollToBottom,
   showNewContentIndicator,
   phaseOpenMode = 'auto',
   errorPhases = [],
+  onFeedback,
+  onContinueGenerating,
 }: ChatFeedProps) {
   const [selectedImage, setSelectedImage] = useState<{ data: string; model?: string; alt: string } | null>(null);
   // Track how many phases are allowed to render for each assistant message.
@@ -436,7 +511,19 @@ export function ChatFeed({
               )}
             </ChatMessage>
             {!msg.isStreaming && msg.role === 'assistant' && (
-              <MessageActions content={msg.content} tokens={msg.tokens} duration={msg.duration} cost={msg.cost} />
+              <>
+                <MessageActions
+                  content={msg.content}
+                  tokens={msg.tokens}
+                  duration={msg.duration}
+                  cost={msg.cost}
+                  messageId={msg.id}
+                  onFeedback={onFeedback}
+                />
+                {msg.id === messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1)?.id && (
+                  <ContinueButton onContinue={onContinueGenerating} />
+                )}
+              </>
             )}
           </div>
         );
@@ -498,3 +585,5 @@ export function ChatFeed({
     </div>
   );
 }
+
+export const ChatFeed = memo(ChatFeedComponent);

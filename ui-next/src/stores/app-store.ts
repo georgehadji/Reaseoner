@@ -31,6 +31,7 @@ interface AppState {
     preset: string;
     autoSelectedMethod: string | null;
   } | null;
+  recentCommands: string[];
 
   // Actions
   setRunning: (running: boolean) => void;
@@ -49,6 +50,7 @@ interface AppState {
   setActiveRunErrors: (errors: string[]) => void;
   clearActiveRun: () => void;
   getAutoPreset: () => string;
+  addRecentCommand: (id: string) => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -64,6 +66,7 @@ export const useAppStore = create<AppState>()(
       attachments: [],
       history: [],
       activeRun: null,
+      recentCommands: [],
 
       setRunning: (running) => set({ running }),
 
@@ -127,6 +130,12 @@ export const useAppStore = create<AppState>()(
 
       clearActiveRun: () => set({ activeRun: null }),
 
+      addRecentCommand: (id) =>
+        set((state) => {
+          const next = [id, ...state.recentCommands.filter((c) => c !== id)].slice(0, 3);
+          return { recentCommands: next };
+        }),
+
       /** Returns the preset string to send to the API: "auto-budget" or "auto-premium". */
       getAutoPreset: () => `auto-${get().tier}`,
     }),
@@ -148,6 +157,7 @@ export const useAppStore = create<AppState>()(
         tier: state.tier,
         isExpert: state.isExpert,
         sidebarCollapsed: state.sidebarCollapsed,
+        recentCommands: state.recentCommands,
         // Do not persist isImageMode so it defaults to false on next load
       }),
     }

@@ -426,7 +426,7 @@ class PerplexitySearchClient:
 
             return [{
                 "title": f"Perplexity result for: {query[:50]}",
-                "url": citations[0] if citations else "",
+                "url": (citations[0] or "") if citations else "",
                 "content": content,
                 "snippet": content[:TRUNCATION.SNIPPET],
                 "source": "perplexity",

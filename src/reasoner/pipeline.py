@@ -329,7 +329,6 @@ class ARAPipeline(
         
         if not raw or not raw.strip():
             logger.warning(f"LLM returned empty response for role={role}; possible content filter or API error")
-            raise LLMError(f"Empty LLM response from provider for role={role}; possible content filter or API error")
 
         # Extract cost info from metadata and accumulate in state
         cost_usd = metadata.get("cost_usd", 0.0)
@@ -843,13 +842,13 @@ class ARAPipeline(
         try:
             client = get_deepl_client()
             result = await client.translate(original_problem, target_lang="EN")
-            translated = result["text"]
+            translated = result.get("text") or original_problem
             detected = result.get("detected_source_language", source_lang)
 
             state.problem = translated
             if original_enhanced and original_enhanced != original_problem:
                 enh_result = await client.translate(original_enhanced, target_lang="EN")
-                state.enhanced_problem = enh_result["text"]
+                state.enhanced_problem = enh_result.get("text") or original_enhanced
             else:
                 state.enhanced_problem = translated
 
@@ -890,7 +889,7 @@ class ARAPipeline(
         try:
             client = get_deepl_client()
             result = await client.translate(synthesis_text, target_lang=target_lang, source_lang="EN")
-            translated = result["text"]
+            translated = result.get("text") or synthesis_text
 
             if state.final_solution:
                 state.final_solution.core_solution = translated

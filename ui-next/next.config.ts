@@ -5,7 +5,7 @@ const HSTS_VALUE = 'max-age=31536000; includeSubDomains; preload';
 
 // Build CSP connect-src from environment: include the WebSocket URL if set
 function buildCsp(): string {
-  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8001/ws';
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://127.0.0.1:8001/ws';
 
   // Collect all WebSocket origins that should be allowed
   const wsOrigins = new Set<string>();

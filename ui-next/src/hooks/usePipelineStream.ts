@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import { fetchWithCsrf } from '@/lib/security-client';
 import { readSSEStream } from '@/lib/sse-reader';
 import { PhaseEvent, RunRequest, RunFollowupRequest } from '@/lib/types';
@@ -14,6 +14,8 @@ function getDevErrorMessage(status: number, text: string): string {
 
 export function usePipelineStream() {
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => { abortControllerRef.current?.abort(); }, []);
 
   const streamEvents = useCallback(
     async (url: string, body: object, onEvent: (ev: PhaseEvent) => void) => {

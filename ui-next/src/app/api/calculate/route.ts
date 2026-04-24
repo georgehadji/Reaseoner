@@ -41,6 +41,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: err.message }, { status: 400 });
     }
     const msg = err instanceof Error ? err.message : 'Proxy error';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

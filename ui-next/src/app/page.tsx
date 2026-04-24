@@ -646,8 +646,9 @@ export default function Home() {
 
     try {
       const state = useAppStore.getState();
-      // Connect WebSocket before starting the stream (additive transport)
-      wsConnect(clientRunId, onEvent);
+      // Connect WebSocket for control (stop) and status only.
+      // Phase events come exclusively via SSE to avoid double-processing.
+      wsConnect(clientRunId, () => {});
 
       if (isFollowup) {
         const followupReq: RunFollowupRequest = {

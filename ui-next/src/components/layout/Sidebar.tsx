@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Conversation } from '@/lib/types';
 import { Plus, PanelLeft, Trash2, Brain, History, Play } from 'lucide-react';
@@ -45,14 +45,16 @@ function formatDateGroup(dateStr: string): string {
 function MemoryStatus() {
   const [status, setStatus] = useState<'ok' | 'degraded' | 'unknown'>('unknown');
 
-  useMemo(() => {
+  useEffect(() => {
+    let mounted = true;
     fetch('/api/neuro/health')
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((d) => setStatus(d.status === 'ok' ? 'ok' : 'degraded'))
-      .catch(() => setStatus('unknown'));
+      .then((d) => { if (mounted) setStatus(d.status === 'ok' ? 'ok' : 'degraded'); })
+      .catch(() => { if (mounted) setStatus('unknown'); });
+    return () => { mounted = false; };
   }, []);
 
   return (

@@ -111,9 +111,9 @@ def synthesis_prompt(state: PipelineState) -> str:
                 "title": r.get("title", "Unknown"),
                 "url": r.get("url", ""),
                 "summary": r.get("summary", ""),
-                "key_facts": (r.get("key_facts") or [])[:TRUNCATION.KEY_INSIGHTS],
-                "relevant_quotes": (r.get("relevant_quotes") or [])[:TRUNCATION.MEMORY],
-                "vetting_flags": (r.get("vetting_flags") or [])[:TRUNCATION.MEMORY],
+                "key_facts": (v if isinstance(v := r.get("key_facts"), list) else [])[:TRUNCATION.KEY_INSIGHTS],
+                "relevant_quotes": (v if isinstance(v := r.get("relevant_quotes"), list) else [])[:TRUNCATION.MEMORY],
+                "vetting_flags": (v if isinstance(v := r.get("vetting_flags"), list) else [])[:TRUNCATION.MEMORY],
             }
             entry_text = json.dumps(entry)
             if total_chars + len(entry_text) > max_chars:

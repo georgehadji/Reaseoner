@@ -9,7 +9,7 @@ import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
 import { ErrorMessage } from './ErrorMessage';
 import { WidgetRenderer } from '@/components/widgets/WidgetRenderer';
 import { TokenCount, Attachment } from '@/lib/types';
-import { TIMING } from '@/lib/config';
+import { TIMING, TEXT_SIZES } from '@/lib/config';
 import { copyToClipboard, cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ManifestationVisuals } from './ManifestationVisuals';
@@ -140,7 +140,7 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
 
   return (
     <div className="mb-2 w-full max-w-3xl overflow-hidden rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(255,196,132,0.18),rgba(255,255,255,0.88)_38%,rgba(143,212,255,0.2))] p-4 shadow-[var(--shadow)]">
-      <div className="relative overflow-hidden rounded-[24px] border border-white/50 bg-[var(--surface)]/80 p-5 backdrop-blur">
+      <div className="relative overflow-hidden rounded-xl border border-white/50 bg-[var(--surface)]/80 p-5 backdrop-blur">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,191,117,0.18),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(104,185,255,0.16),transparent_38%)]" />
 
         <div className="relative mb-4 flex items-center justify-between gap-3">
@@ -499,7 +499,7 @@ function ChatFeedComponent({
                     const isLastPhase = idx === phases.length - 1;
                     return (
                       <PhaseRenderer
-                        key={`${msg.id}-${phase.phase}`}
+                        key={`${msg.id}-${phase.phase}-${idx}`}
                         phase={phase}
                         onComplete={() => handlePhaseComplete(msg.id, idx)}
                         animationKey={`${msg.id}-${phase.index}`}

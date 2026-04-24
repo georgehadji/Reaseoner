@@ -185,6 +185,18 @@ export const DEFAULTS = {
   typewriterWordsPerSecond: 20,
 };
 
+/** Typography sizes per DESIGN.md hierarchy. */
+export const TEXT_SIZES = {
+  /** DESIGN.md Tiny (10px) — badges, fine print, source numbers. */
+  tiny: 'text-[10px]',
+  /** Synthesis / final output — maps to DESIGN.md Body (~18px). */
+  synthesis: 'text-[17px] leading-relaxed',
+  /** Intermediate phase cards — maps to DESIGN.md Nav/UI (15px). */
+  phaseCard: 'text-[15px] leading-relaxed',
+  /** Chat feed body — maps to DESIGN.md Body (18px). */
+  body: 'text-[18px]',
+};
+
 export const TIMING = {
   copiedFeedbackMs: 2000,
   streamingBounceDelays: [0, 150, 300] as const,

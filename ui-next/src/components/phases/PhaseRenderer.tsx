@@ -2,7 +2,7 @@
 
 import { useRef, useEffect, memo } from 'react';
 import { RenderedPhase } from '@/components/chat/ChatFeed';
-import { DEFAULTS } from '@/lib/config';
+import { DEFAULTS, TEXT_SIZES } from '@/lib/config';
 import { TypewriterMarkdown } from '@/components/chat/TypewriterMarkdown';
 import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
 import { PhaseCard } from './PhaseCard';
@@ -115,6 +115,8 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
   const vettedContext = getVettedContext(data);
   const isCompact = isEnabled('compact-phases') && !isSynthesisPhase(name) && phaseNum !== 0;
   const defaultOpen = isSynthesisPhase(name) || phaseNum === 0;
+  const isSynth = isSynthesisPhase(name);
+  const phaseTextClass = isSynth ? TEXT_SIZES.synthesis : TEXT_SIZES.phaseCard;
 
   // Direct Response / Web Search: render inline without a phase card
   if (name === 'Direct Response' || name === 'Web Search') {
@@ -169,9 +171,9 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
         ) : (
-          <MarkdownRenderer>{md}</MarkdownRenderer>
+          <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
         )}
       </PhaseCard>
     );
@@ -188,9 +190,9 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
         ) : (
-          <MarkdownRenderer>{md}</MarkdownRenderer>
+          <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
         )}
       </PhaseCard>
     );
@@ -210,9 +212,9 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
         ) : (
-          <MarkdownRenderer>{md}</MarkdownRenderer>
+          <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
         )}
       </PhaseCard>
     );
@@ -257,7 +259,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
                       });
                       copyToClipboard(lines.join('\n'));
                     }}
-                    className="rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 text-[10px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]"
+                    className={`rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2.5 py-1 ${TEXT_SIZES.tiny} font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]`}
                   >
                     Copy actions
                   </button>
@@ -325,9 +327,9 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
       {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
       {animated ? (
-        <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
+        <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
       ) : (
-        <MarkdownRenderer>{md}</MarkdownRenderer>
+        <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       )}
     </PhaseCard>
   );
@@ -338,7 +340,7 @@ function VettedContextBlock({ items }: { items: Array<Record<string, unknown>> }
     <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
       <div className="mb-2 flex items-center justify-between">
         <h4 className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Vetted Context</h4>
-        <span className="text-[10px] text-[var(--text-subtle)]">{items.length} source{items.length === 1 ? '' : 's'}</span>
+        <span className={`${TEXT_SIZES.tiny} text-[var(--text-subtle)]`}>{items.length} source{items.length === 1 ? '' : 's'}</span>
       </div>
       <div className="space-y-3">
         {items.map((item, idx) => {
@@ -361,7 +363,7 @@ function VettedContextBlock({ items }: { items: Array<Record<string, unknown>> }
               </div>
               {summary ? <p className="mt-2 text-[15px] text-[var(--text)]">{summary}</p> : null}
               {keyFacts.length > 0 && (
-                <ul className="mt-2 space-y-1 text-[14px] text-[var(--text-subtle)]">
+                <ul className="mt-2 space-y-1 text-sm text-[var(--text-subtle)]">
                   {keyFacts.slice(0, 4).map((fact, i) => (
                     <li key={i}>• {fact}</li>
                   ))}

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, memo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
-import { DEFAULTS } from '@/lib/config';
+import { DEFAULTS, TEXT_SIZES } from '@/lib/config';
 import { isAnimationComplete, markAnimationComplete } from '@/lib/animation-cache';
 
 interface TypewriterMarkdownProps {
@@ -10,9 +10,10 @@ interface TypewriterMarkdownProps {
   wordsPerSecond?: number;
   onComplete?: () => void;
   animationKey?: string;
+  className?: string;
 }
 
-export const TypewriterMarkdown = memo(function TypewriterMarkdown({ text, wordsPerSecond = DEFAULTS.typewriterWordsPerSecond, onComplete, animationKey }: TypewriterMarkdownProps) {
+export const TypewriterMarkdown = memo(function TypewriterMarkdown({ text, wordsPerSecond = DEFAULTS.typewriterWordsPerSecond, onComplete, animationKey, className = TEXT_SIZES.synthesis }: TypewriterMarkdownProps) {
   const [displayedText, setDisplayedText] = useState('');
   const onCompleteRef = useRef(onComplete);
   const completedRef = useRef(false);
@@ -81,7 +82,7 @@ export const TypewriterMarkdown = memo(function TypewriterMarkdown({ text, words
   }, [text, wordsPerSecond, animationKey]);
 
   return (
-    <div className="markdown-body text-[17px] leading-relaxed">
+    <div className={`markdown-body ${className}`}>
       <MarkdownRenderer>{displayedText}</MarkdownRenderer>
       {displayedText.length < text.length && (
         <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle ml-0.5" />

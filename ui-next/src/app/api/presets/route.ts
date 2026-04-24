@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Proxy error';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    const isValidationError = msg.includes('Invalid upstream URL') || msg.includes('disallowed port') || msg.includes('private network');
+    return NextResponse.json({ error: msg }, { status: isValidationError ? 400 : 502 });
   }
 }

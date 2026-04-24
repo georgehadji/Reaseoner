@@ -15,7 +15,7 @@ export function ManifestationVisuals({ progress }: ManifestationVisualsProps) {
   const isStabilizing = progress >= 0.7;
 
   return (
-    <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-[24px] bg-black/5 selection:bg-none">
+    <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-xl bg-black/5 selection:bg-none">
       <AnimatePresence mode="wait">
         {/* Stage 1: Dissolved (0-30%) */}
         {isDissolved && (
@@ -129,7 +129,7 @@ export function ManifestationVisuals({ progress }: ManifestationVisualsProps) {
               }}
               transition={{ duration: 0.5, repeat: Infinity }}
             >
-              <div className="h-full w-full rounded-[24px] bg-gradient-to-tr from-sky-100/20 to-amber-50/20" />
+              <div className="h-full w-full rounded-xl bg-gradient-to-tr from-sky-100/20 to-amber-50/20" />
 
               {/* The "Pop" - flash of light at near-completion */}
               {progress > 0.95 && (

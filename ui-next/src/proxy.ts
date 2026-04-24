@@ -5,6 +5,26 @@ import { generateSignedCsrfToken, verifyCsrfToken } from '@/lib/security-server'
 
 const HSTS_VALUE = 'max-age=31536000; includeSubDomains; preload';
 
+function buildConnectSrc(): string {
+  const wsOrigins = new Set<string>();
+  for (const port of ['8000', '8001']) {
+    wsOrigins.add(`ws://localhost:${port}`);
+    wsOrigins.add(`ws://127.0.0.1:${port}`);
+  }
+  const wsUrl = process.env.NEXT_PUBLIC_WS_URL || '';
+  if (wsUrl) {
+    try {
+      const u = new URL(wsUrl);
+      const port = u.port || '8000';
+      wsOrigins.add(`ws://${u.hostname}:${port}`);
+      if (u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') {
+        wsOrigins.add(`wss://${u.hostname}:${port}`);
+      }
+    } catch { /* fall back to dev defaults */ }
+  }
+  return `connect-src 'self' ${[...wsOrigins].join(' ')}`;
+}
+
 export async function proxy(request: NextRequest) {
   const response = NextResponse.next();
 
@@ -17,7 +37,7 @@ export async function proxy(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self'",
+    buildConnectSrc(),
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",

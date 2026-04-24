@@ -29,6 +29,6 @@ export async function DELETE(req: NextRequest) {
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Proxy error';
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json({ error: msg }, { status: 502 });
   }
 }

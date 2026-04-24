@@ -1,6 +1,7 @@
 'use client';
 
 import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
+import { TEXT_SIZES } from '@/lib/config';
 
 interface ClassificationCardProps {
   data: unknown;
@@ -44,7 +45,7 @@ export function ClassificationCard({ data }: ClassificationCardProps) {
       </div>
 
       {rationale && (
-        <div className="text-[17px] leading-relaxed text-[var(--text-2)]">
+        <div className={`${TEXT_SIZES.phaseCard} text-[var(--text-2)]`}>
           <MarkdownRenderer>{rationale}</MarkdownRenderer>
         </div>
       )}

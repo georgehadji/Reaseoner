@@ -4,6 +4,7 @@ import { useEffect, useState, memo } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown, Bot, Timer, Cpu, Boxes } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { TEXT_SIZES } from '@/lib/config';
 
 interface SubagentInfo {
   name: string;
@@ -101,7 +102,7 @@ export const PhaseCard = memo(function PhaseCard({
               />
               <span className="text-xs font-medium text-[var(--text)]">{name}</span>
               {duration !== undefined && duration > 0 ? (
-                <span className="text-[10px] text-[var(--text-subtle)]">
+                <span className={`${TEXT_SIZES.tiny} text-[var(--text-subtle)]`}>
                   <Timer className="inline h-3 w-3" /> {duration.toFixed(1)}s
                 </span>
               ) : null}

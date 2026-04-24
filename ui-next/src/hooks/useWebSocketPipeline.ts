@@ -49,8 +49,8 @@ export function useWebSocketPipeline() {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'event' && msg.data) {
-          onEvent(msg.data as PhaseEvent);
+        if (msg.type === 'event' && msg.data && onEventRef.current) {
+          onEventRef.current(msg.data as PhaseEvent);
         }
       } catch {
         // ignore malformed messages
@@ -74,7 +74,7 @@ export function useWebSocketPipeline() {
         // eslint-disable-next-line no-console
         console.debug(`[WebSocket] reconnecting in ${delay}ms (attempt ${reconnectCountRef.current})`);
         reconnectTimerRef.current = setTimeout(() => {
-          doConnect(pipelineId, onEvent);
+          if (onEventRef.current) doConnect(pipelineId, onEventRef.current);
         }, delay);
       } else {
         setStatus('disconnected');

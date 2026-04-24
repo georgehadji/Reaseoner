@@ -1,43 +1,62 @@
 @echo off
-title Reasoner - Kill Servers
+setlocal EnableDelayedExpansion
+title Reasoner - Stopping...
 cls
-echo ============================================================
-echo   Reasoner - AI Reasoning Platform
-echo   Stopping all servers...
-echo ============================================================
+
+echo.
+echo  ============================================================
+echo    Reasoner  -  Stop All Servers
+echo  ============================================================
 echo.
 
-:: Show any processes on our standard ports before killing
-set SHOW_PORTS=1
-if "%1"=="--quiet" set SHOW_PORTS=0
+:: ── Working directory guard ──────────────────────────────────────────
+if not exist "kill_servers.py" (
+    echo  [ERROR] Run from the project root ^(where kill_servers.py lives^).
+    echo.
+    pause & exit /b 1
+)
 
-if %SHOW_PORTS%==1 (
-    echo [INFO] Checking ports...
-    powershell -NoProfile -Command "try { $c = Get-NetTCPConnection -LocalPort 8001 -ErrorAction Stop; $p = Get-Process -Id $c[0].OwningProcess; Write-Host ('  Port 8001 in use by: ' + $p.ProcessName + ' (PID ' + $p.Id + ')') } catch { Write-Host '  Port 8001: free' }"
-    powershell -NoProfile -Command "try { $c = Get-NetTCPConnection -LocalPort 3000 -ErrorAction Stop; $p = Get-Process -Id $c[0].OwningProcess; Write-Host ('  Port 3000 in use by: ' + $p.ProcessName + ' (PID ' + $p.Id + ')') } catch { Write-Host '  Port 3000: free' }"
+:: ── Python check ─────────────────────────────────────────────────────
+where python >nul 2>&1
+if errorlevel 1 (
+    echo  [ERROR] python not found in PATH.
+    echo.
+    pause & exit /b 1
+)
+
+:: ── Port status (single PowerShell call for all three ports) ─────────
+if not "%1"=="--quiet" (
+    echo  Active Reasoner processes:
+    powershell -NoProfile -Command ^
+        "foreach ($port in @(8001, 50001, 3000)) {" ^
+        "  try {" ^
+        "    $c = Get-NetTCPConnection -LocalPort $port -EA Stop;" ^
+        "    $p = Get-Process -Id $c[0].OwningProcess -EA SilentlyContinue;" ^
+        "    $name = if ($p) { $p.ProcessName + ' (PID ' + $p.Id + ')' } else { 'unknown' };" ^
+        "    Write-Host ('    :' + $port + '  ->  ' + $name)" ^
+        "  } catch {" ^
+        "    Write-Host ('    :' + $port + '  ->  free')" ^
+        "  }" ^
+        "}"
     echo.
 )
 
-if not exist "kill_servers.py" (
-    echo [ERROR] kill_servers.py not found in current directory.
-    echo         Please run this batch file from the project root.
-    pause
-    exit /b 1
-)
-
+:: ── Kill servers ──────────────────────────────────────────────────────
 python kill_servers.py %*
 set EXIT_CODE=%ERRORLEVEL%
 
+title Reasoner - Stopped
+echo.
 if %EXIT_CODE% neq 0 (
-    echo.
-    echo ============================================================
-    echo   Server stop failed with error code %EXIT_CODE%
-    echo ============================================================
+    echo  [ERROR] Stop script exited with code %EXIT_CODE%.
 ) else (
-    echo.
-    echo ============================================================
-    echo   All Reasoner servers stopped.
-    echo ============================================================
+    echo  [OK]  All servers stopped.
 )
+echo.
 
+if "%1"=="--quiet" (
+    endlocal & exit /b %EXIT_CODE%
+)
 pause
+endlocal
+exit /b %EXIT_CODE%

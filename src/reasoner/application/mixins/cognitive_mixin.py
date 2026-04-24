@@ -198,6 +198,9 @@ class CognitiveMixin(PipelineMixinProtocol):
         code = state.pot_state.get("code", "")
         if not code:
             state.errors.append("PoT: No code to execute.")
+            state.pot_state["execution_success"] = False
+            state.pot_state["execution_output"] = ""
+            state.pot_state["execution_error"] = "No code was generated"
             return
         # Simulated execution via LLM (sandbox not available)
         raw, _ = await self._call_llm_cached(
@@ -212,6 +215,12 @@ class CognitiveMixin(PipelineMixinProtocol):
 
     async def _phase_pot_interpret(self, state: PipelineState) -> None:
         self._log("PoT", "Interpreting execution results...", state)
+        if not state.pot_state.get("execution_success", False):
+            self._log("PoT", "Skipping interpretation — execution did not succeed.", state)
+            state.pot_state["interpretation"] = "Execution failed; no results to interpret."
+            state.pot_state["computed_answer"] = ""
+            state.pot_state["caveats"] = []
+            return
         raw, _ = await self._call_llm_cached(
             role="pot_interpret",
             system_prompt=phases.POT_INTERPRET_SYSTEM,

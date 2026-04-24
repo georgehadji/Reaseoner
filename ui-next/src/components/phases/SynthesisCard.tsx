@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks, ExternalLink } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { TEXT_SIZES } from '@/lib/config';
 
 interface SubagentInfo {
   name: string;
@@ -62,7 +63,7 @@ function SourcesPanel({ sources }: { sources: SourceItem[] }) {
               rel="noopener noreferrer"
               className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs transition-colors hover:bg-[var(--surface-3)]"
             >
-            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-[var(--accent-text)]">
+            <span className={`flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] ${TEXT_SIZES.tiny} font-bold text-[var(--accent-text)]`}>
               {i + 1}
             </span>
             <div className="flex flex-col">
@@ -70,7 +71,7 @@ function SourcesPanel({ sources }: { sources: SourceItem[] }) {
                 {source.title || 'Source'}
               </span>
               {source.domain && (
-                <span className="flex items-center gap-0.5 text-[10px] text-[var(--text-subtle)]">
+                <span className={`flex items-center gap-0.5 ${TEXT_SIZES.tiny} text-[var(--text-subtle)]`}>
                   {source.domain} <ExternalLink className="h-2.5 w-2.5" />
                 </span>
               )}
@@ -201,7 +202,7 @@ export function SynthesisCard({
                   <a
                     key={highlight.label}
                     href={`#${anchor}`}
-                    className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+                    className={`rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 ${TEXT_SIZES.tiny} font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]`}
                   >
                     {highlight.label}
                   </a>

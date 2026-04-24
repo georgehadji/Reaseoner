@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -123,7 +123,7 @@ def _label_color(label: ClaimLabel) -> str:
 
 
 def _duration(state: PipelineState) -> float:
-    return (datetime.now() - state.started_at).total_seconds()
+    return (datetime.now(timezone.utc) - state.started_at).total_seconds()
 
 
 

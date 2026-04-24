@@ -18,7 +18,7 @@ import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
 import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '@/lib/types';
-import { METHOD_PHASES } from '@/lib/config';
+import { METHOD_PHASES, LIMITS, PIPELINE_DEFAULTS } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
 import { conversationToMessages } from '@/lib/conversation-history';
@@ -142,7 +142,7 @@ function getMethodPhases(method: string) {
   return METHOD_PHASES[normalized] || METHOD_PHASES['multi-perspective'] || [];
 }
 
-const IMAGE_PROMPT_MAX_CHARS = 2000;
+const IMAGE_PROMPT_MAX_CHARS = LIMITS.imagePromptMaxChars;
 
 /** Strip model-name prefixes like "DALL-E 3, Midjourney, Flux prompt:" or "**DALL-E 3, Midjourney, Flux Prompt:**" from enhanced prompts for display. */
 function cleanDisplayPrompt(prompt: string): string {
@@ -202,7 +202,7 @@ export default function Home() {
   const clientRunIdRef = useRef<string | null>(null);
 
   // Auto-selected method from HyperGate — populated from the 'start' SSE event.
-  const [autoSelectedMethod, setAutoSelectedMethod] = useState<string>('multi_perspective');
+  const [autoSelectedMethod, setAutoSelectedMethod] = useState<string>(PIPELINE_DEFAULTS.method);
 
   const [completedPhases, setCompletedPhases] = useState<number[]>([]);
   const [errorPhases, setErrorPhases] = useState<number[]>([]);
@@ -255,7 +255,7 @@ export default function Home() {
     setErrorPhases([]);
     setCurrentPhase(undefined);
     setPhaseDurations({});
-    setAutoSelectedMethod('multi_perspective');
+    setAutoSelectedMethod(PIPELINE_DEFAULTS.method);
     setPhaseOpenMode('auto');
     phaseStartTimesRef.current = {};
 
@@ -327,7 +327,7 @@ export default function Home() {
         const referenceImages = await Promise.all(
           attachments
             .filter((attachment) => attachment.type.startsWith('image/'))
-            .slice(0, 4)
+            .slice(0, LIMITS.maxReferenceImages)
             .map((attachment) => fileToDataUrl(attachment.file)),
         );
         const enhancement = await generateImageEnhancement(basePrompt.prompt, tier);
@@ -445,7 +445,7 @@ export default function Home() {
     let finalErrors: string[] = [];
     let finalTokens = { input: 0, output: 0, total: 0 };
     // Track the method discovered from the 'start' event within this run
-    let runMethod = 'multi_perspective';
+    let runMethod = PIPELINE_DEFAULTS.method;
 
     // Shared event handler for SSE stream processing
     const onEvent = (ev: PhaseEvent) => {
@@ -716,7 +716,7 @@ export default function Home() {
     setErrorPhases([]);
     setCurrentPhase(undefined);
     setPhaseDurations({});
-    setAutoSelectedMethod('multi_perspective');
+    setAutoSelectedMethod(PIPELINE_DEFAULTS.method);
     setPhaseOpenMode('auto');
     phaseStartTimesRef.current = {};
     conversationIdRef.current = null;
@@ -811,7 +811,7 @@ export default function Home() {
     dispatchMessages({ type: 'SET_MESSAGES', payload: loadedMessages });
     
     // Restore the method so PhaseTimeline shows the right phases for loaded conversations
-    setAutoSelectedMethod(conv.method || 'multi_perspective');
+    setAutoSelectedMethod(conv.method || PIPELINE_DEFAULTS.method);
     setCompletedPhases(renderedPhases.map((p) => p.phase));
     setErrorPhases([]);
     setCurrentPhase(undefined);

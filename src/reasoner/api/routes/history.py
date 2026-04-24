@@ -6,8 +6,9 @@ import json
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from reasoner.api.auth_deps import require_csrf
 from reasoner.api.history import HISTORY_DIR, _list_history
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,10 @@ async def get_history_entry(entry_id: str):
 
 
 @router.delete("/api/history/{entry_id}")
-async def delete_history_entry(entry_id: str):
+async def delete_history_entry(
+    entry_id: str,
+    csrf_checked=Depends(require_csrf),
+):
     """Delete a history entry."""
     safe_id = Path(entry_id).name
     path = HISTORY_DIR / f"{safe_id}.json"
@@ -66,7 +70,9 @@ async def delete_history_entry(entry_id: str):
 
 
 @router.delete("/api/history")
-async def clear_history():
+async def clear_history(
+    csrf_checked=Depends(require_csrf),
+):
     """Clear all history."""
     cleared = 0
     failed = 0

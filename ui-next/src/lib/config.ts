@@ -173,16 +173,65 @@ export const EXAMPLE_PROMPTS: string[] = [
 
 export const API = {
   RUN: '/api/run',
+  RUN_FOLLOWUP: '/api/run-followup',
   STOP: '/api/stop',
   CACHE: '/api/cache',
   PRESETS: '/api/presets',
   MODELS: '/api/models',
+  ESTIMATE: '/api/estimate',
+  WEATHER: '/api/weather',
+  STOCKS: '/api/stocks',
+  CALCULATE: '/api/calculate',
+  SEARCH: '/api/search',
+  UPLOAD: '/api/upload',
+  FEEDBACK: '/api/feedback',
+  GENERATE_IMAGE: '/api/generate-image',
+  NEURO_HEALTH: '/api/neuro/health',
+  NEURO_SESSIONS: '/api/neuro/sessions',
+  NEURO_RECALL: '/api/neuro/recall',
+  NEURO_LEARN: '/api/neuro/learn',
+  PIPELINE_RESUME: (id: string) => `/api/pipelines/${encodeURIComponent(id)}/resume-stream`,
 };
 
 export const DEFAULTS = {
   tier: 'budget' as 'budget' | 'premium',
   topK: 2,
   typewriterWordsPerSecond: 20,
+};
+
+export const LIMITS = {
+  imagePromptMaxChars: 2000,
+  maxFileSizeBytes: 10 * 1024 * 1024,
+  maxAttachments: 5,
+  maxRecentCommands: 3,
+  titleTruncateChars: 45,
+  maxTagDisplay: 4,
+  maxReferenceImages: 4,
+  neuroSessionsLimit: 20,
+  neuroRecallMaxResults: 5,
+  webSearchNumResults: 10,
+};
+
+export const WS = {
+  defaultUrl: 'ws://localhost:8001/ws',
+  maxReconnectAttempts: 5,
+  baseReconnectDelayMs: 1000,
+};
+
+export const PIPELINE_DEFAULTS = {
+  method: 'multi_perspective',
+  topK: 2,
+  sequential: false,
+  enhancePrompt: true,
+  webSearch: false,
+  smartSearch: true,
+  imageGenPreset: 'budget' as 'budget' | 'premium',
+  imageGenBudgetNumImages: 4,
+};
+
+export const STORAGE_KEYS = {
+  appStore: 'ara-ui-store',
+  featureFlags: 'ara-feature-flags',
 };
 
 /** Typography sizes per DESIGN.md hierarchy. */
@@ -205,4 +254,10 @@ export const TIMING = {
   presetsRefreshIntervalMs: 60000,
   scrollAnchorThresholdPx: 120,
   durationFormatMsThreshold: 1000,
+  estimateDebounceMs: 400,
+  neuroLearnStatusClearMs: 3000,
+  imageGenProgressDurationMs: 25000,
+  imageGenProgressIntervalMs: 100,
+  csrfMaxAgeSeconds: 60 * 60 * 24,
+  jsonBodyMaxBytes: 1024 * 1024,
 };

@@ -627,6 +627,35 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
         }
         await _broadcast_ws(run_id, done_payload)
         yield _event(done_payload)
+
+        # ── Neuro Persist (main pipeline) ──
+        try:
+            import httpx
+
+            from reasoner.core.settings import settings
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{settings.internal_api_base_url}/neuro/learn",
+                    json={
+                        "prompt": req.problem,
+                        "response": (
+                            state.final_solution.core_solution
+                            if state.final_solution
+                            else getattr(state, 'previous_synthesis', '')
+                        ),
+                        "agent_id": getattr(state, 'conversation_id', None),
+                        "metadata": {
+                            "preset": effective_preset_name,
+                            "tokens": {"input": total_input, "output": total_output},
+                            "type": "pipeline",
+                        },
+                    },
+                    timeout=5.0,
+                )
+        except Exception:
+            pass
+
     except Exception as exc:
         import traceback
 

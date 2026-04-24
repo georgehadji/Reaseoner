@@ -6,8 +6,9 @@ import asyncio
 import logging
 import os
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 
+from reasoner.api.auth_deps import check_rate_limit, optional_auth, require_auth, require_csrf
 from reasoner.core.constants import TIMEOUTS, VALIDATION_TEST_MAX_TOKENS
 from reasoner.llm import _REGISTRY, build_provider
 
@@ -16,7 +17,9 @@ router = APIRouter()
 
 
 @router.get("/api/keys/status")
-async def get_api_keys_status():
+async def get_api_keys_status(
+    authenticated=Depends(optional_auth),
+):
     """
     Get status of all configured LLM provider API keys.
 
@@ -44,7 +47,16 @@ async def get_api_keys_status():
     total_providers = len(env_status)
     configured = sum(1 for s in env_status.values() if s["is_set"])
 
-    # SECURITY: Do not expose provider names, env vars, or model lists
+    # SECURITY: Do not expose provider names, env vars, or model lists.
+    # If unauthenticated, return a zeroed summary to prevent reconnaissance.
+    if authenticated is None:
+        return {
+            "summary": {
+                "total_providers": 0,
+                "configured": 0,
+                "missing": 0,
+            },
+        }
     return {
         "summary": {
             "total_providers": total_providers,
@@ -54,8 +66,12 @@ async def get_api_keys_status():
     }
 
 
-@router.post("/api/keys/validate")
-async def validate_api_keys(request: Request):
+@router.post("/api/keys/validate", dependencies=[Depends(check_rate_limit)])
+async def validate_api_keys(
+    request: Request,
+    authenticated=Depends(require_auth),
+    csrf_checked=Depends(require_csrf),
+):
     """
     Pre-flight validation of API keys.
 

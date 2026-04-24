@@ -41,6 +41,25 @@ MAX_FILE_SIZE = 10 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx", ".md", ".png", ".jpg", ".jpeg", ".webp"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
 
+# MIME-type to extension mapping for validation
+MIME_TYPE_MAP: dict[str, set[str]] = {
+    "text/plain": {".txt"},
+    "text/markdown": {".md"},
+    "application/pdf": {".pdf"},
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {".docx"},
+    "image/png": {".png"},
+    "image/jpeg": {".jpg", ".jpeg"},
+    "image/webp": {".webp"},
+}
+
+# Optional MIME-type validation via libmagic
+try:
+    import magic
+    _MAGIC_AVAILABLE = True
+except ImportError:
+    _MAGIC_AVAILABLE = False
+    logger.warning("python-magic not available — upload MIME-type validation disabled")
+
 
 def _get_file_extension(filename: str) -> str:
     """Get the file extension from filename."""
@@ -228,6 +247,26 @@ async def save_uploaded_file(
             "success": False,
             "error": f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB",
         }
+
+    # Validate MIME type (defense against extension spoofing)
+    if _MAGIC_AVAILABLE:
+        detected_mime = magic.from_buffer(content, mime=True)
+        allowed_exts = MIME_TYPE_MAP.get(detected_mime, set())
+        if ext not in allowed_exts:
+            logger.warning(
+                "MIME-type mismatch: detected %s for declared extension %s",
+                detected_mime,
+                ext,
+            )
+            return {
+                "success": False,
+                "error": (
+                    f"File content does not match extension. "
+                    f"Detected: {detected_mime}, expected: {ext}"
+                ),
+            }
+    else:
+        logger.debug("Skipping MIME-type validation (python-magic not installed)")
 
     # Generate unique ID and create safe filename
     # FIX BUG-008: Prevent path traversal by using only the extension, not the full filename

@@ -1,3 +1,4 @@
+<!-- From: E:\Documents\Vibe-Coding\Reasoner\AGENTS.md -->
 # AGENTS.md — Reasoner (ARA Pipeline v2.2)
 
 > This file is written for AI coding agents. It assumes you know nothing about this project.
@@ -31,7 +32,7 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 | LLM Routing | OpenRouter (primary, 350+ models); direct adapters for Anthropic, OpenAI, Google, Perplexity, DeepSeek, Mistral, xAI, Qwen, Kimi, GLM, MiniMax, Ollama |
 | Search | SearXNG (self-hosted via Docker Compose), Perplexity Sonar |
 | Database | SQLite (event store), PostgreSQL support via asyncpg, aiosqlite for async SQLite |
-| File Processing | PyPDF2, python-docx |
+| File Processing | PyPDF2, python-docx, pymupdf |
 | Web Scraping | newspaper3k, lxml |
 | Financial Data | yfinance, yahooquery |
 | Math | simpleeval |
@@ -41,15 +42,19 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 ### Frontend (`ui-next/`)
 | Layer | Technology |
 |-------|------------|
-| Framework | Next.js 16 (App Router) |
-| UI Library | React 19 |
+| Framework | Next.js 16.2.3 (App Router) |
+| UI Library | React 19.2.4 |
 | Language | TypeScript 5 |
 | Styling | Tailwind CSS v4 |
-| State | Zustand (client), SWR (server) |
-| Persistence | IndexedDB via `idb` |
+| State | Zustand v5 (client), SWR v2 (server) |
+| Persistence | IndexedDB via `idb` v8 |
 | Markdown | react-markdown, react-syntax-highlighter, remark-gfm, rehype-highlight |
 | Icons | lucide-react |
-| Testing | Vitest, @testing-library/react, @playwright/test |
+| Animation | framer-motion |
+| Testing | Vitest v4, @testing-library/react, @playwright/test |
+| Linting | ESLint 9 flat config (`eslint.config.mjs`) |
+
+**Critical frontend note:** Tailwind CSS v4 does **NOT** use a `tailwind.config.ts` file. Configuration is CSS-native via `@import "tailwindcss"` in `globals.css` and the `@tailwindcss/postcss` PostCSS plugin. Do **not** create a `tailwind.config.ts`.
 
 ---
 
@@ -59,6 +64,8 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 ```
 Reasoner/
 ├── main.py                 # CLI entry-point shim → reasoner.main
+├── asgi.py                 # ASGI entry point: uvicorn asgi:app --reload --port 8000
+├── start_all.py            # Orchestrator shim (starts backend + frontend + SearXNG)
 ├── api.py                  # Backward-compat API shim
 ├── pipeline.py             # Backward-compat pipeline shim
 ├── llm.py                  # Backward-compat LLM shim
@@ -69,17 +76,16 @@ Reasoner/
 ├── parsing.py              # Backward-compat parsing shim
 ├── scraper.py              # Backward-compat scraper shim
 ├── gate_agent.py           # Legacy GateAgent + HyperGateAgent lazy import
-├── asgi.py                 # ASGI entry point: uvicorn asgi:app --reload --port 8000
-├── start_all.py            # Orchestrator shim
-├── requirements.txt        # Python dependencies
+├── requirements.txt        # Python dependencies (no pyproject.toml / setup.py)
 ├── pytest.ini              # Test configuration
 ├── .env / .env.example     # Environment variables (NEVER commit .env)
 ├── docker-compose.searxng.yml   # SearXNG container setup
-├── tests/                  # 60+ pytest files
+├── tests/                  # 80+ pytest files
 ├── src/reasoner/           # Main Python package
 ├── ui-next/                # Next.js frontend
 ├── cache/                  # Run-related cache
 ├── docs/                   # Markdown documentation
+├── scripts/                # Utility scripts (smoke_test_search.py)
 ├── healing/                # Self-healing codebase (introspection, test generation)
 └── .github/workflows/      # CI/CD (self-healing-ci.yml)
 ```
@@ -99,16 +105,19 @@ src/reasoner/
 │   ├── search.py                  # Discovery client for web search
 │   ├── memory.py                  # Memory abstractions
 │   ├── perspectives.py            # Perspective definitions
+│   ├── health_validator.py        # Startup health checks
 │   ├── events/                    # Domain events (event sourcing)
 │   └── aggregates/                # Pipeline aggregate root
 ├── domain/                        # Domain logic
 │   ├── preset_core.py             # Preset data structures
 │   └── preset_registry.py         # Preset definitions and resolution
 ├── application/                   # Application layer
+│   ├── commands/                  # Command handlers
 │   ├── event_bus/                 # In-memory event bus
 │   ├── flows/                     # Pipeline flows
 │   ├── handlers/                  # Event handlers
 │   ├── mixins/                    # Method-specific mixins (debate, jury, research, etc.)
+│   ├── queries/                   # Query handlers
 │   └── services/                  # Preset service, search service, renderers
 ├── phases/                        # 16+ reasoning method implementations
 │   ├── multi_perspective.py
@@ -138,6 +147,7 @@ src/reasoner/
 │   │   └── extraction/            # JSON extraction utilities
 │   ├── persistence/               # Event store, postgres, snapshots
 │   ├── websocket/                 # WebSocket manager
+│   ├── translation/               # Translation utilities
 │   └── widgets/                   # Widget registry (calculator, stocks, weather, etc.)
 ├── api/                           # FastAPI application
 │   ├── __init__.py                # App factory, CORS, rate limiter, security middleware
@@ -191,11 +201,13 @@ src/reasoner/
 ui-next/src/
 ├── app/                           # Next.js App Router
 │   ├── layout.tsx
-│   ├── page.tsx
-│   ├── globals.css
-│   ├── providers.tsx
+│   ├── page.tsx                   # Main application UI (969-line client component)
+│   ├── globals.css                # Tailwind v4 import + CSS custom properties
+│   ├── providers.tsx              # next-themes ThemeProvider
+│   ├── error.tsx                  # Error boundary
 │   └── api/                       # API route handlers (proxies to FastAPI)
 │       ├── run/route.ts
+│       ├── run-followup/route.ts
 │       ├── stop/route.ts
 │       ├── presets/route.ts
 │       ├── search/route.ts
@@ -204,23 +216,24 @@ ui-next/src/
 │       ├── weather/route.ts
 │       ├── upload/route.ts
 │       ├── generate-image/route.ts
+│       ├── estimate/route.ts
+│       ├── feedback/route.ts
 │       ├── cache/route.ts
-│       └── csrf/route.ts
+│       ├── csrf/route.ts
+│       └── neuro/                 # Neuro memory routes
 ├── components/
-│   ├── chat/                      # ChatFeed, ChatMessage, MarkdownRenderer, TypewriterMarkdown
-│   ├── layout/                    # Composer, PhaseTimeline, Sidebar, ShortcutModal
-│   ├── phases/                    # ClassificationCard, CritiqueCard, PhaseCard, PhaseRenderer, SynthesisCard
-│   ├── ui/                        # Badge, Button, Spinner, ThemeToggle
-│   └── widgets/                   # CalculationWidget, StockWidget, WeatherWidget
-├── hooks/                         # useConversationHistory, useKeyboardShortcuts, usePipelineStream, etc.
-├── lib/                           # api-client, config, db (IndexedDB), types, utils, security
+│   ├── chat/                      # ChatFeed, ChatMessage, MarkdownRenderer, Composer
+│   ├── layout/                    # Sidebar, PhaseTimeline, ShortcutModal, CommandPalette, NeuroPanel
+│   ├── phases/                    # PhaseRenderer, PhaseCard, ClassificationCard, CritiqueCard, SynthesisCard
+│   ├── ui/                        # Button, Badge, Spinner, ThemeToggle, Tooltip
+│   └── widgets/                   # WidgetRenderer, CalculationWidget, StockWidget, WeatherWidget
+├── hooks/                         # usePipelineStream, useWebSocketPipeline, useKeyboardShortcuts, useConversationHistory, useServerStatus, useScrollAnchor, useFeatureFlags
+├── lib/                           # api-client, config, db (IndexedDB), types, utils, security-server, security-client, server-config
 ├── stores/
 │   └── app-store.ts               # Zustand store with persistence
 └── proxy.ts
 ```
 
-
-Read: ARCHITECTURE_MINDMAP.md
 ---
 
 ## 4. Build, Test, and Development Commands
@@ -237,13 +250,14 @@ python main.py --problem "..." --preset <id> [--top-k N] [--sequential] [--sourc
 python main.py --resume state.json
 
 # Start API server
-uvicorn asgi:app --reload --port 8000
+uvicorn asgi:app --reload --port 8001
 
 # Run tests
 python -m pytest -v
 python -m pytest test_parsing.py test_models.py test_perplexity_config.py
 python -m pytest -m "not slow"          # Skip slow tests
 python -m pytest --run-slow             # Include slow tests
+python -m pytest -m searxng             # SearXNG integration tests (requires live instance)
 ```
 
 ### Frontend
@@ -252,7 +266,7 @@ cd ui-next
 npm install
 npm run dev          # Development server (http://localhost:3000)
 npm run build        # Production build
-npm run lint         # ESLint
+npm run lint         # ESLint (flat config)
 ```
 
 ### Full Stack (Local)
@@ -283,6 +297,7 @@ docker compose -f docker-compose.searxng.yml up -d
 - **Type hints:** Prefer type hints when intent is unclear
 - **Docstrings:** Use triple-double-quote docstrings for modules and public functions
 - **Imports:** `from __future__ import annotations` at the top of files when using modern typing
+- **No formal linter config** (no `ruff.toml`, `mypy.ini`, or `.pre-commit-config.yaml`) exists at repo root. Rely on manual consistency.
 
 ### TypeScript / Frontend
 - **Components:** PascalCase files, default export for page components
@@ -290,6 +305,7 @@ docker compose -f docker-compose.searxng.yml up -d
 - **Styling:** Tailwind CSS v4 utility classes
 - **Accent colors:** Preserve the `--method-accent-rgb` CSS custom property when adjusting gradients or glass panels
 - **UI blocks:** Document new helper UI blocks in the same file rather than scattering markup elsewhere
+- **ESLint:** Uses ESLint 9 flat config (`eslint.config.mjs`) extending `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`
 
 ---
 
@@ -298,13 +314,14 @@ docker compose -f docker-compose.searxng.yml up -d
 - **Framework:** pytest with pytest-asyncio, pytest-timeout
 - **Location:** `tests/` directory at repo root
 - **Naming:** `test_*.py` files, `Test…` classes
+- **Configuration:** `pytest.ini` sets `testpaths = tests` and `pythonpath = src`
 - **Markers:**
-  - `slow` — deselect with `-m "not slow"`
+  - `slow` — deselect with `-m "not slow"`; include with `--run-slow`
   - `integration` — integration tests
   - `timeout` — tests with timeout threshold
   - `searxng` — tests requiring a live SearXNG instance
-- **Fixtures:** Defined in `tests/conftest.py` (sample_pipeline_state, mock_llm_response, searxng_container, temp_event_store, etc.)
-- **Coverage target:** ~70%, minimum gate 60%
+- **Fixtures:** Defined in `tests/conftest.py` (sample_pipeline_state, mock_llm_response, searxng_container, temp_event_store, run_state_store, etc.)
+- **Coverage target:** ~70%, minimum gate 60% (enforced in CI)
 - **Guidelines:**
   - Add regression coverage when fixing parsing, routing, or UI rendering bugs
   - Assert on both happy and fallback paths
@@ -347,9 +364,11 @@ Copy `.env.example` to `.env` and fill in:
 - **Rate Limiting:** Token-bucket rate limiter per client IP (`rate_limiter.py`)
 - **Authentication:** Token-based auth with scoped permissions (`auth.py`)
 - **Circuit Breaker:** Automatic fallback when providers fail (`circuit_breaker.py`)
-- **CSRF Protection:** CSRF token endpoints for state-changing operations
-- **Security Headers:** X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS (production)
-- **CORS:** Restricted to known origins (configurable via `CORS_ORIGINS` env var)
+- **CSRF Protection:** CSRF token endpoints for state-changing operations (HMAC-SHA256 signed, verified in Next.js API routes **and** FastAPI backend via `require_csrf`)
+- **Security Headers:** X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS (production), CSP (dynamic WebSocket origin allowlist)
+- **CORS:** Restricted to known origins (configurable via `CORS_ORIGINS` env var) with an explicit header whitelist
+- **Frontend proxy validation:** Next.js API routes validate upstream URLs against port allowlists and block private IPs in production
+- **Horizontal Scaling Limitations:** Rate limiter, circuit breaker, and auth store are in-memory by default. For multi-worker deployments, enable `AUTH_PERSISTENCE_ENABLED=true` and place a shared rate limiter (e.g., Redis or reverse-proxy) in front of the app. Set `RATE_LIMITER_MODE` / `CIRCUIT_BREAKER_MODE` to configure backends.
 
 ---
 
@@ -363,6 +382,7 @@ Copy `.env.example` to `.env` and fill in:
 6. **HyperGate Pre-Routing** — 6 parallel sub-agents detect language, complexity, directness, web need, and optimal method
 7. **Token Optimization** — Phase-specific budgets, context compression, caching
 8. **Security in Depth** — Input sanitization, prompt injection filtering, rate limiting, scoped auth, CSRF protection
+9. **Dual-Stream Frontend** — SSE carries all phase data/events; WebSocket is used ONLY for control signals (stop, status) to avoid double-processing
 
 ---
 

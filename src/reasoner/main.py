@@ -58,7 +58,13 @@ from reasoner.pipeline import ARAPipeline
 from reasoner.renderer import export_to_json, render_pipeline_result
 from reasoner.llm import ProviderRouter, list_models
 from reasoner.core.settings import settings  # triggers dotenv load
-from reasoner.core.constants import DEFAULT_CLI_PRESET
+from reasoner.core.constants import (
+    DEFAULT_CLI_PRESET,
+    ANALYTICAL_SYSTEM_PROMPT,
+    DIRECT_ANSWER_MAX_TOKENS,
+    DIRECT_ANSWER_TEMPERATURE,
+    MAX_PROBLEM_DISPLAY_CHARS,
+)
 from reasoner.presets import (
     PRESETS,
     build_custom_router,
@@ -185,7 +191,7 @@ async def main(args: argparse.Namespace) -> None:
             print(f"\n{'='*60}")
             print(f"  ARA v2.0 — Resumed from saved state")
             print(f"{'='*60}")
-            print(f"  Problem: {state.problem[:120]}...")
+            print(f"  Problem: {state.problem[:MAX_PROBLEM_DISPLAY_CHARS]}...")
             print(f"  Resumed at: {state.task_type.value if state.task_type else 'start'}")
             print(f"{'='*60}\n")
             render_pipeline_result(state)
@@ -223,7 +229,7 @@ async def main(args: argparse.Namespace) -> None:
     print(f"\n{'='*60}")
     print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
     print(f"{'='*60}")
-    short_problem = problem[:120] + ("..." if len(problem) > 120 else "")
+    short_problem = problem[:MAX_PROBLEM_DISPLAY_CHARS] + ("..." if len(problem) > MAX_PROBLEM_DISPLAY_CHARS else "")
     print(f"  Problem: {short_problem}")
     print(f"  Top-K candidates: {args.top_k}")
     print(f"  Parallel perspectives: {not args.sequential}")
@@ -246,10 +252,10 @@ async def main(args: argparse.Namespace) -> None:
             print("  [Gate] Direct answer selected.\n")
             response, _ = await router.call(
                 role="primary",
-                system_prompt="You are an analytical assistant. Provide a clear, concise answer.",
+                system_prompt=ANALYTICAL_SYSTEM_PROMPT,
                 user_prompt=problem,
-                max_tokens=2048,
-                temperature=0.7,
+                max_tokens=DIRECT_ANSWER_MAX_TOKENS,
+                temperature=DIRECT_ANSWER_TEMPERATURE,
             )
             print(response)
             return

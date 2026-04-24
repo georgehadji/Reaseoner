@@ -51,7 +51,6 @@ from reasoner.core.constants import (
     TRUNCATION,
 )
 from reasoner.core.search import get_discovery_client  # Import for web search
-from reasoner.neuro.server import create_neuro_router # Assuming neuro is an available module
 from reasoner.token_cache import get_token_cache # TOKEN OPTIMIZATION: Token-aware caching
 from reasoner.sanitization import sanitize_for_prompt  # SECURITY: prompt-injection defense
 import reasoner.phases as phases # Refactored phases

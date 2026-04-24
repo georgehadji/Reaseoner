@@ -9,6 +9,7 @@ import {
   requireCsrfToken,
   ValidationError,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const headers = new Headers(sanitizeRequestHeaders(req.headers));
     headers.set('Content-Type', 'application/json');
-    const upstream = await fetch(`${apiBase}/api/estimate`, {
+    const upstream = await fetch(`${apiBase}${API.ESTIMATE}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

@@ -10,6 +10,7 @@ import re
 from typing import Any
 
 from reasoner.infrastructure.widgets.protocol import BaseWidget, WidgetResult, WidgetType
+from reasoner.core.constants import OPENMETEO_GEOCODING_URL, OPENMETEO_FORECAST_URL
 
 
 class WeatherWidget(BaseWidget):
@@ -81,7 +82,7 @@ class WeatherWidget(BaseWidget):
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET_SHORT) as client:
                 response = await client.get(
-                    "https://geocoding-api.open-meteo.com/v1/search",
+                    OPENMETEO_GEOCODING_URL,
                     params={
                         'name': location,
                         'count': 1,
@@ -115,7 +116,7 @@ class WeatherWidget(BaseWidget):
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET) as client:
                 response = await client.get(
-                    "https://api.open-meteo.com/v1/forecast",
+                    OPENMETEO_FORECAST_URL,
                     params={
                         'latitude': latitude,
                         'longitude': longitude,

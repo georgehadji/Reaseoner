@@ -15,7 +15,9 @@ const DEFAULT_FEATURES: Record<string, boolean> = {
   'theme-transition': true,
 };
 
-const STORAGE_KEY = 'ara-feature-flags';
+import { STORAGE_KEYS } from '@/lib/config';
+
+const STORAGE_KEY = STORAGE_KEYS.featureFlags;
 
 function loadFlags(): Record<string, boolean> {
   if (typeof window === 'undefined') return DEFAULT_FEATURES;

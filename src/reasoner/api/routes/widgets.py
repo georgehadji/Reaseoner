@@ -7,8 +7,10 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
+
+from reasoner.api.auth_deps import require_csrf
 
 from reasoner.api.schemas import SuggestionRequestModel
 from reasoner.application.commands import ExecuteWidgetCommand
@@ -90,7 +92,10 @@ async def get_suggestions(req: SuggestionRequestModel):
 
 
 @router.post("/api/widget/execute")
-async def execute_widget(req: ExecuteWidgetRequest) -> dict[str, Any]:
+async def execute_widget(
+    req: ExecuteWidgetRequest,
+    csrf_checked=Depends(require_csrf),
+) -> dict[str, Any]:
     """Execute widget using new architecture.
 
     Supports auto-detection from query or explicit widget execution.
@@ -114,7 +119,7 @@ async def execute_widget(req: ExecuteWidgetRequest) -> dict[str, Any]:
         return result
     except Exception as e:
         logger.error(f"Widget execution error: {e}")
-        return {"error": str(e), "detected": False}
+        return {"error": "Internal server error", "detected": False}
 
 
 @router.get("/api/widgets/list")
@@ -128,7 +133,7 @@ async def list_widgets():
         return {"widgets": widgets, "total": len(widgets)}
     except Exception as e:
         logger.error(f"List widgets error: {e}")
-        return {"error": str(e), "widgets": []}
+        return {"error": "Internal server error", "widgets": []}
 
 
 @router.get("/api/widgets/detect")

@@ -14,7 +14,7 @@ import re
 
 import httpx
 
-from reasoner.core.constants import TRUNCATION
+from reasoner.core.constants import TRUNCATION, YOUTUBE_OEMBED_URL, YOUTUBE_WATCH_BASE_URL
 from reasoner.core.search import (
     get_discovery_client,
     _should_include_result,
@@ -51,8 +51,8 @@ class SearchMixin(PipelineMixinProtocol):
     async def _fetch_youtube_metadata(self, video_id: str) -> dict | None:
         """Fetch video title and author via YouTube oEmbed (no API key required)."""
         from reasoner.core.constants import TIMEOUTS
-        oembed_url = "https://www.youtube.com/oembed"
-        watch_url = f"https://www.youtube.com/watch?v={video_id}"
+        oembed_url = YOUTUBE_OEMBED_URL
+        watch_url = f"{YOUTUBE_WATCH_BASE_URL}{video_id}"
         try:
             async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET_SHORT, follow_redirects=True) as client:
                 response = await client.get(

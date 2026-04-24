@@ -11,6 +11,7 @@ import {
   ValidationError,
   SECURITY_SERVER_HASH,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 // Touch SECURITY_SERVER_HASH so Turbopack recompiles this route when it changes.
 void SECURITY_SERVER_HASH;
@@ -28,7 +29,7 @@ export async function POST(req: NextRequest) {
 
     await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
-    upstreamUrl = `${apiBase}/api/run-followup`;
+    upstreamUrl = `${apiBase}${API.RUN_FOLLOWUP}`;
     const body = await readJsonBody(req);
     const payload = validateRunFollowupRequest(body);
 

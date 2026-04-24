@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { Conversation } from '@/lib/types';
+import { STORAGE_KEYS, LIMITS } from '@/lib/config';
 
 export interface ComposerAttachment {
   id: string;
@@ -81,7 +82,7 @@ export const useAppStore = create<AppState>()(
 
       addAttachment: (file) =>
         set((state) => {
-          if (state.attachments.length >= 5) return state;
+          if (state.attachments.length >= LIMITS.maxAttachments) return state;
           const id = `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
           const attachment: ComposerAttachment = {
             id,
@@ -132,7 +133,7 @@ export const useAppStore = create<AppState>()(
 
       addRecentCommand: (id) =>
         set((state) => {
-          const next = [id, ...state.recentCommands.filter((c) => c !== id)].slice(0, 3);
+          const next = [id, ...state.recentCommands.filter((c) => c !== id)].slice(0, LIMITS.maxRecentCommands);
           return { recentCommands: next };
         }),
 
@@ -140,7 +141,7 @@ export const useAppStore = create<AppState>()(
       getAutoPreset: () => `auto-${get().tier}`,
     }),
     {
-      name: 'ara-ui-store',
+      name: STORAGE_KEYS.appStore,
       version: 2,
       migrate: (persistedState) => {
         const s = (persistedState || {}) as Record<string, unknown>;

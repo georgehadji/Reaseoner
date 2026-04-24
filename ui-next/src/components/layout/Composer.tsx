@@ -2,7 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import { EXAMPLE_PROMPTS } from '@/lib/config';
+import { EXAMPLE_PROMPTS, LIMITS, TIMING, API } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon, Upload } from 'lucide-react';
@@ -16,7 +16,7 @@ interface ComposerProps {
   isFollowup?: boolean;
 }
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE = LIMITS.maxFileSizeBytes;
 const ALLOWED_TYPES = [
   'application/pdf',
   'text/plain',
@@ -57,7 +57,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
     }
     try {
       const { fetchWithCsrf } = await import('@/lib/security-client');
-      const resp = await fetchWithCsrf('/api/estimate', {
+      const resp = await fetchWithCsrf(API.ESTIMATE, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ problem: text, preset }),
@@ -77,7 +77,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   useEffect(() => {
     if (!isEnabled('cost-transparency')) return;
     const preset = tier === 'premium' ? 'auto-premium' : 'auto-budget';
-    const timer = setTimeout(() => fetchEstimate(composerText, preset), 400);
+    const timer = setTimeout(() => fetchEstimate(composerText, preset), TIMING.estimateDebounceMs);
     return () => clearTimeout(timer);
   }, [composerText, tier, fetchEstimate]);
 
@@ -101,12 +101,12 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   function processFiles(files: FileList | null) {
     if (!files) return;
     for (const file of Array.from(files)) {
-      if (attachments.length >= 5) {
+      if (attachments.length >= LIMITS.maxAttachments) {
         alert('Maximum 5 files allowed per message.');
         break;
       }
-      if (file.size > MAX_FILE_SIZE) {
-        alert(`File "${file.name}" exceeds 10MB limit.`);
+      if (file.size > LIMITS.maxFileSizeBytes) {
+        alert(`File "${file.name}" exceeds ${(LIMITS.maxFileSizeBytes / (1024 * 1024)).toFixed(0)}MB limit.`);
         continue;
       }
       if (!ALLOWED_TYPES.includes(file.type)) {
@@ -160,12 +160,12 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
     if (files.length > 0) {
       e.preventDefault();
       for (const file of files) {
-        if (attachments.length >= 5) {
-          alert('Maximum 5 files allowed per message.');
+        if (attachments.length >= LIMITS.maxAttachments) {
+          alert(`Maximum ${LIMITS.maxAttachments} files allowed per message.`);
           break;
         }
-        if (file.size > MAX_FILE_SIZE) {
-          alert(`File "${file.name}" exceeds 10MB limit.`);
+        if (file.size > LIMITS.maxFileSizeBytes) {
+          alert(`File "${file.name}" exceeds ${(LIMITS.maxFileSizeBytes / (1024 * 1024)).toFixed(0)}MB limit.`);
           continue;
         }
         if (!ALLOWED_TYPES.includes(file.type)) {
@@ -351,7 +351,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           </div>
 
           <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-            {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
+            {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : `Enter to send · Shift+Enter for newline · Esc to stop · Max ${LIMITS.maxAttachments} files (${(LIMITS.maxFileSizeBytes / (1024 * 1024)).toFixed(0)}MB each)`}
           </div>
 
           <input
@@ -449,7 +449,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         </div>
 
         <div className="mt-2 text-center text-xs text-[var(--text-subtle)]">
-          {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : 'Enter to send · Shift+Enter for newline · Esc to stop · Max 5 files (10MB each)'}
+          {isImageMode ? 'Enter to generate image · Upload photos to use them as references · Shift+Enter for newline' : `Enter to send · Shift+Enter for newline · Esc to stop · Max ${LIMITS.maxAttachments} files (${(LIMITS.maxFileSizeBytes / (1024 * 1024)).toFixed(0)}MB each)`}
         </div>
         {isEnabled('cost-transparency') && estimate && (
           <div className="mt-1 text-center text-[10px] text-[var(--text-subtle)]">

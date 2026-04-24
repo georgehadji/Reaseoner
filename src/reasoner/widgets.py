@@ -14,6 +14,12 @@ from typing import Any, Optional
 from dataclasses import dataclass, asdict
 import httpx
 
+from reasoner.core.constants import (
+    OPENMETEO_GEOCODING_URL,
+    OPENMETEO_FORECAST_URL,
+    TIMEOUTS,
+)
+
 logger = logging.getLogger(__name__)
 
 # ─────────────────────────────────────────────────────────────────────
@@ -197,9 +203,9 @@ WEATHER_CONDITIONS = {
 async def geocode_location(location: str) -> Optional[dict[str, float]]:
     """Geocode a location name to coordinates."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET) as client:
             response = await client.get(
-                "https://geocoding-api.open-meteo.com/v1/search",
+                OPENMETEO_GEOCODING_URL,
                 params={"name": location, "count": 1, "language": "en", "format": "json"},
             )
             response.raise_for_status()
@@ -230,9 +236,9 @@ async def get_weather_data(location: str) -> dict[str, Any]:
         return {"error": f"Location '{location}' not found"}
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET) as client:
             response = await client.get(
-                "https://api.open-meteo.com/v1/forecast",
+                OPENMETEO_FORECAST_URL,
                 params={
                     "latitude": coords["latitude"],
                     "longitude": coords["longitude"],
@@ -440,7 +446,7 @@ async def search_searxng(query: str, engines: list[str] = None) -> list[dict[str
     
     for url in searxng_urls:
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
+            async with httpx.AsyncClient(timeout=TIMEOUTS.WIDGET_SHORT) as client:
                 response = await client.get(
                     url,
                     params={"q": query, "format": "json", "engines": ",".join(engines) if engines else ""},
@@ -524,7 +530,7 @@ def search_images(query: str, limit: int = 20) -> dict[str, Any]:
             response = httpx.get(
                 url,
                 params={"q": query, "format": "json", "categories": "images"},
-                timeout=5.0,
+                timeout=TIMEOUTS.WIDGET_SHORT,
             )
             if response.status_code == 200:
                 data = response.json()
@@ -564,7 +570,7 @@ def search_videos(query: str, limit: int = 20) -> dict[str, Any]:
             response = httpx.get(
                 url,
                 params={"q": query, "format": "json", "categories": "videos"},
-                timeout=5.0,
+                timeout=TIMEOUTS.WIDGET_SHORT,
             )
             if response.status_code == 200:
                 data = response.json()

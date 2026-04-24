@@ -9,6 +9,7 @@ import {
   ValidationError,
   SECURITY_SERVER_HASH,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 // Touch SECURITY_SERVER_HASH so Turbopack recompiles this route when it changes.
 void SECURITY_SERVER_HASH;
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
-    upstreamUrl = `${apiBase}/api/upload`;
+    upstreamUrl = `${apiBase}${API.UPLOAD}`;
 
     // Forward the multipart body directly — do NOT parse it in Next.js
     const headers = sanitizeRequestHeaders(req.headers);

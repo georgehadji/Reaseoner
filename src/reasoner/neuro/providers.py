@@ -19,6 +19,8 @@ from reasoner.core.constants import (
     ANTHROPIC_BASE_URL,
     OPENROUTER_BASE_URL as _OPENROUTER_BASE_URL,
     GOOGLE_BASE_URL as _GOOGLE_BASE_URL,
+    PERPLEXITY_BASE_URL,
+    HUGGINGFACE_API_BASE,
 )
 from reasoner.neuro.config import ProviderConfig, ResilientProviderConfig
 
@@ -389,7 +391,7 @@ class PerplexityEmbedding(EmbeddingProvider):
             "Authorization": f"Bearer {self.config.api_key}",
             "Content-Type": "application/json",
         }
-        base = self.config.api_base or "https://api.perplexity.ai"
+        base = self.config.api_base or PERPLEXITY_BASE_URL
         resp = await self._get_client().post(
             f"{base}/embeddings",
             headers=headers,
@@ -441,7 +443,7 @@ class HuggingFaceEmbedding(EmbeddingProvider):
             return resp.json()[0]
         else:
             headers = {"Authorization": f"Bearer {self.config.api_key}"}
-            url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{self.config.model}"
+            url = f"{HUGGINGFACE_API_BASE}/pipeline/feature-extraction/{self.config.model}"
             resp = await self._get_client().post(url, json={"inputs": text}, headers=headers)
             resp.raise_for_status()
             data = resp.json()

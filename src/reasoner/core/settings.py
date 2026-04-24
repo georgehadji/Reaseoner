@@ -63,6 +63,18 @@ class Settings:
     SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8000"))
     UVICORN_HOST: str = os.getenv("UVICORN_HOST", "0.0.0.0")
 
+    # ── CSRF ──
+    CSRF_SECRET: str | None = os.getenv("CSRF_SECRET")
+    CSRF_ENFORCE_BACKEND: bool = os.getenv("CSRF_ENFORCE_BACKEND", "true").lower() in ("1", "true", "yes")
+
+    # ── Auth Persistence ──
+    AUTH_PERSISTENCE_ENABLED: bool = os.getenv("AUTH_PERSISTENCE_ENABLED", "false").lower() in ("1", "true", "yes")
+    AUTH_DB_PATH: str = os.getenv("AUTH_DB_PATH", "src/reasoner/auth_keys.db")
+
+    # ── Rate Limiter / Circuit Breaker Mode ──
+    RATE_LIMITER_MODE: str = os.getenv("RATE_LIMITER_MODE", "memory")
+    CIRCUIT_BREAKER_MODE: str = os.getenv("CIRCUIT_BREAKER_MODE", "memory")
+
     # ── CORS ──
     CORS_ORIGINS: str = os.getenv(
         "CORS_ORIGINS",
@@ -78,10 +90,41 @@ class Settings:
     )
     OPENROUTER_APP_TITLE: str = os.getenv("OPENROUTER_APP_TITLE", "Reasoner")
 
+    # ── Neuro Memory Models ──
+    NEURO_REASONING_MODEL: str = os.getenv("NEURO_REASONING_MODEL", "openai/gpt-4o-mini")
+    NEURO_REASONING_FALLBACK_MODELS: str = os.getenv(
+        "NEURO_REASONING_FALLBACK_MODELS",
+        "google/gemini-2.0-flash-001,anthropic/claude-3-haiku",
+    )
+    NEURO_EMBEDDING_MODEL: str = os.getenv("NEURO_EMBEDDING_MODEL", "qwen/qwen3-embedding-8b")
+    NEURO_EMBEDDING_FALLBACK_MODELS: str = os.getenv(
+        "NEURO_EMBEDDING_FALLBACK_MODELS",
+        "openai/text-embedding-3-small,baai/bge-m3",
+    )
+
+    # ── Scraping ──
+    SCRAPE_USER_AGENT: str = os.getenv(
+        "SCRAPE_USER_AGENT",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    )
+
+    # ── Rerank ──
+    RERANK_API_BASE: str = os.getenv("RERANK_API_BASE", "https://openrouter.ai/api/v1")
+
     @property
     def internal_api_base_url(self) -> str:
         """Base URL for internal self-calls (e.g., Neuro endpoints from streaming)."""
         return f"http://{self.SERVER_HOST}:{self.SERVER_PORT}"
+
+    @property
+    def neuro_reasoning_fallbacks(self) -> list[str]:
+        """Parse NEURO_REASONING_FALLBACK_MODELS into a list."""
+        return [m.strip() for m in self.NEURO_REASONING_FALLBACK_MODELS.split(",") if m.strip()]
+
+    @property
+    def neuro_embedding_fallbacks(self) -> list[str]:
+        """Parse NEURO_EMBEDDING_FALLBACK_MODELS into a list."""
+        return [m.strip() for m in self.NEURO_EMBEDDING_FALLBACK_MODELS.split(",") if m.strip()]
 
     @property
     def cors_origins_list(self) -> list[str]:

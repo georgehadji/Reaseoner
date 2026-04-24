@@ -9,6 +9,7 @@ import {
   rateLimit,
   ValidationError,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,7 +27,7 @@ export async function POST(req: NextRequest) {
 
     const headers = new Headers(sanitizeRequestHeaders(req.headers));
     headers.set('Content-Type', 'application/json');
-    const upstream = await fetch(`${apiBase}/api/generate-image`, {
+    const upstream = await fetch(`${apiBase}${API.GENERATE_IMAGE}`, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

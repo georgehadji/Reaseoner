@@ -89,8 +89,9 @@ def main():
         key = settings.OPENROUTER_API_KEY or ""
         if not key:
             raise RuntimeError("OPENROUTER_API_KEY not set")
+        from reasoner.core.constants import OPENROUTER_AUTH_KEY_URL
         r = httpx.get(
-            "https://openrouter.ai/api/v1/auth/key",
+            OPENROUTER_AUTH_KEY_URL,
             headers={"Authorization": f"Bearer {key}"},
             timeout=10.0,
         )

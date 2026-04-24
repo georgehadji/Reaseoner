@@ -115,7 +115,7 @@ async def rerank_documents(
         return documents
 
     model_id = model or settings.COHERE_RERANK_MODEL or "cohere/rerank-4-fast"
-    base = api_base or "https://openrouter.ai/api/v1"
+    base = api_base or settings.RERANK_API_BASE
 
     # ── Build document texts ──
     texts: list[str] = []

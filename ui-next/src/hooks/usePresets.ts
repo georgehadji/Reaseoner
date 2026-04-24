@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { TIMING } from '@/lib/config';
+import { TIMING, API } from '@/lib/config';
 import { PresetsResponse } from '@/lib/types';
 
 const fetcher = async (url: string) => {
@@ -11,7 +11,7 @@ const fetcher = async (url: string) => {
 };
 
 export function usePresets() {
-  const { data, error, isLoading } = useSWR<PresetsResponse>('/api/presets', fetcher, {
+  const { data, error, isLoading } = useSWR<PresetsResponse>(API.PRESETS, fetcher, {
     refreshInterval: TIMING.presetsRefreshIntervalMs,
     revalidateOnFocus: false,
   });

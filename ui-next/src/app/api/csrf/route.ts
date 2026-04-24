@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { CSRF_COOKIE } from '@/lib/security-constants';
 import { generateSignedCsrfToken } from '@/lib/security-server';
+import { TIMING } from '@/lib/config';
 
 export async function GET() {
   const token = await generateSignedCsrfToken();
@@ -10,7 +11,7 @@ export async function GET() {
     sameSite: 'strict',
     secure: process.env.NODE_ENV === 'production',
     path: '/',
-    maxAge: 60 * 60 * 24,
+    maxAge: TIMING.csrfMaxAgeSeconds,
   });
   return response;
 }

@@ -6,6 +6,7 @@ import {
   sanitizeResponseHeaders,
   rateLimit,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 export async function DELETE(req: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function DELETE(req: NextRequest) {
 
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const headers = sanitizeRequestHeaders(req.headers);
-    const upstream = await fetch(`${apiBase}/api/cache`, {
+    const upstream = await fetch(`${apiBase}${API.CACHE}`, {
       method: 'DELETE',
       headers,
     });

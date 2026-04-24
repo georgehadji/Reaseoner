@@ -63,5 +63,5 @@ async def generate_image_endpoint(
         logger.error("Image generation endpoint error: %s", exc)
         return {
             "success": False,
-            "error": str(exc),
+            "error": "Internal server error",
         }

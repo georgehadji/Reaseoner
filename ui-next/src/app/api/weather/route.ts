@@ -5,6 +5,7 @@ import {
   sanitizeRequestHeaders,
   sanitizeResponseHeaders,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,7 +17,7 @@ export async function GET(req: NextRequest) {
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const headers = sanitizeRequestHeaders(req.headers);
     const upstream = await fetch(
-      `${apiBase}/api/weather?location=${encodeURIComponent(location)}`,
+      `${apiBase}${API.WEATHER}?location=${encodeURIComponent(location)}`,
       { headers }
     );
 

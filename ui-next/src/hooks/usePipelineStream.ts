@@ -4,6 +4,7 @@ import { useRef, useCallback, useEffect } from 'react';
 import { fetchWithCsrf } from '@/lib/security-client';
 import { readSSEStream } from '@/lib/sse-reader';
 import { PhaseEvent, RunRequest, RunFollowupRequest } from '@/lib/types';
+import { API } from '@/lib/config';
 
 function getDevErrorMessage(status: number, text: string): string {
   if (status === 504) {
@@ -48,21 +49,21 @@ export function usePipelineStream() {
 
   const startRun = useCallback(
     async (req: RunRequest, onEvent: (ev: PhaseEvent) => void) => {
-      await streamEvents('/api/run', req, onEvent);
+      await streamEvents(API.RUN, req, onEvent);
     },
     [streamEvents]
   );
 
   const startFollowup = useCallback(
     async (req: RunFollowupRequest, onEvent: (ev: PhaseEvent) => void) => {
-      await streamEvents('/api/run-followup', req, onEvent);
+      await streamEvents(API.RUN_FOLLOWUP, req, onEvent);
     },
     [streamEvents]
   );
 
   const stopRun = useCallback(() => {
     abortControllerRef.current?.abort();
-    fetchWithCsrf('/api/stop', { method: 'POST' }).catch(() => {});
+    fetchWithCsrf(API.STOP, { method: 'POST' }).catch(() => {});
     abortControllerRef.current = null;
   }, []);
 

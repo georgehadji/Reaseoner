@@ -3,21 +3,25 @@ import type { NextRequest } from 'next/server';
 import { CSRF_COOKIE, CSRF_HEADER } from '@/lib/security-constants';
 import { generateSignedCsrfToken, verifyCsrfToken } from '@/lib/security-server';
 
+import { REASONER_WS_PORTS, REASONER_WS_HOSTS } from '@/lib/server-config';
+import { TIMING } from '@/lib/config';
+
 const HSTS_VALUE = 'max-age=31536000; includeSubDomains; preload';
 
 function buildConnectSrc(): string {
   const wsOrigins = new Set<string>();
-  for (const port of ['8000', '8001']) {
-    wsOrigins.add(`ws://localhost:${port}`);
-    wsOrigins.add(`ws://127.0.0.1:${port}`);
+  for (const port of REASONER_WS_PORTS) {
+    for (const host of REASONER_WS_HOSTS) {
+      wsOrigins.add(`ws://${host}:${port}`);
+    }
   }
   const wsUrl = process.env.NEXT_PUBLIC_WS_URL || '';
   if (wsUrl) {
     try {
       const u = new URL(wsUrl);
-      const port = u.port || '8000';
+      const port = u.port || REASONER_WS_PORTS[0];
       wsOrigins.add(`ws://${u.hostname}:${port}`);
-      if (u.hostname !== 'localhost' && u.hostname !== '127.0.0.1') {
+      if (!REASONER_WS_HOSTS.includes(u.hostname)) {
         wsOrigins.add(`wss://${u.hostname}:${port}`);
       }
     } catch { /* fall back to dev defaults */ }
@@ -79,7 +83,7 @@ export async function proxy(request: NextRequest) {
       sameSite: 'strict',
       secure: process.env.NODE_ENV === 'production',
       path: '/',
-      maxAge: 60 * 60 * 24,
+      maxAge: TIMING.csrfMaxAgeSeconds,
     });
   }
 

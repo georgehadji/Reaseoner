@@ -6,6 +6,7 @@ import { Conversation } from '@/lib/types';
 import { Plus, PanelLeft, Trash2, Brain, History, Play } from 'lucide-react';
 import { NeuroPanel } from './NeuroPanel';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { API, LIMITS, PIPELINE_DEFAULTS } from '@/lib/config';
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -47,7 +48,7 @@ function MemoryStatus() {
 
   useEffect(() => {
     let mounted = true;
-    fetch('/api/neuro/health')
+    fetch(API.NEURO_HEALTH)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -218,7 +219,7 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onRes
                       Clear
                     </button>
                   )}
-                  {methodTags.slice(0, 4).map((tag) => (
+                  {methodTags.slice(0, LIMITS.maxTagDisplay).map((tag) => (
                     <button
                       key={tag}
                       type="button"
@@ -232,7 +233,7 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onRes
                       {String(tag)}
                     </button>
                   ))}
-                  {presetTags.slice(0, 4).map((tag) => (
+                  {presetTags.slice(0, LIMITS.maxTagDisplay).map((tag) => (
                     <button
                       key={tag}
                       type="button"
@@ -261,7 +262,7 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onRes
                     </div>
                     {items.map((conv) => {
                       const title =
-                        conv.problem.length > 45 ? conv.problem.slice(0, 45) + '…' : conv.problem;
+                        conv.problem.length > LIMITS.titleTruncateChars ? conv.problem.slice(0, LIMITS.titleTruncateChars) + '…' : conv.problem;
                       const tokens = conv.total_tokens?.total ?? 0;
 
                       return (
@@ -277,7 +278,7 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onRes
                               </div>
                             </Tooltip>
                             <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                              {conv.method && conv.method !== 'multi_perspective' && (
+                              {conv.method && conv.method !== PIPELINE_DEFAULTS.method && (
                                 <span className="text-[10px] text-[var(--text-muted)]">
                                   {conv.method.replace(/_/g, '-')}
                                 </span>

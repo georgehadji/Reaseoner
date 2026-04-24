@@ -8,6 +8,7 @@ import {
   rateLimit,
   ValidationError,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 export async function POST(req: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function POST(req: NextRequest) {
     await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const headers = sanitizeRequestHeaders(req.headers);
-    const upstream = await fetch(`${apiBase}/api/stop`, {
+    const upstream = await fetch(`${apiBase}${API.STOP}`, {
       method: 'POST',
       headers,
     });

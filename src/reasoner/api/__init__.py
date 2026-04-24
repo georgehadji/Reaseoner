@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import secrets
 import sys
 from pathlib import Path
 
@@ -46,6 +47,24 @@ async def lifespan(app: FastAPI):
     from reasoner.core.health_validator import validate_all
     await validate_all()
 
+    # Warn if running in multi-worker mode with in-memory rate limiting / circuit breaker
+    uvicorn_workers = int(os.environ.get("UVICORN_WORKERS", "1"))
+    if uvicorn_workers > 1:
+        if settings.RATE_LIMITER_MODE == "memory":
+            logger.warning(
+                "Rate limiter is in 'memory' mode but UVICORN_WORKERS=%d. "
+                "Each worker maintains its own token bucket, allowing rate-limit bypass. "
+                "Set RATE_LIMITER_MODE to a shared backend (e.g., 'redis') for production.",
+                uvicorn_workers,
+            )
+        if settings.CIRCUIT_BREAKER_MODE == "memory":
+            logger.warning(
+                "Circuit breaker is in 'memory' mode but UVICORN_WORKERS=%d. "
+                "Circuit state is not shared across workers. "
+                "Set CIRCUIT_BREAKER_MODE to a shared backend (e.g., 'redis') for production.",
+                uvicorn_workers,
+            )
+
     logger.info("Reasoner startup complete")
     logger.info(f"Web UI: http://{settings.SERVER_HOST}:{settings.SERVER_PORT}")
     logger.info(f"API Docs: http://{settings.SERVER_HOST}:{settings.SERVER_PORT}/docs")
@@ -80,7 +99,14 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,  # Configurable via CORS_ORIGINS env var
     allow_credentials=True,
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=[
+        "authorization",
+        "content-type",
+        "accept",
+        "accept-language",
+        "x-csrf-token",
+        "x-requested-with",
+    ],
     max_age=CORS_MAX_AGE_SECONDS,  # Cache preflight for 1 day
 )
 
@@ -234,19 +260,27 @@ from reasoner.api.streaming import (
     run_stream_cached,
 )
 
-from reasoner.api.auth_deps import check_rate_limit, optional_auth
+from reasoner.api.auth_deps import check_rate_limit, optional_auth, require_csrf
 
 
 # ─────────────────────────────────────────────────────────────────────
 # API Endpoints
 # ─────────────────────────────────────────────────────────────────────
 
+@app.post("/api/csrf")
+async def get_csrf_token():
+    """Generate a signed CSRF token for frontend use."""
+    from reasoner.api.csrf import generate_signed_csrf_token
+    return {"token": generate_signed_csrf_token()}
+
+
 @app.post("/api/run")
 async def run_pipeline(
     request: Request,
     req: RunRequest,
     authenticated = Depends(optional_auth),
-    rate_limit_checked = Depends(check_rate_limit)
+    rate_limit_checked = Depends(check_rate_limit),
+    csrf_checked = Depends(require_csrf),
 ):
     """
     Run pipeline with optional authentication and rate limiting.
@@ -269,7 +303,8 @@ async def run_pipeline(
 async def run_followup_pipeline(
     request: Request,
     req: FollowupRequest,
-    rate_limit_checked = Depends(check_rate_limit)
+    rate_limit_checked = Depends(check_rate_limit),
+    csrf_checked = Depends(require_csrf),
 ):
     """
     Run the ARA pipeline for a follow-up question with full conversation context.
@@ -325,7 +360,9 @@ async def search_web(
 
 
 @app.delete("/api/cache")
-async def clear_cache():
+async def clear_cache(
+    csrf_checked = Depends(require_csrf),
+):
     cleared = 0
     for f in CACHE_DIR.glob("*.json"):
         try:
@@ -338,7 +375,10 @@ async def clear_cache():
 
 
 @app.post("/api/stop")
-async def stop_pipeline(run_id: str | None = None):
+async def stop_pipeline(
+    run_id: str | None = None,
+    csrf_checked = Depends(require_csrf),
+):
     # If a specific run_id is provided, cancel only that run.
     # Otherwise cancel all active runs (global stop, e.g. from the UI stop button).
     if run_id:
@@ -455,7 +495,10 @@ async def root():
 # ─────────────────────────────────────────────────────────────────────
 
 @app.post("/api/estimate")
-async def estimate_cost(req: RunRequest):
+async def estimate_cost(
+    req: RunRequest,
+    csrf_checked = Depends(require_csrf),
+):
     """
     Estimate tokens, cost, and duration for a pipeline run without executing it.
     """
@@ -519,7 +562,10 @@ class FeedbackRequest(BaseModel):
 
 
 @app.post("/api/feedback")
-async def submit_feedback(req: FeedbackRequest):
+async def submit_feedback(
+    req: FeedbackRequest,
+    csrf_checked = Depends(require_csrf),
+):
     """
     Submit user feedback for a specific message.
     Persisted to SQLite for durability and queryability.
@@ -537,7 +583,7 @@ async def submit_feedback(req: FeedbackRequest):
     return {"status": "received", "id": row_id}
 
 
-@app.get("/api/admin/feedback-stats")
+@app.get("/api/admin/feedback-stats", dependencies=[Depends(check_rate_limit)])
 async def feedback_stats(
     days: int = Query(30, ge=1, le=365),
     admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
@@ -545,8 +591,11 @@ async def feedback_stats(
     """
     Admin-only endpoint returning aggregated feedback statistics.
     Requires X-Admin-Key header matching ADMIN_API_KEY.
+    Uses constant-time comparison to mitigate timing attacks.
     """
-    if not settings.ADMIN_API_KEY or admin_key != settings.ADMIN_API_KEY:
+    if not settings.ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    if not admin_key or not secrets.compare_digest(admin_key, settings.ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Unauthorized")
     stats = await _feedback_store.get_stats(days=days)
     return {

@@ -1,6 +1,14 @@
 """
 Production-Ready Rate Limiter
 Token bucket algorithm with Redis-like sliding window.
+
+ARCHITECTURAL NOTE:
+    This implementation stores all state in-memory. In a multi-worker or
+    horizontally-scaled deployment each process maintains its own token
+    buckets, which means a client can bypass limits by hitting different
+    workers. Set RATE_LIMITER_MODE to a shared backend (e.g., 'redis')
+    or place a reverse-proxy rate limiter in front of the application
+    for production multi-instance deployments.
 """
 
 from __future__ import annotations

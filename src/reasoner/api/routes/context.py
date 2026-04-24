@@ -75,4 +75,4 @@ async def run_with_context(req: ContextAnalysisRequest):
         import traceback
 
         logger.error(f"Context analysis failed: {exc}\n{traceback.format_exc()}")
-        return {"success": False, "error": str(exc)}
+        return {"success": False, "error": "Internal server error"}

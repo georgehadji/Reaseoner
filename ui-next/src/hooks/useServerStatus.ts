@@ -1,6 +1,6 @@
 'use client';
 
-import { TIMING } from '@/lib/config';
+import { TIMING, API } from '@/lib/config';
 import { useState, useEffect } from 'react';
 
 export function useServerStatus() {
@@ -13,7 +13,7 @@ export function useServerStatus() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), TIMING.serverStatusAbortTimeoutMs);
       try {
-        const resp = await fetch('/api/presets', { signal: controller.signal });
+        const resp = await fetch(API.PRESETS, { signal: controller.signal });
         if (mounted) setOnline(resp.ok);
       } catch {
         if (mounted) setOnline(false);

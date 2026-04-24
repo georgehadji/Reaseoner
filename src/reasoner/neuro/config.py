@@ -10,6 +10,9 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional
 
+from reasoner.core.constants import OPENROUTER_BASE_URL, PERPLEXITY_BASE_URL
+from reasoner.core.settings import settings
+
 
 DEFAULT_CONFIG_PATHS = [
     Path("neuro.yaml"),
@@ -134,7 +137,7 @@ def _build_provider(data: dict) -> ProviderConfig:
         provider=data.get("provider", "openrouter"),
         model=data.get("model", ""),
         api_key=_resolve_env(data.get("api_key", os.environ.get("OPENROUTER_API_KEY", ""))),
-        api_base=_resolve_env(data.get("api_base", "https://openrouter.ai/api/v1")),
+        api_base=_resolve_env(data.get("api_base", OPENROUTER_BASE_URL)),
         timeout=data.get("timeout", 30.0),
         extra=data.get("extra", {}),
     )
@@ -283,26 +286,27 @@ def _apply_defaults(cfg: NeuroConfig) -> NeuroConfig:
     if not p.provider:
         p.provider = "openrouter"
     if not p.model:
-        p.model = "openai/gpt-4o-mini"
+        p.model = settings.NEURO_REASONING_MODEL
     if not p.api_base and p.provider == "openrouter":
-        p.api_base = "https://openrouter.ai/api/v1"
+        p.api_base = OPENROUTER_BASE_URL
     if not p.api_key:
         p.api_key = os.environ.get("OPENROUTER_API_KEY", "")
 
     # Reasoning fallbacks (value-for-money, cross-provider redundancy)
     if not cfg.reasoning.fallbacks:
+        fallbacks = settings.neuro_reasoning_fallbacks
         cfg.reasoning.fallbacks = [
             ProviderConfig(
                 provider="openrouter",
-                model="google/gemini-2.0-flash-001",
+                model=fallbacks[0] if len(fallbacks) > 0 else "google/gemini-2.0-flash-001",
                 api_key=p.api_key,
-                api_base="https://openrouter.ai/api/v1",
+                api_base=OPENROUTER_BASE_URL,
             ),
             ProviderConfig(
                 provider="openrouter",
-                model="anthropic/claude-3-haiku",
+                model=fallbacks[1] if len(fallbacks) > 1 else "anthropic/claude-3-haiku",
                 api_key=p.api_key,
-                api_base="https://openrouter.ai/api/v1",
+                api_base=OPENROUTER_BASE_URL,
             ),
         ]
 
@@ -311,12 +315,12 @@ def _apply_defaults(cfg: NeuroConfig) -> NeuroConfig:
     if not e.provider:
         e.provider = "openrouter"
     if not e.model:
-        e.model = "qwen/qwen3-embedding-8b"
+        e.model = settings.NEURO_EMBEDDING_MODEL
     if not e.api_base:
         if e.provider == "openrouter":
-            e.api_base = "https://openrouter.ai/api/v1"
+            e.api_base = OPENROUTER_BASE_URL
         elif e.provider == "perplexity":
-            e.api_base = "https://api.perplexity.ai"
+            e.api_base = PERPLEXITY_BASE_URL
     if not e.api_key:
         if e.provider == "perplexity":
             e.api_key = os.environ.get("PERPLEXITY_API_KEY", "")
@@ -325,18 +329,19 @@ def _apply_defaults(cfg: NeuroConfig) -> NeuroConfig:
 
     # Embedding fallbacks (value-for-money, cross-provider redundancy)
     if not cfg.embedding.fallbacks:
+        fallbacks = settings.neuro_embedding_fallbacks
         cfg.embedding.fallbacks = [
             ProviderConfig(
                 provider="openrouter",
-                model="openai/text-embedding-3-small",
+                model=fallbacks[0] if len(fallbacks) > 0 else "openai/text-embedding-3-small",
                 api_key=e.api_key,
-                api_base="https://openrouter.ai/api/v1",
+                api_base=OPENROUTER_BASE_URL,
             ),
             ProviderConfig(
                 provider="openrouter",
-                model="baai/bge-m3",
+                model=fallbacks[1] if len(fallbacks) > 1 else "baai/bge-m3",
                 api_key=e.api_key,
-                api_base="https://openrouter.ai/api/v1",
+                api_base=OPENROUTER_BASE_URL,
             ),
         ]
 

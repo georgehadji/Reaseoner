@@ -11,6 +11,7 @@ from reasoner.core.constants import (
     MODEL_GEMINI_FLASH,
     MODEL_GEMINI_PRO,
     MODEL_GPT4O_MINI,
+    NVIDIA_BASE_URL,
 )
 from reasoner.infrastructure.llm.providers.openai_compat import (
     OpenAICompatibleProvider,
@@ -58,6 +59,8 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "deepseek-v3.1-nex-n1": {"model": "nex-agi/deepseek-v3.1-nex-n1"},
     "deepseek-r1":      {"model": "deepseek/deepseek-r1-0528"},
     "deepseek-r1t2-chimera": {"model": "tngtech/deepseek-r1t2-chimera"},
+    "deepseek-v4-pro": {"model": "deepseek/deepseek-v4-pro"},
+    "deepseek-v4-flash": {"model": "deepseek/deepseek-v4-flash"},
     # Qwen
     "qwen3-max":        {"model": "qwen/qwen3.6-plus"},
     "qwen3.6-plus":     {"model": "qwen/qwen3.6-plus"},
@@ -100,7 +103,7 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "nvidia-nemotron-super": {
         "cls": "compat",
         "model": "nvidia/nemotron-3-super-120b-a12b",
-        "base": "https://integrate.api.nvidia.com/v1",
+        "base": NVIDIA_BASE_URL,
         "env": "NVIDIA_API_KEY",
     },
     # Image generation models (OpenRouter multimodal image output)

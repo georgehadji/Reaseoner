@@ -11,6 +11,7 @@ from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from reasoner.auth import AuthenticationError, get_auth_manager
+from reasoner.api.csrf import verify_csrf_token
 
 logger = logging.getLogger(__name__)
 from reasoner.core.settings import settings
@@ -112,3 +113,41 @@ async def optional_auth(
     except AuthenticationError as e:
         logger.warning("Invalid API key rejected in optional_auth: %s", e.message)
         return None
+
+
+async def require_csrf(request: Request):
+    """
+    Require a valid CSRF token on state-changing requests.
+
+    Reads the X-CSRF-Token header and validates its HMAC signature.
+    Raises HTTPException(403) if missing, invalid, or if CSRF is
+    misconfigured (no secret set).
+
+    Can be disabled globally via CSRF_ENFORCE_BACKEND=false.
+    """
+    if not settings.CSRF_ENFORCE_BACKEND:
+        return True
+
+    token = request.headers.get("X-CSRF-Token")
+    if not token:
+        raise HTTPException(
+            status_code=403,
+            detail="Missing CSRF token. Include X-CSRF-Token header.",
+        )
+
+    try:
+        valid = verify_csrf_token(token)
+    except RuntimeError as e:
+        logger.error("CSRF verification misconfigured: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="CSRF protection misconfigured on server.",
+        )
+
+    if not valid:
+        raise HTTPException(
+            status_code=403,
+            detail="Invalid CSRF token.",
+        )
+
+    return True

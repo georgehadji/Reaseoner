@@ -11,9 +11,11 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # DeepL free-tier keys end with ":fx"
+from reasoner.core.constants import DEEPL_FREE_BASE_URL, DEEPL_PAID_BASE_URL
+
 FREE_KEY_SUFFIX = ":fx"
-FREE_BASE_URL = "https://api-free.deepl.com/v2"
-PAID_BASE_URL = "https://api.deepl.com/v2"
+FREE_BASE_URL = DEEPL_FREE_BASE_URL
+PAID_BASE_URL = DEEPL_PAID_BASE_URL
 
 
 def _get_base_url(api_key: str | None) -> str:

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
+from reasoner.api.auth_deps import require_csrf
 from reasoner.api.schemas import CalculationRequest, DiscoverRequest, StockRequest, WeatherRequest
 
 logger = logging.getLogger(__name__)
@@ -24,7 +25,7 @@ async def get_weather(location: str = ""):
         return weather_data
     except Exception as e:
         logger.error(f"Weather error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/api/stocks")
@@ -39,11 +40,14 @@ async def get_stock(symbol: str = ""):
         return stock_data
     except Exception as e:
         logger.error(f"Stock error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/api/calculate")
-async def calculate(req: CalculationRequest):
+async def calculate(
+    req: CalculationRequest,
+    csrf_checked=Depends(require_csrf),
+):
     """Evaluate a mathematical expression (legacy endpoint)."""
     try:
         from reasoner.widgets import calculate_expression
@@ -52,7 +56,7 @@ async def calculate(req: CalculationRequest):
         return result
     except Exception as e:
         logger.error(f"Calculation error: {e}")
-        return {"error": str(e), "valid": False}
+        return {"error": "Internal server error", "valid": False}
 
 
 @router.get("/api/discover")
@@ -65,4 +69,4 @@ async def discover(topic: str = "tech", mode: str = "normal"):
         return content
     except Exception as e:
         logger.error(f"Discover error: {e}")
-        return {"error": str(e), "results": []}
+        return {"error": "Internal server error", "results": []}

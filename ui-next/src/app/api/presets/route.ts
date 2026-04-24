@@ -5,12 +5,13 @@ import {
   sanitizeRequestHeaders,
   sanitizeResponseHeaders,
 } from '@/lib/security-server';
+import { API } from '@/lib/config';
 
 export async function GET(req: NextRequest) {
   try {
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const headers = sanitizeRequestHeaders(req.headers);
-    const upstream = await fetch(`${apiBase}/api/presets`, {
+    const upstream = await fetch(`${apiBase}${API.PRESETS}`, {
       headers,
     });
     return new Response(upstream.body, {

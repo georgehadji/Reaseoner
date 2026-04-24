@@ -127,6 +127,15 @@ OPENAI_BASE_URL: str = "https://api.openai.com/v1"
 ANTHROPIC_BASE_URL: str = "https://api.anthropic.com/v1"
 GOOGLE_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta"
 PERPLEXITY_BASE_URL: str = "https://api.perplexity.ai"
+NVIDIA_BASE_URL: str = "https://integrate.api.nvidia.com/v1"
+OPENMETEO_GEOCODING_URL: str = "https://geocoding-api.open-meteo.com/v1/search"
+OPENMETEO_FORECAST_URL: str = "https://api.open-meteo.com/v1/forecast"
+DEEPL_FREE_BASE_URL: str = "https://api-free.deepl.com/v2"
+DEEPL_PAID_BASE_URL: str = "https://api.deepl.com/v2"
+HUGGINGFACE_API_BASE: str = "https://api-inference.huggingface.co"
+OPENROUTER_AUTH_KEY_URL: str = "https://openrouter.ai/api/v1/auth/key"
+YOUTUBE_OEMBED_URL: str = "https://www.youtube.com/oembed"
+YOUTUBE_WATCH_BASE_URL: str = "https://www.youtube.com/watch?v="
 
 # ═════════════════════════════════════════════════════════════════════
 # MODEL ALIASES
@@ -201,6 +210,59 @@ TRUNCATION = TruncationLimits()
 JSON_ONLY_FOOTER: str = "Output ONLY valid JSON."
 
 # ═════════════════════════════════════════════════════════════════════
+# SYSTEM PROMPTS
+# ═════════════════════════════════════════════════════════════════════
+
+GATE_SYSTEM_PROMPT: str = (
+    "You are a routing assistant. Your job is to read the user request and classify it into exactly one category.\n"
+    "Categories:\n"
+    "- A: simple factual, conversational, or creative request → answer directly\n"
+    "- B: requires adversarial reasoning with conflicting viewpoints\n"
+    "- C: requires scientific hypothesis generation and falsification\n"
+    "- D: requires deep Socratic questioning\n"
+    "- E: requires multi-faceted analysis with multiple perspectives\n"
+    "- F: requires iterative refinement with memory\n"
+    "- G: requires research with web search\n"
+    "- H: requires pre-mortem risk analysis\n"
+    "- I: requires Bayesian belief updating\n"
+    "- J: requires dialectical synthesis\n"
+    "- K: requires analogical reasoning\n"
+    "- L: requires expert panel consensus (Delphi)\n"
+    "- M: requires structured fact-checking and verification\n"
+    "- N: requires parallel decomposition and assembly\n"
+    "- O: requires sequential decision tree search\n"
+    "- P: requires computational reasoning with code\n"
+    "- Q: requires dynamic reasoning module composition\n"
+    "- W: requires simple factual web search (current events, weather, sports scores, recent news)\n\n"
+    "Output ONLY valid JSON with keys: 'category' (A-W), 'confidence' (0.0-1.0), 'reasoning' (one sentence).\n"
+    "Do not include markdown formatting, explanations, or code fences."
+)
+
+ANALYTICAL_SYSTEM_PROMPT: str = (
+    "You are an analytical assistant. Provide a clear, concise answer."
+)
+
+CREATIVE_SYSTEM_PROMPT: str = (
+    "You are an expert writer and creative assistant.\n"
+    "\n"
+    "WRITING PRINCIPLES:\n"
+    "1. Produce well-structured, engaging, and original content.\n"
+    "2. Follow the user's instructions precisely regarding tone, length, format, and style.\n"
+    "3. Maintain a consistent voice and perspective throughout the piece.\n"
+    "\n"
+    "HALLUCINATION PREVENTION:\n"
+    "1. If you include historical events, real people, statistics, or scientific claims, "
+    "ensure they are accurate and widely accepted. Do NOT invent studies, citations, dates, or data.\n"
+    "2. Clearly distinguish between factual claims and creative interpretation, opinion, or speculation.\n"
+    "3. If you are uncertain about a fact, rephrase it as a general observation or omit it.\n"
+    "4. Do NOT fabricate quotes, sources, or references.\n"
+    "\n"
+    "SELF-CORRECTION:\n"
+    "Before finalizing, mentally review your draft for any unsupported factual claims. "
+    "Replace dubious claims with safer, more general statements.\n"
+)
+
+# ═════════════════════════════════════════════════════════════════════
 # IMAGE GENERATION
 # ═════════════════════════════════════════════════════════════════════
 
@@ -264,3 +326,20 @@ ARTICLE_MAX_SOURCE_COUNT: int = 16
 ARTICLE_SEARCH_RESULTS_PER_QUERY: int = 6
 ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION: int = 16
 ARTICLE_MIN_CLAIM_SUPPORT_RATIO: float = 0.5
+
+# ═════════════════════════════════════════════════════════════════════
+# DIRECT ANSWER / STREAMING DEFAULTS
+# ═════════════════════════════════════════════════════════════════════
+
+CREATIVE_MAX_TOKENS: int = 4096
+DIRECT_ANSWER_MAX_TOKENS: int = 2048
+CREATIVE_TEMPERATURE: float = 0.8
+DIRECT_ANSWER_TEMPERATURE: float = 0.7
+MAX_PROBLEM_DISPLAY_CHARS: int = 120
+
+# ═════════════════════════════════════════════════════════════════════
+# CALCULATION WIDGET LIMITS
+# ═════════════════════════════════════════════════════════════════════
+
+MAX_EXPRESSION_DEPTH: int = 100
+MAX_EXPRESSION_LENGTH: int = 10000

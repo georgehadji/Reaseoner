@@ -129,7 +129,8 @@
       "Bash(PYTHONPATH=\"E:/Documents/Vibe-Coding/Reasoner/src:$PYTHONPATH\" python -c \"from reasoner.pipeline import ARAPipeline; print\\(''pipeline.py OK''\\)\")",
       "Bash(then echo:*)",
       "Bash(fi)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(echo \"EXIT_CODE=$?\")"
     ]
   },
   "enableAllProjectMcpServers": true,

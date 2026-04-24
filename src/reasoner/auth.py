@@ -12,7 +12,10 @@ from typing import Optional, Dict, Set, List
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
+from pathlib import Path
 import asyncio
+
+from reasoner.core.settings import settings
 
 
 class Scope(str, Enum):
@@ -79,6 +82,7 @@ class AuthManager:
     - Rate limit tiers
     - Usage tracking
     - Async-safe
+    - Optional SQLite persistence for horizontal scaling
     """
 
     def __init__(self):
@@ -90,6 +94,16 @@ class AuthManager:
         admin_key = os.environ.get("ADMIN_API_KEY")
         if admin_key:
             self._admin_keys.add(self._hash_key(admin_key))
+
+        # Optional persistent store
+        self._store: Optional["AuthStore"] = None
+        if settings.AUTH_PERSISTENCE_ENABLED:
+            from reasoner.infrastructure.persistence.auth_store import AuthStore
+            self._store = AuthStore(Path(settings.AUTH_DB_PATH))
+
+        # Local LRU cache for hot-path reads (avoids DB round-trips)
+        self._cache: Dict[str, APIKey] = {}
+        self._CACHE_MAX_SIZE = 1000
 
     def _hash_key(self, key: str) -> str:
         """Hash API key using SHA-256."""
@@ -141,6 +155,21 @@ class AuthManager:
 
         async with self._lock:
             self._keys[key_hash] = api_key
+            self._cache.pop(key_hash, None)  # Invalidate cache
+
+        # Write-through to persistent store if enabled
+        if self._store:
+            await self._store.insert(
+                key_hash=key_hash,
+                name=name,
+                scopes=api_key.scopes,
+                is_active=True,
+                rate_limit_tier=rate_limit_tier,
+                created_at=api_key.created_at,
+                expires_at=expires_at,
+                created_by=created_by,
+            )
+
         return raw_key
 
     async def authenticate(self, api_key: Optional[str]) -> Optional[APIKey]:
@@ -161,12 +190,29 @@ class AuthManager:
 
         key_hash = self._hash_key(api_key)
 
+        # Fast-path: check local cache
+        cached = self._cache.get(key_hash)
+        if cached and cached.is_active:
+            if cached.expires_at is None or datetime.now() <= cached.expires_at:
+                cached.last_used_at = datetime.now()
+                cached.usage_count += 1
+                return cached
+            else:
+                self._cache.pop(key_hash, None)
+
         async with self._lock:
             stored_key = self._keys.get(key_hash)
 
+            # Fallback to persistent store if enabled and not in memory
+            if stored_key is None and self._store:
+                db_row = await self._store.get_by_hash(key_hash)
+                if db_row:
+                    stored_key = APIKey(**db_row)
+                    self._keys[key_hash] = stored_key
+
             # Check if key exists
             if not stored_key:
-                # Check admin keys
+                # Check admin keys (always in-memory, never persisted)
                 if key_hash in self._admin_keys:
                     return APIKey(
                         key_hash=key_hash,
@@ -190,6 +236,12 @@ class AuthManager:
             # Update usage tracking
             stored_key.last_used_at = datetime.now()
             stored_key.usage_count += 1
+
+            # Update persistent store and cache
+            if self._store:
+                await self._store.update_usage(key_hash)
+            self._cache[key_hash] = stored_key
+            self._maybe_evict_cache()
 
             return stored_key
 
@@ -241,34 +293,54 @@ class AuthManager:
         async with self._lock:
             if key_hash in self._keys:
                 self._keys[key_hash].is_active = False
-                return True
-            return False
+                self._cache.pop(key_hash, None)
+            if self._store:
+                return await self._store.revoke(key_hash)
+            return key_hash in self._keys
+
+    def _maybe_evict_cache(self) -> None:
+        """Evict oldest entries if cache exceeds max size."""
+        if len(self._cache) > self._CACHE_MAX_SIZE:
+            # Simple eviction: remove 10% oldest entries
+            keys_to_remove = list(self._cache.keys())[: self._CACHE_MAX_SIZE // 10]
+            for k in keys_to_remove:
+                self._cache.pop(k, None)
 
     async def list_keys(self, requester_scopes: Optional[Set[str]] = None) -> list[dict]:
         """
         List all active keys (without exposing hashes).
-        
+
         Args:
             requester_scopes: Scopes of the requesting user (for filtering)
         """
-        async with self._lock:
-            keys = []
-            for key in self._keys.values():
-                key_info = {
-                    "name": key.name,
-                    "created_at": key.created_at.isoformat(),
-                    "expires_at": key.expires_at.isoformat() if key.expires_at else None,
-                    "scopes": list(key.scopes),
-                    "is_active": key.is_active,
-                    "rate_limit_tier": key.rate_limit_tier,
-                    "usage_count": key.usage_count,
-                    "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
-                }
-                # Only show created_by to admins
-                if requester_scopes and Scope.ADMIN.value in requester_scopes:
-                    key_info["created_by"] = key.created_by
-                keys.append(key_info)
-            return keys
+        # Load from persistent store if enabled to get a complete view
+        source_keys = list(self._keys.values())
+        if self._store:
+            db_keys = await self._store.list_all()
+            # Merge in-memory and DB keys (in-memory wins for active sessions)
+            db_hashes = {k["key_hash"] for k in db_keys}
+            mem_hashes = {k.key_hash for k in source_keys}
+            for row in db_keys:
+                if row["key_hash"] not in mem_hashes:
+                    source_keys.append(APIKey(**row))
+
+        keys = []
+        for key in source_keys:
+            key_info = {
+                "name": key.name,
+                "created_at": key.created_at.isoformat(),
+                "expires_at": key.expires_at.isoformat() if key.expires_at else None,
+                "scopes": list(key.scopes),
+                "is_active": key.is_active,
+                "rate_limit_tier": key.rate_limit_tier,
+                "usage_count": key.usage_count,
+                "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+            }
+            # Only show created_by to admins
+            if requester_scopes and Scope.ADMIN.value in requester_scopes:
+                key_info["created_by"] = key.created_by
+            keys.append(key_info)
+        return keys
 
     def get_rate_limit_tier(self, api_key: Optional[APIKey]) -> str:
         """Get rate limit tier for an API key."""

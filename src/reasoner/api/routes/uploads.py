@@ -6,7 +6,7 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from reasoner.api.auth_deps import check_rate_limit, optional_auth
+from reasoner.api.auth_deps import check_rate_limit, optional_auth, require_csrf
 from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file, save_uploaded_files
 
 logger = logging.getLogger(__name__)
@@ -19,6 +19,7 @@ async def upload_file(
     force_ocr: bool = Query(False, description="Use OCR for images and scanned PDFs"),
     authenticated=Depends(optional_auth),
     rate_limit_checked=Depends(check_rate_limit),
+    csrf_checked=Depends(require_csrf),
 ):
     """Upload one or more files and extract their text content."""
     try:
@@ -51,7 +52,7 @@ async def upload_file(
 
     except Exception as e:
         logger.error(f"Upload failed: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Internal server error"}
 
 
 @router.get("/api/uploads")

@@ -1,6 +1,14 @@
 """
 ARA Pipeline - Circuit Breaker Pattern
 Provides fault tolerance for LLM provider calls.
+
+ARCHITECTURAL NOTE:
+    The circuit breaker registry stores state in-memory. In a multi-worker
+    or horizontally-scaled deployment each process maintains its own circuit
+    state, which means a failing provider may not be detected consistently
+    across workers. Set CIRCUIT_BREAKER_MODE to a shared backend (e.g.,
+    'redis') or accept per-worker degradation for production multi-instance
+    deployments.
 """
 
 from __future__ import annotations

@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from reasoner.api.auth_deps import require_csrf
 
 from reasoner.application.queries import GetPipelineStatusQuery
 
@@ -24,7 +26,7 @@ async def get_event_stats():
         return stats
     except Exception as e:
         logger.error(f"Event stats error: {e}")
-        return {"error": str(e)}
+        return {"error": "Internal server error"}
 
 
 @router.get("/api/pipelines")
@@ -46,7 +48,7 @@ async def list_pipelines(
         return {"pipelines": pipelines, "total": len(pipelines)}
     except Exception as e:
         logger.error(f"List pipelines error: {e}")
-        return {"error": str(e), "pipelines": []}
+        return {"error": "Internal server error", "pipelines": []}
 
 
 @router.get("/api/pipelines/{pipeline_id}")
@@ -67,11 +69,14 @@ async def get_pipeline_status(pipeline_id: str):
         return result
     except Exception as e:
         logger.error(f"Get pipeline error: {e}")
-        return {"error": str(e)}
+        return {"error": "Internal server error"}
 
 
 @router.post("/api/pipelines/{pipeline_id}/resume")
-async def resume_pipeline(pipeline_id: str):
+async def resume_pipeline(
+    pipeline_id: str,
+    csrf_checked=Depends(require_csrf),
+):
     """Resume a paused/failed pipeline from event history."""
     try:
         from reasoner.api import get_architecture_components
@@ -89,11 +94,14 @@ async def resume_pipeline(pipeline_id: str):
         return {"error": str(e), "can_resume": False}
     except Exception as e:
         logger.error(f"Resume pipeline error: {e}")
-        return {"error": str(e), "can_resume": False}
+        return {"error": "Internal server error", "can_resume": False}
 
 
 @router.post("/api/pipelines/{pipeline_id}/resume-stream")
-async def resume_pipeline_stream(pipeline_id: str):
+async def resume_pipeline_stream(
+    pipeline_id: str,
+    csrf_checked=Depends(require_csrf),
+):
     """Resume a pipeline by reconstructing its context and starting a fresh stream.
 
     This is a "resume-as-restart" approach: the pipeline's problem, preset, and
@@ -121,7 +129,7 @@ async def resume_pipeline_stream(pipeline_id: str):
         return {"error": str(e), "can_resume": False}
     except Exception as e:
         logger.error(f"Resume stream error: {e}")
-        return {"error": str(e), "can_resume": False}
+        return {"error": "Internal server error", "can_resume": False}
 
     problem = result.get("problem", "")
     preset = result.get("preset", "auto-budget")
@@ -159,7 +167,10 @@ async def resume_pipeline_stream(pipeline_id: str):
 
 
 @router.delete("/api/pipelines/{pipeline_id}")
-async def delete_pipeline(pipeline_id: str):
+async def delete_pipeline(
+    pipeline_id: str,
+    csrf_checked=Depends(require_csrf),
+):
     """Delete pipeline and all events (GDPR compliance)."""
     try:
         from reasoner.api import get_architecture_components
@@ -169,4 +180,4 @@ async def delete_pipeline(pipeline_id: str):
         return {"status": "deleted", "pipeline_id": pipeline_id}
     except Exception as e:
         logger.error(f"Delete pipeline error: {e}")
-        return {"error": str(e)}
+        return {"error": "Internal server error"}

@@ -93,11 +93,18 @@ class TokenAwareCache:
         self._current_tokens = 0
         self._stats = CacheStats()
         self._lock = asyncio.Lock()
-        
-        # Load from disk if cache_dir provided
+        self._loaded = False
+
+        # Defer disk loading — call _ensure_loaded() before first use
         if cache_dir:
             cache_dir.mkdir(parents=True, exist_ok=True)
-            self._load_from_disk()
+
+    async def _ensure_loaded(self) -> None:
+        """Lazy-init: load cache entries from disk on first use."""
+        if self._loaded or not self.cache_dir:
+            return
+        self._loaded = True
+        await self._load_from_disk()
     
     def _compute_key(self, problem: str, phase: str, model_id: str, prompt: str) -> str:
         """Compute cache key from inputs."""
@@ -130,6 +137,7 @@ class TokenAwareCache:
             Cached response if hit, None otherwise
         """
         async with self._lock:
+            await self._ensure_loaded()
             key = self._compute_key(problem, phase, model_id, prompt)
             prompt_hash = self._compute_prompt_hash(prompt)
             
@@ -183,6 +191,7 @@ class TokenAwareCache:
     ) -> None:
         """Store response in cache."""
         async with self._lock:
+            await self._ensure_loaded()
             key = self._compute_key(problem, phase, model_id, prompt)
             
             # Check if we need to evict
@@ -259,21 +268,21 @@ class TokenAwareCache:
             "estimated_cost_savings_usd": self._stats.estimated_cost_savings,
         }
     
-    def _load_from_disk(self) -> None:
+    async def _load_from_disk(self) -> None:
         """Load cache entries from disk."""
         if not self.cache_dir:
             return
-        
+
         for f in self.cache_dir.glob("*.json"):
             try:
-                data = json.loads(f.read_text())
+                data = json.loads(await asyncio.to_thread(f.read_text))
                 entry = CacheEntry(**data)
-                
+
                 # Skip expired entries
                 if time.time() - entry.created_at > entry.ttl_seconds:
                     f.unlink()
                     continue
-                
+
                 self._entries[entry.key] = entry
                 self._current_tokens += entry.tokens_used
             except (json.JSONDecodeError, KeyError, TypeError):
@@ -300,7 +309,7 @@ class TokenAwareCache:
                 "access_count": entry.access_count,
                 "last_accessed": entry.last_accessed,
             }
-            f.write_text(json.dumps(data))
+            await asyncio.to_thread(f.write_text, json.dumps(data))
         except (IOError, OSError):
             pass  # Ignore disk write errors
 

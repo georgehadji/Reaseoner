@@ -54,7 +54,7 @@ class ProviderRouter:
         user_prompt: str,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = DEFAULT_TEMPERATURE,
-        timeout_seconds: float | None = None,
+        timeout_seconds: float = 30.0,
     ) -> tuple[str, dict[str, Any]]:
         """
         Call LLM for role. On LLMError or timeout, tries a fallback provider:

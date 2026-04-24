@@ -1,19 +1,17 @@
 'use client';
 
-import { useState, memo } from 'react';
+import { memo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { useTheme } from 'next-themes';
-import { Check, Copy } from 'lucide-react';
-import { TIMING } from '@/lib/config';
-import { copyToClipboard } from '@/lib/utils';
+
+// CodeBlock is in its own JS chunk (~400KB with Prism), loaded on demand
+const CodeBlock = dynamic(
+  () => import('./CodeBlock').then((mod) => mod.CodeBlock),
+  { ssr: false },
+);
 
 const MarkdownRendererComponent = ({ children }: { children: string }) => {
-  const { theme } = useTheme();
-  const isDark = theme === 'dark';
-
   return (
     <div className="markdown-body">
       <ReactMarkdown
@@ -49,7 +47,11 @@ const MarkdownRendererComponent = ({ children }: { children: string }) => {
             const codeString = String(children).replace(/\n$/, '');
 
             if (!inline && lang) {
-              return <CodeBlock code={codeString} language={lang} isDark={isDark} />;
+              return (
+                <Suspense fallback={<pre className="code-block"><code>{codeString}</code></pre>}>
+                  <CodeBlock code={codeString} language={lang} />
+                </Suspense>
+              );
             }
 
             return (
@@ -96,51 +98,4 @@ function slugify(text: string): string {
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
-}
-
-function CodeBlock({ code, language, isDark }: { code: string; language: string; isDark?: boolean }) {
-  const [copied, setCopied] = useState(false);
-
-  async function handleCopy() {
-    const ok = await copyToClipboard(code);
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), TIMING.copiedFeedbackMs);
-    }
-  }
-
-  return (
-    <div className="code-block">
-      <div className="code-block-header">
-        <span className="uppercase tracking-wide">{language}</span>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-[var(--surface-3)]"
-        >
-          {copied ? (
-            <>
-              <Check className="h-3.5 w-3.5" /> Copied
-            </>
-          ) : (
-            <>
-              <Copy className="h-3.5 w-3.5" /> Copy
-            </>
-          )}
-        </button>
-      </div>
-      <SyntaxHighlighter
-        language={language}
-        style={isDark ? vscDarkPlus : vs}
-        customStyle={{
-          margin: 0,
-          padding: '1em',
-          background: 'transparent',
-          fontSize: '0.85em',
-        }}
-      >
-        {code}
-      </SyntaxHighlighter>
-    </div>
-  );
 }

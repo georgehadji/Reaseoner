@@ -24,7 +24,8 @@ export function PhaseTimeline({
   onExpandAll,
   onCollapseAll,
 }: PhaseTimelineProps) {
-  const phases = METHOD_PHASES[method] || METHOD_PHASES['multi_perspective'] || METHOD_PHASES['multi-perspective'];
+  const normalized = method.replace(/_/g, '-');
+  const phases = METHOD_PHASES[normalized] || METHOD_PHASES['multi-perspective'];
 
   return (
     <nav

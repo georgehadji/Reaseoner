@@ -195,13 +195,21 @@ export function validateRunRequest(body: unknown): RunRequest {
     throw new ValidationError('Invalid enhance_prompt');
   }
 
-  return {
+  const result: RunRequest = {
     problem: b.problem,
     preset: b.preset,
     top_k: b.top_k,
     sequential: b.sequential,
     enhance_prompt: b.enhance_prompt,
   };
+
+  if (typeof b.expert === 'boolean') result.expert = b.expert;
+  if (typeof b.web_search === 'boolean') result.web_search = b.web_search;
+  if (typeof b.smart_search === 'boolean') result.smart_search = b.smart_search;
+  if (typeof b.client_run_id === 'string') result.client_run_id = b.client_run_id;
+  if (Array.isArray(b.attachments)) result.attachments = b.attachments as RunRequest['attachments'];
+
+  return result;
 }
 
 export function validateRunFollowupRequest(body: unknown): import('./types').RunFollowupRequest {
@@ -246,7 +254,7 @@ export function validateRunFollowupRequest(body: unknown): import('./types').Run
     : typeof b.agent_model === 'string' ? b.agent_model
     : null;
 
-  return {
+  const result: import('./types').RunFollowupRequest = {
     question: b.question,
     preset: b.preset,
     top_k: b.top_k,
@@ -257,6 +265,14 @@ export function validateRunFollowupRequest(body: unknown): import('./types').Run
     previous_synthesis: b.previous_synthesis,
     agent_model,
   };
+
+  if (typeof b.expert === 'boolean') result.expert = b.expert;
+  if (typeof b.web_search === 'boolean') result.web_search = b.web_search;
+  if (typeof b.smart_search === 'boolean') result.smart_search = b.smart_search;
+  if (typeof b.client_run_id === 'string') result.client_run_id = b.client_run_id;
+  if (Array.isArray(b.attachments)) result.attachments = b.attachments as import('./types').RunFollowupRequest['attachments'];
+
+  return result;
 }
 
 export function validateCalculateRequest(body: unknown): { expression: string } {
@@ -305,6 +321,7 @@ const RATE_LIMITS: Record<string, { limit: number; windowMs: number }> = {
   cache: { limit: 30, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
   search: { limit: 20, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
   'generate-image': { limit: 10, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
+  estimate: { limit: 30, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
   default: { limit: 30, windowMs: SECURITY_CONSTANTS.rateLimitWindowMs },
 };
 

@@ -188,6 +188,7 @@ class GenerateImageRequest(BaseModel):
     enhance: bool = True
     preview_only: bool = False
     reference_images: list[str] = []
+    num_images: int = 2
 
     @field_validator("prompt")
     @classmethod

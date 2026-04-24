@@ -6,6 +6,7 @@ import { EXAMPLE_PROMPTS } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon, Upload } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface ComposerProps {
   running: boolean;
@@ -55,7 +56,8 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       return;
     }
     try {
-      const resp = await fetch('/api/estimate', {
+      const { fetchWithCsrf } = await import('@/lib/security-client');
+      const resp = await fetchWithCsrf('/api/estimate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ problem: text, preset }),
@@ -202,21 +204,22 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   /** Plus button to open file picker */
   function AttachButton() {
     return (
-      <button
-        type="button"
-        onClick={() => fileInputRef.current?.click()}
-        disabled={attachments.length >= 5 || running}
-        className={cn(
-          'flex h-8 w-8 items-center justify-center rounded-full border transition-colors',
-          attachments.length >= 5 || running
-            ? 'cursor-not-allowed border-[var(--border)] text-[var(--text-subtle)] opacity-40'
-            : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-        )}
-        title="Attach files (PDF, TXT, MD, images)"
-        aria-label="Attach files"
-      >
-        <Plus className="h-4 w-4" />
-      </button>
+      <Tooltip text="Attach files (PDF, TXT, MD, images)">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={attachments.length >= 5 || running}
+          className={cn(
+            'flex h-8 w-8 items-center justify-center rounded-full border transition-colors',
+            attachments.length >= 5 || running
+              ? 'cursor-not-allowed border-[var(--border)] text-[var(--text-subtle)] opacity-40'
+              : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+          )}
+          aria-label="Attach files"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+      </Tooltip>
     );
   }
 
@@ -232,7 +235,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         : 'Budget mode active — click to switch to Premium';
 
     return (
-      <div className="group relative">
+      <Tooltip text={tooltipText}>
         <button
           type="button"
           onClick={toggleTier}
@@ -246,31 +249,28 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           <Sparkles className="h-3.5 w-3.5" />
           <span>Premium</span>
         </button>
-        <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 w-max max-w-[220px] -translate-x-1/2 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs text-[var(--text-muted)] opacity-0 shadow-[var(--shadow)] transition-opacity group-hover:opacity-100">
-          {tooltipText}
-          <div className="absolute left-1/2 top-full -mt-0.5 h-2 w-2 -translate-x-1/2 rotate-45 border-b border-r border-[var(--border)] bg-[var(--surface)]" />
-        </div>
-      </div>
+      </Tooltip>
     );
   }
 
   /** Image generation mode toggle */
   function ImageModeToggle() {
     return (
-      <button
-        type="button"
-        onClick={toggleImageMode}
-        className={cn(
-          'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
-          isImageMode
-            ? 'border-purple-500/50 bg-purple-500/10 text-purple-400'
-            : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
-        )}
-        title={isImageMode ? 'Image generation mode — click to switch to reasoning' : 'Generate an image — click to switch to image mode'}
-      >
-        <ImageIcon className="h-3.5 w-3.5" />
-        <span>Image</span>
-      </button>
+      <Tooltip text={isImageMode ? 'Image generation mode — click to switch to reasoning' : 'Generate an image — click to switch to image mode'}>
+        <button
+          type="button"
+          onClick={toggleImageMode}
+          className={cn(
+            'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
+            isImageMode
+              ? 'border-purple-500/50 bg-purple-500/10 text-purple-400'
+              : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+          )}
+        >
+          <ImageIcon className="h-3.5 w-3.5" />
+          <span>Image</span>
+        </button>
+      </Tooltip>
     );
   }
 

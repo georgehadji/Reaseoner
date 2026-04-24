@@ -13,6 +13,7 @@ import { Composer } from '@/components/layout/Composer';
 import { ShortcutModal } from '@/components/layout/ShortcutModal';
 import { CommandPalette } from '@/components/layout/CommandPalette';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
@@ -135,18 +136,18 @@ function messagesReducer(state: ChatFeedMessage[], action: MessagesAction): Chat
   }
 }
 
-/** Resolve METHOD_PHASES by trying snake_case then kebab-case then fallback. */
+/** Resolve METHOD_PHASES by normalizing method name and falling back to multi-perspective. */
 function getMethodPhases(method: string) {
-  return (
-    METHOD_PHASES[method] ||
-    METHOD_PHASES[method.replace(/_/g, '-')] ||
-    METHOD_PHASES['multi_perspective'] ||
-    METHOD_PHASES['multi-perspective'] ||
-    []
-  );
+  const normalized = method.replace(/_/g, '-');
+  return METHOD_PHASES[normalized] || METHOD_PHASES['multi-perspective'] || [];
 }
 
 const IMAGE_PROMPT_MAX_CHARS = 2000;
+
+/** Strip model-name prefixes like "DALL-E 3, Midjourney, Flux prompt:" or "**DALL-E 3, Midjourney, Flux Prompt:**" from enhanced prompts for display. */
+function cleanDisplayPrompt(prompt: string): string {
+  return prompt.replace(/^(?:\*{2})?[\w\s,'-]+prompt:\*{0,2}\s+/i, '');
+}
 
 function clampImagePrompt(prompt: string) {
   const trimmed = prompt.trim();
@@ -345,6 +346,7 @@ export default function Home() {
           });
         }
         const enhancedPrompt = enhancedBase.prompt;
+        const displayPrompt = cleanDisplayPrompt(enhancedPrompt);
         dispatchMessages({
           type: 'ADD_MESSAGES',
           payload: [
@@ -353,22 +355,22 @@ export default function Home() {
               role: 'info',
               content:
                 enhancedPrompt === basePrompt.prompt
-                  ? `Prompt used for generation: “${enhancedPrompt}”`
-                  : `Enhanced prompt: “${enhancedPrompt}”`,
-              meta: enhancedPrompt === basePrompt.prompt ? undefined : { original: basePrompt.prompt, enhanced: enhancedPrompt },
+                  ? `Prompt used for generation: “${displayPrompt}”`
+                  : `Enhanced prompt: “${displayPrompt}”`,
+              meta: enhancedPrompt === basePrompt.prompt ? undefined : { original: basePrompt.prompt, enhanced: displayPrompt },
             },
             {
               ...assistantMsg,
               loadingKind: 'image-generation',
               loadingPrompt:
                 referenceImages.length > 0
-                  ? `${enhancedPrompt} [using ${referenceImages.length} reference image${referenceImages.length === 1 ? '' : 's'}]`
-                  : enhancedPrompt,
+                  ? `${displayPrompt} [using ${referenceImages.length} reference image${referenceImages.length === 1 ? '' : 's'}]`
+                  : displayPrompt,
             },
           ],
         });
 
-        const result = await generateImage(enhancedPrompt, tier, false, referenceImages);
+        const result = await generateImage(enhancedPrompt, tier, false, referenceImages, tier === 'budget' ? 4 : undefined);
         const genDuration = (performance.now() - genStart) / 1000;
         if (result.success && result.images && result.images.length > 0) {
           const formattedImages =
@@ -476,7 +478,7 @@ export default function Home() {
             phaseStartTimesRef.current[ev.phase] = performance.now();
             setCurrentPhase(ev.phase);
             // Update the assistant message to show current phase and models
-            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { currentPhaseName: displayName, phaseModels: startModels ?? (messages.find(m => m.id === assistantId)?.phaseModels) } } });
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { currentPhaseName: displayName, phaseModels: startModels } } });
           }
           break;
         case 'agent_start':
@@ -607,7 +609,7 @@ export default function Home() {
           
           if (finalErrors.length > 0) {
             // Add error messages if any
-            dispatchMessages({ type: 'ADD_MESSAGES', payload: finalErrors.map(err => ({ id: 'err-' + Date.now(), role: 'error', content: err })) });
+            dispatchMessages({ type: 'ADD_MESSAGES', payload: finalErrors.map((err, i) => ({ id: 'err-' + Date.now() + '-' + i, role: 'error', content: err })) });
           }
 
           // Save conversation to DB
@@ -776,7 +778,7 @@ export default function Home() {
           resumeErrors = ev.errors || [];
           dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { content: buildMarkdownFromPhases(resumePhases), phases: [...resumePhases], isStreaming: false, currentPhaseName: undefined } } });
           if (resumeErrors.length > 0) {
-            dispatchMessages({ type: 'ADD_MESSAGES', payload: resumeErrors.map((err) => ({ id: 'err-' + Date.now(), role: 'error', content: err })) });
+            dispatchMessages({ type: 'ADD_MESSAGES', payload: resumeErrors.map((err, i) => ({ id: 'err-' + Date.now() + '-' + i, role: 'error', content: err })) });
           }
           break;
       }
@@ -862,29 +864,31 @@ export default function Home() {
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
           <div className="flex items-center gap-3">
             <span className="font-semibold tracking-tight">ARA Chat</span>
-            <div
-              className={`h-2 w-2 rounded-full ${
-                serverOnline === true
-                  ? 'bg-green-500'
-                  : serverOnline === false
-                  ? 'bg-red-500'
-                  : 'bg-yellow-500'
-              }`}
-              title={serverOnline === true ? 'Online' : serverOnline === false ? 'Offline' : 'Checking…'}
-            />
+            <Tooltip text={serverOnline === true ? 'Online' : serverOnline === false ? 'Offline' : 'Checking…'}>
+              <div
+                className={`h-2 w-2 rounded-full ${
+                  serverOnline === true
+                    ? 'bg-green-500'
+                    : serverOnline === false
+                    ? 'bg-red-500'
+                    : 'bg-yellow-500'
+                }`}
+              />
+            </Tooltip>
             {wsStatus !== 'idle' && (
               <div className="flex items-center gap-1.5">
-                <div
-                  className={`h-2 w-2 rounded-full ${
-                    wsStatus === 'connected'
-                      ? 'bg-blue-500'
-                      : wsStatus === 'reconnecting'
-                      ? 'bg-amber-500 animate-pulse'
-                      : 'bg-gray-400'
-                  }`}
-                  aria-label={`WebSocket ${wsStatus}`}
-                  title={`WebSocket: ${wsStatus}`}
-                />
+                <Tooltip text={`WebSocket: ${wsStatus}`}>
+                  <div
+                    className={`h-2 w-2 rounded-full ${
+                      wsStatus === 'connected'
+                        ? 'bg-blue-500'
+                        : wsStatus === 'reconnecting'
+                        ? 'bg-amber-500 animate-pulse'
+                        : 'bg-gray-400'
+                    }`}
+                    aria-label={`WebSocket ${wsStatus}`}
+                  />
+                </Tooltip>
                 <span className="hidden text-[10px] text-[var(--text-muted)] sm:inline">
                   {wsStatus === 'connected' ? 'Live' : wsStatus}
                 </span>

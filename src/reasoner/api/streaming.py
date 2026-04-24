@@ -560,7 +560,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             if isinstance(data, dict):
                 data["tokens"] = state.phase_tokens.get(phase_key, {"input": 0, "output": 0})
                 data["duration"] = duration
-                phase_models = getattr(state, "_phase_models_by_key", {}).get(phase_key, [])
+                phase_models = state.cost_state._phase_models_by_key.get(phase_key, [])
                 if phase_models:
                     data["models"] = phase_models
                 subagent_outputs = _get_phase_subagents(state, name)
@@ -702,7 +702,7 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
 async def run_stream_cached(req: RunRequest) -> AsyncGenerator[str, None]:
     key = _cache_key(req)
     if not req.no_cache:
-        cached = _load_cache(key)
+        cached = await _load_cache(key)
         if cached:
             has_fatal_error = any(ev.get("type") == "done" and ev.get("errors") for ev in cached)
             if not has_fatal_error:
@@ -722,6 +722,6 @@ async def run_stream_cached(req: RunRequest) -> AsyncGenerator[str, None]:
                 ev = json.loads(chunk[6:])
                 collected.append(ev)
                 if ev.get("type") == "done" and not req.no_cache:
-                    _save_cache(key, collected)
+                    await _save_cache(key, collected)
             except Exception:
                 pass

@@ -77,7 +77,7 @@ def build_followup_context(
     rendered_turns: list[str] = []
     for turn in history[-6:]:
         role = str(turn.get("role", "user")).strip().lower()
-        content = str(turn.get("content", ""))
+        content = str(turn.get("content", ""))[:TRUNCATION.LARGE_CONTENT]
         if not content.strip():
             continue
         if role == "user":
@@ -104,12 +104,21 @@ def build_followup_context(
 
 
 def _followup_context(state: PipelineState) -> str:
-    """Build a compact follow-up context block for injection into prompts."""
-    return build_followup_context(
+    """Build a compact follow-up context block for injection into prompts.
+
+    Results are cached on PipelineState._followup_cache since the
+    conversation history does not change mid-run and this function
+    is called 7+ times per pipeline run (once per phase prompt).
+    """
+    if state._followup_cache is not None:
+        return state._followup_cache
+    result = build_followup_context(
         state.conversation_history,
         previous_synthesis=state.previous_synthesis,
         turn_number=state.turn_number,
     )
+    state._followup_cache = result
+    return result
 
 
 def _wrap_user_input(text: str) -> str:

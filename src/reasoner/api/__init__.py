@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request, Depends, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from reasoner.core.settings import settings
@@ -62,6 +62,9 @@ async def lifespan(app: FastAPI):
 
     from reasoner.llm import OpenAICompatibleProvider
     await OpenAICompatibleProvider.close_shared_pool()
+
+    from reasoner.scraper import close_scraper_client
+    await close_scraper_client()
 
     logger.info("Reasoner shutdown complete")
 
@@ -501,11 +504,9 @@ async def estimate_cost(req: RunRequest):
 # FEEDBACK ENDPOINT
 # ─────────────────────────────────────────────────────────────────────
 
-import json as _json
-from pathlib import Path as _Path
+from reasoner.infrastructure.persistence.feedback_store import FeedbackStore, FeedbackEntry
 
-_FEEDBACK_FILE = _Path(__file__).parent.parent.parent / "feedback" / "feedback.jsonl"
-_FEEDBACK_FILE.parent.mkdir(parents=True, exist_ok=True)
+_feedback_store = FeedbackStore()
 
 
 class FeedbackRequest(BaseModel):
@@ -514,25 +515,49 @@ class FeedbackRequest(BaseModel):
     rating: str  # "up" | "down"
     reason: str | None = None
     comment: str | None = None
+    context: dict | None = None
 
 
 @app.post("/api/feedback")
 async def submit_feedback(req: FeedbackRequest):
     """
     Submit user feedback for a specific message.
-    Appends to a local JSONL file for later analysis.
+    Persisted to SQLite for durability and queryability.
     """
-    entry = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "conversation_id": req.conversation_id,
-        "message_id": req.message_id,
-        "rating": req.rating,
-        "reason": req.reason,
-        "comment": req.comment,
+    row_id = await _feedback_store.insert(
+        FeedbackEntry(
+            conversation_id=req.conversation_id,
+            message_id=req.message_id,
+            rating=req.rating,
+            reason=req.reason,
+            comment=req.comment,
+            context=req.context,
+        )
+    )
+    return {"status": "received", "id": row_id}
+
+
+@app.get("/api/admin/feedback-stats")
+async def feedback_stats(
+    days: int = Query(30, ge=1, le=365),
+    admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+):
+    """
+    Admin-only endpoint returning aggregated feedback statistics.
+    Requires X-Admin-Key header matching ADMIN_API_KEY.
+    """
+    if not settings.ADMIN_API_KEY or admin_key != settings.ADMIN_API_KEY:
+        raise HTTPException(status_code=401, detail="Unauthorized")
+    stats = await _feedback_store.get_stats(days=days)
+    return {
+        "total_entries": stats.total_entries,
+        "upvotes": stats.upvotes,
+        "downvotes": stats.downvotes,
+        "downvote_reasons": stats.downvote_reasons,
+        "avg_comment_length": stats.avg_comment_length,
+        "entries_with_context": stats.entries_with_context,
+        "period_days": stats.period_days,
     }
-    with open(_FEEDBACK_FILE, "a", encoding="utf-8") as f:
-        f.write(_json.dumps(entry) + "\n")
-    return {"status": "received"}
 
 
 # ─────────────────────────────────────────────────────────────────────

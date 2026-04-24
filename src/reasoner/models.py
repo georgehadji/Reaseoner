@@ -10,7 +10,7 @@ from collections import deque
 from dataclasses import dataclass, field, asdict, fields as dc_fields
 from enum import Enum
 from typing import Any, TYPE_CHECKING
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 if TYPE_CHECKING:
@@ -226,11 +226,35 @@ class FinalSolution:
 
 
 @dataclass
+class CostTrackingState:
+    """Grouped cost and token tracking for the pipeline.
+
+    Aggregates fields that were previously flat in PipelineState
+    into a single sub-object for cleaner serialization.
+    """
+    total_cost_usd: float = 0.0
+    phase_costs: dict[str, float] = field(default_factory=dict)
+    detailed_token_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    phase_costs_by_key: dict[str, float] = field(default_factory=dict)
+    _phase_models_by_key: dict[str, list[str]] = field(default_factory=dict)
+
+
+@dataclass
+class ConversationState:
+    """Grouped multi-turn follow-up context."""
+    conversation_history: list[dict[str, str]] = field(default_factory=list)
+    conversation_id: str = ""
+    turn_number: int = 1
+    previous_synthesis: str = ""
+    agent_model: str | None = None
+
+
+@dataclass
 class PipelineState:
     """Complete pipeline state — passed between phases."""
     problem: str
     enhanced_problem: str = ""  # Auto-rewritten prompt for clarity and context
-    started_at: "datetime" = field(default_factory=datetime.now)
+    started_at: "datetime" = field(default_factory=lambda: datetime.now(timezone.utc))
     task_type: TaskType | None = None
     task_type_rationale: str = ""
     language: str = "English"  # Detected language from the problem
@@ -295,6 +319,8 @@ class PipelineState:
     self_discover_state: dict[str, Any] = field(default_factory=dict)
     # Writing Method: Structured article writing with research-backed outline, draft, fact-check
     writing_state: dict[str, Any] = field(default_factory=dict)
+    # Cross-Language Method: Translation metadata (source lang, original problem, translated synthesis)
+    cross_language_state: dict[str, Any] = field(default_factory=dict)
     # PhaseSubAgent outputs (for transparency / resume / debugging)
     synthesis_subagent_outputs: list[dict[str, Any]] = field(default_factory=list)
     # Neuro memory: recalled context chunks from long-term memory
@@ -311,31 +337,101 @@ class PipelineState:
     web_discovery_results: list[dict[str, Any]] = field(default_factory=list)
     # Vetted Context: Flags from context vetting phase
     vetted_context: list[dict[str, Any]] = field(default_factory=list)
+    # Internal: cached _followup_context result to avoid rebuilding per-phase
+    _followup_cache: str | None = field(default=None, repr=False)
     
     # ─────────────────────────────────────────────────────────────────────
-    # Cost Tracking (OpenRouter & Direct API)
+    # Cost Tracking (grouped in CostTrackingState sub-object)
     # ─────────────────────────────────────────────────────────────────────
-    # Total cost in USD for the entire pipeline run
-    total_cost_usd: float = 0.0
-    # Per-phase cost breakdown: {phase_name: cost_in_usd}
-    phase_costs: dict[str, float] = field(default_factory=dict)
-    # Per-phase token usage: {phase_name: {"input": int, "output": int, "total": int}}
-    # (supersedes phase_tokens which only tracked input/output)
-    detailed_token_usage: dict[str, dict[str, int]] = field(default_factory=dict)
+    cost_state: CostTrackingState = field(default_factory=CostTrackingState)
 
     # ─────────────────────────────────────────────────────────────────────
-    # Conversation Context (Multi-turn Follow-up Support)
+    # Conversation Context (grouped in ConversationState sub-object)
     # ─────────────────────────────────────────────────────────────────────
-    conversation_history: list[dict[str, str]] = field(default_factory=list)
-    conversation_id: str = ""
-    turn_number: int = 1
-    previous_synthesis: str = ""
-    agent_model: str | None = None  # Tier-based agent override for follow-ups
+    conversation_state: ConversationState = field(default_factory=ConversationState)
 
     # ─────────────────────────────────────────────────────────────────────
     # Uploaded File Attachments
     # ─────────────────────────────────────────────────────────────────────
     attachments: list[dict[str, Any]] = field(default_factory=list)  # [{file_id, filename, mime_type, extracted_text}]
+
+    def __post_init__(self) -> None:
+        """Backward-compat migration for --resume with old-format state files.
+        Also sets up property-backed alias attributes for the grouped fields."""
+        if not isinstance(self.cost_state, CostTrackingState):
+            if isinstance(self.cost_state, dict):
+                self.cost_state = CostTrackingState(**self.cost_state)
+            else:
+                self.cost_state = CostTrackingState()
+        if not isinstance(self.conversation_state, ConversationState):
+            if isinstance(self.conversation_state, dict):
+                self.conversation_state = ConversationState(**self.conversation_state)
+            else:
+                self.conversation_state = ConversationState()
+
+    @property
+    def total_cost_usd(self) -> float:
+        return self.cost_state.total_cost_usd
+
+    @total_cost_usd.setter
+    def total_cost_usd(self, value: float) -> None:
+        self.cost_state.total_cost_usd = value
+
+    @property
+    def phase_costs(self) -> dict[str, float]:
+        return self.cost_state.phase_costs
+
+    @phase_costs.setter
+    def phase_costs(self, value: dict[str, float]) -> None:
+        self.cost_state.phase_costs = value
+
+    @property
+    def detailed_token_usage(self) -> dict[str, dict[str, int]]:
+        return self.cost_state.detailed_token_usage
+
+    @detailed_token_usage.setter
+    def detailed_token_usage(self, value: dict[str, dict[str, int]]) -> None:
+        self.cost_state.detailed_token_usage = value
+
+    @property
+    def conversation_history(self) -> list[dict[str, str]]:
+        return self.conversation_state.conversation_history
+
+    @conversation_history.setter
+    def conversation_history(self, value: list[dict[str, str]]) -> None:
+        self.conversation_state.conversation_history = value
+
+    @property
+    def conversation_id(self) -> str:
+        return self.conversation_state.conversation_id
+
+    @conversation_id.setter
+    def conversation_id(self, value: str) -> None:
+        self.conversation_state.conversation_id = value
+
+    @property
+    def turn_number(self) -> int:
+        return self.conversation_state.turn_number
+
+    @turn_number.setter
+    def turn_number(self, value: int) -> None:
+        self.conversation_state.turn_number = value
+
+    @property
+    def previous_synthesis(self) -> str:
+        return self.conversation_state.previous_synthesis
+
+    @previous_synthesis.setter
+    def previous_synthesis(self, value: str) -> None:
+        self.conversation_state.previous_synthesis = value
+
+    @property
+    def agent_model(self) -> str | None:
+        return self.conversation_state.agent_model
+
+    @agent_model.setter
+    def agent_model(self, value: str | None) -> None:
+        self.conversation_state.agent_model = value
 
     def add_error(self, message: str) -> None:
         """Atomic append to error list."""
@@ -883,5 +979,25 @@ class PipelineState:
         data.setdefault('decomposition_subagent_outputs', [])
         data.setdefault('enhancement_subagent_outputs', [])
         data.setdefault('search_subagent_outputs', [])
+
+        # Migrate old-format flat cost fields into cost_state
+        if 'cost_state' not in data:
+            cost_fields = {}
+            for key in ('total_cost_usd', 'phase_costs', 'detailed_token_usage',
+                        'phase_costs_by_key', '_phase_models_by_key'):
+                if key in data:
+                    cost_fields[key] = data.pop(key)
+            if cost_fields:
+                data['cost_state'] = cost_fields
+
+        # Migrate old-format flat conversation fields into conversation_state
+        if 'conversation_state' not in data:
+            conv_fields = {}
+            for key in ('conversation_history', 'conversation_id', 'turn_number',
+                        'previous_synthesis', 'agent_model'):
+                if key in data:
+                    conv_fields[key] = data.pop(key)
+            if conv_fields:
+                data['conversation_state'] = conv_fields
 
         return cls(**data)

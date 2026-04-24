@@ -5,6 +5,7 @@ import { useAppStore } from '@/stores/app-store';
 import { Conversation } from '@/lib/types';
 import { Plus, PanelLeft, Trash2, Brain, History, Play } from 'lucide-react';
 import { NeuroPanel } from './NeuroPanel';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -58,16 +59,17 @@ function MemoryStatus() {
     <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-[var(--text-muted)]">
       <Brain className="h-3.5 w-3.5" />
       <span>Memory</span>
-      <span
-        className={`ml-auto h-2 w-2 rounded-full ${
-          status === 'ok'
-            ? 'bg-green-500'
-            : status === 'degraded'
-            ? 'bg-amber-500'
-            : 'bg-gray-400'
-        }`}
-        title={status === 'ok' ? 'Healthy' : status === 'degraded' ? 'Degraded' : 'Unavailable'}
-      />
+      <Tooltip text={status === 'ok' ? 'Healthy' : status === 'degraded' ? 'Degraded' : 'Unavailable'}>
+        <span
+          className={`ml-auto h-2 w-2 rounded-full ${
+            status === 'ok'
+              ? 'bg-green-500'
+              : status === 'degraded'
+              ? 'bg-amber-500'
+              : 'bg-gray-400'
+          }`}
+        />
+      </Tooltip>
     </div>
   );
 }
@@ -267,9 +269,11 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onRes
                           onClick={() => onLoad(conv)}
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm text-[var(--text-2)]" title={conv.problem}>
-                              {title}
-                            </div>
+                            <Tooltip text={conv.problem}>
+                              <div className="truncate text-sm text-[var(--text-2)]">
+                                {title}
+                              </div>
+                            </Tooltip>
                             <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                               {conv.method && conv.method !== 'multi_perspective' && (
                                 <span className="text-[10px] text-[var(--text-muted)]">
@@ -290,18 +294,19 @@ export function Sidebar({ conversations, onLoad, onDelete, onClear, onNew, onRes
                           </div>
                           <div className="flex items-center gap-1">
                             {onResume && conv.pipeline_id && conv.kind === 'pipeline' && (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  onResume(conv.pipeline_id!);
-                                }}
-                                className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)] group-hover:opacity-100"
-                                aria-label="Resume pipeline"
-                                title="Resume pipeline"
-                              >
-                                <Play className="h-3.5 w-3.5" />
-                              </button>
+                              <Tooltip text="Resume pipeline">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onResume(conv.pipeline_id!);
+                                  }}
+                                  className="rounded p-1 text-[var(--text-muted)] opacity-0 transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)] group-hover:opacity-100"
+                                  aria-label="Resume pipeline"
+                                >
+                                  <Play className="h-3.5 w-3.5" />
+                                </button>
+                              </Tooltip>
                             )}
                             <button
                               type="button"

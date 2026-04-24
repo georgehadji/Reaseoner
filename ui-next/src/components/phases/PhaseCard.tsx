@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown, Bot, Timer, Cpu, Boxes } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface SubagentInfo {
   name: string;
@@ -40,7 +41,7 @@ function formatDurationMs(ms: number) {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-export function PhaseCard({
+export const PhaseCard = memo(function PhaseCard({
   index,
   phase,
   name,
@@ -126,24 +127,25 @@ export function PhaseCard({
                 ) : null}
                 {models && models.length > 0
                   ? models.map((model) => (
-                      <span
-                        key={model}
-                        className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
-                        title={model}
-                      >
-                        <Cpu className="h-3 w-3" />
-                        {formatModelLabel(model)}
-                      </span>
+                      <Tooltip key={model} text={model}>
+                        <span
+                          className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
+                        >
+                          <Cpu className="h-3 w-3" />
+                          {formatModelLabel(model)}
+                        </span>
+                      </Tooltip>
                     ))
                   : null}
                 {subagents && subagents.length > 0 ? (
-                  <span
-                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
-                    title={subagentTooltip}
-                  >
-                    <Bot className="h-3 w-3" />
-                    {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
-                  </span>
+                  <Tooltip text={subagentTooltip}>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1"
+                    >
+                      <Bot className="h-3 w-3" />
+                      {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+                    </span>
+                  </Tooltip>
                 ) : null}
               </div>
             </div>
@@ -161,29 +163,31 @@ export function PhaseCard({
           <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] p-3">
             <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>
             <div className="flex flex-wrap gap-2">
-              {subagents.map((s) => (
-                <div
-                  key={s.name}
-                  className={cn(
-                    'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
-                    s.error
-                      ? 'bg-red-500/10 text-red-400'
-                      : 'bg-[var(--surface)] text-[var(--text-subtle)]'
-                  )}
-                  title={s.error || undefined}
-                >
-                  <Bot className="h-3 w-3 shrink-0" />
-                  <span className="font-medium">{s.name}</span>
-                  <span className="text-[var(--text-muted)]">→</span>
-                  <span>{formatModelLabel(s.model)}</span>
-                  <span className="text-[var(--text-muted)]">
-                    {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
-                  </span>
-                  <span className="text-[var(--text-muted)]">
-                    · {formatDurationMs(s.duration_ms ?? 0)}
-                  </span>
-                </div>
-              ))}
+              {subagents.map((s) => {
+                const el = (
+                  <div
+                    key={s.name}
+                    className={cn(
+                      'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
+                      s.error
+                        ? 'bg-red-500/10 text-red-400'
+                        : 'bg-[var(--surface)] text-[var(--text-subtle)]'
+                    )}
+                  >
+                    <Bot className="h-3 w-3 shrink-0" />
+                    <span className="font-medium">{s.name}</span>
+                    <span className="text-[var(--text-muted)]">→</span>
+                    <span>{formatModelLabel(s.model)}</span>
+                    <span className="text-[var(--text-muted)]">
+                      {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
+                    </span>
+                    <span className="text-[var(--text-muted)]">
+                      · {formatDurationMs(s.duration_ms ?? 0)}
+                    </span>
+                  </div>
+                );
+                return s.error ? <Tooltip key={s.name} text={s.error}>{el}</Tooltip> : el;
+              })}
             </div>
           </div>
         )}
@@ -191,4 +195,4 @@ export function PhaseCard({
       </div>
     </div>
   );
-}
+});

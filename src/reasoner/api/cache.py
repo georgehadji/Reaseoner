@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
@@ -80,7 +81,7 @@ def _cache_key(req: "RunRequest") -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _load_cache(key: str) -> list[dict] | None:
+async def _load_cache(key: str) -> list[dict] | None:
     global _cache_hits, _cache_misses
     # 1. Check in-memory hot cache first (under lock for consistency)
     with _memory_cache_lock:
@@ -92,7 +93,7 @@ def _load_cache(key: str) -> list[dict] | None:
     path = CACHE_DIR / f"{key}.json"
     if path.exists():
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
+            data = json.loads(await asyncio.to_thread(path.read_text, encoding="utf-8"))
             with _memory_cache_lock:
                 _MEMORY_CACHE[key] = data
                 _prune_memory_cache()
@@ -104,7 +105,8 @@ def _load_cache(key: str) -> list[dict] | None:
                 path.unlink(missing_ok=True)
             except OSError:
                 pass
-    _cache_misses += 1
+    with _memory_cache_lock:
+        _cache_misses += 1
     return None
 
 
@@ -122,7 +124,7 @@ def _prune_disk_cache() -> None:
             pass
 
 
-def _save_cache(key: str, events: list[dict]) -> None:
+async def _save_cache(key: str, events: list[dict]) -> None:
     # Update in-memory hot cache immediately (under lock)
     with _memory_cache_lock:
         _MEMORY_CACHE[key] = events.copy()
@@ -136,20 +138,22 @@ def _save_cache(key: str, events: list[dict]) -> None:
     # Unique temp file: key.{pid}.{timestamp}.tmp
     tmp = CACHE_DIR / f"{key}.{os.getpid()}.{int(time.time() * 1000)}.tmp"
     try:
-        tmp.write_text(json.dumps(events), encoding="utf-8")
+        await asyncio.to_thread(tmp.write_text, json.dumps(events), encoding="utf-8")
         # On Windows, os.replace() may not be atomic, but with unique temp filenames
         # we avoid overwriting another writer's temp file. The last writer wins,
         # but data is never corrupted from interleaved writes.
         tmp.replace(path)
-        # Clean up any old temp files for this key (from crashed writers)
+    except OSError:
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return
+    finally:
+        # Clean up old temp files (crashed writers) regardless of success
         for old_tmp in CACHE_DIR.glob(f"{key}.*.tmp"):
             try:
                 old_tmp.unlink(missing_ok=True)
             except OSError:
                 pass
         _prune_disk_cache()
-    except OSError:
-        try:
-            tmp.unlink(missing_ok=True)
-        except OSError:
-            pass

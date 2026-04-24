@@ -110,58 +110,107 @@ async def _extract_image(content: bytes, filename: str) -> str:
         return f"[Image description failed: {e}]"
 
 
-async def extract_text(content: bytes, filename: str) -> str:
+async def _ocr_image(content: bytes, filename: str) -> str:
+    """Extract verbatim text from image via OCR-optimized model."""
+    try:
+        from reasoner.infrastructure.llm.extraction import ocr_image
+        return await ocr_image(content, filename)
+    except Exception as e:
+        logger.error(f"Image OCR failed: {e}")
+        return f"[Image OCR failed: {e}]"
+
+
+async def _ocr_scanned_pdf(content: bytes, max_pages: int = 3) -> str:
+    """Render PDF pages to images and OCR them."""
+    try:
+        import fitz  # pymupdf
+    except ImportError:
+        return "[Scanned PDF detected — install pymupdf for OCR: pip install pymupdf]"
+
+    try:
+        import io
+        doc = fitz.open(stream=content, filetype="pdf")
+        parts: list[str] = []
+        for page_num in range(min(max_pages, len(doc))):
+            page = doc.load_page(page_num)
+            pix = page.get_pixmap(dpi=200)
+            img_bytes = pix.tobytes("png")
+            page_text = await _ocr_image(img_bytes, f"page_{page_num}.png")
+            if page_text and not page_text.startswith("["):
+                parts.append(page_text)
+        doc.close()
+        if not parts:
+            return "[Scanned PDF — no text could be extracted]"
+        return "\n\n".join(parts)
+    except Exception as e:
+        logger.error(f"Scanned PDF OCR failed: {e}")
+        return f"[Scanned PDF OCR failed: {e}]"
+
+
+async def extract_text(content: bytes, filename: str, *, force_ocr: bool = False) -> str:
     """
     Extract text content from a file based on its extension.
-    
+
     Args:
         content: Raw file content bytes
         filename: Original filename to determine file type
-        
+        force_ocr: If True, use OCR instead of standard extraction for images and PDFs
+
     Returns:
         Extracted text content
     """
     ext = _get_file_extension(filename)
-    
+
     match ext:
         case ".txt":
             return _extract_txt(content)
         case ".md":
             return _extract_md(content)
         case ".pdf":
-            return _extract_pdf(content)
+            text = _extract_pdf(content)
+            if not force_ocr and len(text.strip()) >= 50:
+                return text
+            return await _ocr_scanned_pdf(content)
         case ".docx":
             return _extract_docx(content)
         case ".png" | ".jpg" | ".jpeg" | ".webp":
+            if force_ocr:
+                return await _ocr_image(content, filename)
             return await _extract_image(content, filename)
         case _:
             return f"[Unsupported file type: {ext}]"
 
 
-async def save_uploaded_files(files: list[tuple[bytes, str]]) -> list[dict[str, Any]]:
+async def save_uploaded_files(
+    files: list[tuple[bytes, str]], *, force_ocr: bool = False
+) -> list[dict[str, Any]]:
     """
     Save multiple uploaded files and extract their text content.
 
     Args:
         files: List of (content, filename) tuples
+        force_ocr: If True, use OCR for images and scanned PDFs
 
     Returns:
         List of dictionaries with file info and extracted text
     """
     results = []
     for content, filename in files:
-        result = await save_uploaded_file(content, filename)
+        result = await save_uploaded_file(content, filename, force_ocr=force_ocr)
         results.append(result)
     return results
 
 
-async def save_uploaded_file(content: bytes, filename: str) -> dict[str, Any]:
+async def save_uploaded_file(
+    content: bytes, filename: str, *, force_ocr: bool = False
+) -> dict[str, Any]:
     """
     Save an uploaded file and extract its text content.
 
     Args:
         content: Raw file content bytes
         filename: Original filename
+        force_ocr: If True, use OCR for images and scanned PDFs
 
     Returns:
         Dictionary with file info and extracted text
@@ -218,7 +267,7 @@ async def save_uploaded_file(content: bytes, filename: str) -> dict[str, Any]:
         file_path.write_bytes(content)
 
         # Extract text
-        text_content = await extract_text(content, filename)
+        text_content = await extract_text(content, filename, force_ocr=force_ocr)
 
         # Background: index for semantic retrieval if enabled
         if file_id and text_content and len(text_content) > 0:

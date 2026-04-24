@@ -841,6 +841,7 @@ async def generate_images(
     aspect_ratio: str = IMAGE_GEN_DEFAULT_ASPECT_RATIO,
     resolution: str = IMAGE_GEN_DEFAULT_RESOLUTION,
     reference_images: list[str] | None = None,
+    num_images: int = 2,
 ) -> dict[str, Any]:
     """Generate images in parallel with 2 models + optional prompt enhancement.
 
@@ -874,7 +875,7 @@ async def generate_images(
     else:
         model_aliases = IMAGE_GEN_PRESETS[tier]
         fallback_aliases = IMAGE_GEN_FALLBACKS.get(tier, [])
-    required_image_count = 2
+    required_image_count = num_images
 
     # 1. Optional prompt enhancement
     final_prompt = prompt

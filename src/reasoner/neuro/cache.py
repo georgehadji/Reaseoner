@@ -85,8 +85,8 @@ class L1Cache:
         if len(self.bundles) > self.config.l1_max_bundles:
             self.bundles.sort(key=lambda b: b.get("created_at", 0))
             evicted = self.bundles.pop(0)
-            (self.cache_dir / f"{evicted['id']}.json").unlink(missing_ok=True)
-        (self.cache_dir / f"{bundle_id}.json").write_text(json.dumps(bundle, default=str))
+            await asyncio.to_thread((self.cache_dir / f"{evicted['id']}.json").unlink, missing_ok=True)
+        await asyncio.to_thread((self.cache_dir / f"{bundle_id}.json").write_text, json.dumps(bundle, default=str))
         return bundle_id
 
     @property
@@ -111,8 +111,8 @@ class L2Index:
             except Exception as e:
                 log.warning(f"L2 load error: {e}")
 
-    def _save(self):
-        (self.index_dir / "index.json").write_text(json.dumps(self.entries, default=str))
+    async def _save(self):
+        await asyncio.to_thread((self.index_dir / "index.json").write_text, json.dumps(self.entries, default=str))
 
     def search(self, query_embedding: list[float], top_k: int = 5,
                persona: Optional[PersonaConfig] = None) -> list[ContextChunk]:
@@ -141,7 +141,7 @@ class L2Index:
         # Evict oldest entries if size exceeds limit
         while len(self.entries) > self.config.l2_max_entries:
             self.entries.pop(0)
-        self._save()
+        await self._save()
         return entry_id
 
     @property
@@ -169,7 +169,7 @@ async def l3_scan(
     results = []
     for mem_file in sorted(memory_dir.glob("*.json")):
         try:
-            mem = json.loads(mem_file.read_text())
+            mem = json.loads(await asyncio.to_thread(mem_file.read_text))
             content = mem.get("summary", "") + "\n" + "\n".join(mem.get("key_facts", []))
             if not content.strip():
                 continue
@@ -180,7 +180,7 @@ async def l3_scan(
             content_embedding = None
             if sidecar.exists():
                 try:
-                    cached = json.loads(sidecar.read_text())
+                    cached = json.loads(await asyncio.to_thread(sidecar.read_text))
                     if cached.get("hash") == content_hash:
                         content_embedding = cached["embedding"]
                 except Exception:
@@ -189,7 +189,7 @@ async def l3_scan(
             if content_embedding is None:
                 content_embedding = await embed_fn(content)
                 try:
-                    sidecar.write_text(json.dumps({"hash": content_hash, "embedding": content_embedding}))
+                    await asyncio.to_thread(sidecar.write_text, json.dumps({"hash": content_hash, "embedding": content_embedding}))
                 except Exception as e:
                     log.debug(f"L3 sidecar write failed for {mem_file.stem}: {e}")
 

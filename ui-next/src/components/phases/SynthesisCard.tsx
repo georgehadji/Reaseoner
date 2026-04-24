@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks, ExternalLink } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface SubagentInfo {
   name: string;
@@ -54,14 +55,13 @@ function SourcesPanel({ sources }: { sources: SourceItem[] }) {
       <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Sources</p>
       <div className="flex gap-2 overflow-x-auto pb-1">
         {sources.map((source, i) => (
-          <a
-            key={i}
-            href={source.url || '#'}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs transition-colors hover:bg-[var(--surface-3)]"
-            title={source.snippet || source.title}
-          >
+          <Tooltip key={i} text={source.snippet || source.title || ''}>
+            <a
+              href={source.url || '#'}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex shrink-0 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2 text-xs transition-colors hover:bg-[var(--surface-3)]"
+            >
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[var(--accent)] text-[10px] font-bold text-[var(--accent-text)]">
               {i + 1}
             </span>
@@ -76,6 +76,7 @@ function SourcesPanel({ sources }: { sources: SourceItem[] }) {
               )}
             </div>
           </a>
+          </Tooltip>
         ))}
       </div>
     </div>
@@ -135,24 +136,25 @@ export function SynthesisCard({
               ) : null}
               {models && models.length > 0
                 ? models.map((model) => (
-                    <span
-                      key={model}
-                      className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
-                      title={model}
-                    >
-                      <Cpu className="h-3 w-3" />
-                      {formatModelLabel(model)}
-                    </span>
+                    <Tooltip key={model} text={model}>
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
+                      >
+                        <Cpu className="h-3 w-3" />
+                        {formatModelLabel(model)}
+                      </span>
+                    </Tooltip>
                   ))
                 : null}
               {subagents && subagents.length > 0 ? (
-                <span
-                  className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
-                  title={subagentTooltip}
-                >
-                  <Bot className="h-3 w-3" />
-                  {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
-                </span>
+                <Tooltip text={subagentTooltip}>
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2 py-1"
+                  >
+                    <Bot className="h-3 w-3" />
+                    {subagents.length} subagent{subagents.length > 1 ? 's' : ''}
+                  </span>
+                </Tooltip>
               ) : null}
             </div>
           </div>
@@ -212,29 +214,31 @@ export function SynthesisCard({
             <div className="mb-3 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
               <p className="mb-2 text-xs font-medium text-[var(--text-muted)]">Subagents</p>
               <div className="flex flex-wrap gap-2">
-                {subagents.map((s) => (
-                  <div
-                    key={s.name}
-                    className={cn(
-                      'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
-                      s.error
-                        ? 'bg-red-500/10 text-red-400'
-                        : 'bg-[var(--surface-2)] text-[var(--text-subtle)]'
-                    )}
-                    title={s.error || undefined}
-                  >
-                    <Bot className="h-3 w-3 shrink-0" />
-                    <span className="font-medium">{s.name}</span>
-                    <span className="text-[var(--text-muted)]">→</span>
-                    <span>{formatModelLabel(s.model)}</span>
-                    <span className="text-[var(--text-muted)]">
-                      {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
-                    </span>
-                    <span className="text-[var(--text-muted)]">
-                      · {formatDurationMs(s.duration_ms ?? 0)}
-                    </span>
-                  </div>
-                ))}
+                {subagents.map((s) => {
+                  const el = (
+                    <div
+                      key={s.name}
+                      className={cn(
+                        'flex items-center gap-2 rounded-md px-2 py-1 text-xs',
+                        s.error
+                          ? 'bg-red-500/10 text-red-400'
+                          : 'bg-[var(--surface-2)] text-[var(--text-subtle)]'
+                      )}
+                    >
+                      <Bot className="h-3 w-3 shrink-0" />
+                      <span className="font-medium">{s.name}</span>
+                      <span className="text-[var(--text-muted)]">→</span>
+                      <span>{formatModelLabel(s.model)}</span>
+                      <span className="text-[var(--text-muted)]">
+                        {s.tokens_in ?? 0}+{s.tokens_out ?? 0} tok
+                      </span>
+                      <span className="text-[var(--text-muted)]">
+                        · {formatDurationMs(s.duration_ms ?? 0)}
+                      </span>
+                    </div>
+                  );
+                  return s.error ? <Tooltip key={s.name} text={s.error}>{el}</Tooltip> : el;
+                })}
               </div>
             </div>
           )}

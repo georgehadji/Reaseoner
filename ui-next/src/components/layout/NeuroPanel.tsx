@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Brain, Search, BookOpen, Loader2, Zap, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { neuroRecall, neuroLearn, neuroSessions } from '@/lib/api-client';
 
 interface RecallChunk {
@@ -183,9 +184,11 @@ export function NeuroPanel({ conversationId, lastUserPrompt, lastAssistantRespon
                     <span className="rounded bg-[var(--accent)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent-text)]">
                       {(chunk.relevance * 100).toFixed(0)}%
                     </span>
-                    <span className="truncate text-[10px] text-[var(--text-muted)]" title={chunk.source}>
-                      {chunk.source}
-                    </span>
+                    <Tooltip text={chunk.source}>
+                      <span className="truncate text-[10px] text-[var(--text-muted)]">
+                        {chunk.source}
+                      </span>
+                    </Tooltip>
                   </div>
                   <div className="max-h-24 overflow-y-auto whitespace-pre-wrap text-[var(--text)] leading-relaxed">
                     {chunk.content}

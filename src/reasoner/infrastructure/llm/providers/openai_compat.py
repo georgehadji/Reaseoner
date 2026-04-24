@@ -88,7 +88,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
                         limits=httpx.Limits(
                             max_keepalive_connections=20,
                             max_connections=100,
-                            keepalive_expiry=30.0,
+                            keepalive_expiry=120.0,
                         ),
                         timeout=httpx.Timeout(TIMEOUTS.HTTP_TOTAL, connect=TIMEOUTS.HTTP_CONNECT),
                     )
@@ -128,6 +128,10 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         'sonar-pro', 'sonar', 'sonar-deep-research',
         # Xiaomi
         'mimo-v2-pro', 'mimo-v2-flash', 'mimo-v2-omni',
+        # inclusionAI
+        'ling-2.6',
+        # NVIDIA
+        'nemotron',
     })
 
     async def complete(

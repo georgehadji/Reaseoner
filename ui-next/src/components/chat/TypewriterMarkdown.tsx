@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { DEFAULTS } from '@/lib/config';
 import { isAnimationComplete, markAnimationComplete } from '@/lib/animation-cache';
@@ -12,7 +12,7 @@ interface TypewriterMarkdownProps {
   animationKey?: string;
 }
 
-export function TypewriterMarkdown({ text, wordsPerSecond = DEFAULTS.typewriterWordsPerSecond, onComplete, animationKey }: TypewriterMarkdownProps) {
+export const TypewriterMarkdown = memo(function TypewriterMarkdown({ text, wordsPerSecond = DEFAULTS.typewriterWordsPerSecond, onComplete, animationKey }: TypewriterMarkdownProps) {
   const [displayedText, setDisplayedText] = useState('');
   const onCompleteRef = useRef(onComplete);
   const completedRef = useRef(false);
@@ -88,4 +88,4 @@ export function TypewriterMarkdown({ text, wordsPerSecond = DEFAULTS.typewriterW
       )}
     </div>
   );
-}
+});

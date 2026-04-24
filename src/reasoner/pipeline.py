@@ -40,7 +40,7 @@ from reasoner.models import (PipelineState, SolutionCandidate, CritiqueScore, St
                 ScenarioType, GenerationCandidate, CriticScore, VerificationResult,
                 MetaEvaluation, ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit, TaskType)
 from reasoner.parsing import ParseError, extract_json, safe_list, safe_float, _parse_critique_scores
-from reasoner.llm import ProviderRouter
+from reasoner.llm import LLMError, ProviderRouter
 from reasoner.core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
 from reasoner.core.temperatures import PHASE_TEMPERATURES
 from reasoner.core.constants import (
@@ -294,25 +294,30 @@ class ARAPipeline(
 
             if cached_response:
                 self._log("CACHE", f"HIT for {role} (saved ~{len(cached_response)//4} tokens)", state)
-                # Estimate tokens
-                tokens = {"input": len(user_prompt)//4, "output": len(cached_response)//4, "total": (len(user_prompt) + len(cached_response))//4}
-                state.detailed_token_usage[role] = tokens
+                # Estimate tokens and accumulate (role may be called multiple times)
+                estimated_input = len(user_prompt)//4
+                estimated_output = len(cached_response)//4
+                prior = state.detailed_token_usage.get(role, {"input": 0, "output": 0, "total": 0})
+                state.detailed_token_usage[role] = {
+                    "input": prior["input"] + estimated_input,
+                    "output": prior["output"] + estimated_output,
+                    "total": prior["total"] + estimated_input + estimated_output,
+                }
                 state.phase_models[role] = model_id
                 # Per-phase token and model tracking
                 phase_key = getattr(state, '_current_phase_key', None)
                 if phase_key:
                     if phase_key not in state.phase_tokens:
                         state.phase_tokens[phase_key] = {"input": 0, "output": 0}
-                    state.phase_tokens[phase_key]["input"] += tokens["input"]
-                    state.phase_tokens[phase_key]["output"] += tokens["output"]
-                    if not hasattr(state, '_phase_models_by_key'):
-                        state._phase_models_by_key = {}
-                    if phase_key not in state._phase_models_by_key:
-                        state._phase_models_by_key[phase_key] = []
-                    if model_id not in state._phase_models_by_key[phase_key]:
-                        state._phase_models_by_key[phase_key].append(model_id)
+                    state.phase_tokens[phase_key]["input"] += estimated_input
+                    state.phase_tokens[phase_key]["output"] += estimated_output
+                    if phase_key not in state.cost_state._phase_models_by_key:
+                        state.cost_state._phase_models_by_key[phase_key] = []
+                    if model_id not in state.cost_state._phase_models_by_key[phase_key]:
+                        state.cost_state._phase_models_by_key[phase_key].append(model_id)
                 # Cache hit = no additional cost
-                return cached_response, {**tokens, "cost_usd": 0.0, "model": model_id, "cached": True}
+                token_meta = {"input": estimated_input, "output": estimated_output, "total": estimated_input + estimated_output}
+                return cached_response, {**token_meta, "cost_usd": 0.0, "model": model_id, "cached": True}
 
         # Cache miss - make actual LLM call
         self._log("CACHE", f"MISS for {role}", state)
@@ -324,7 +329,7 @@ class ARAPipeline(
         
         if not raw or not raw.strip():
             logger.warning(f"LLM returned empty response for role={role}; possible content filter or API error")
-            state.errors.append(f"Empty LLM response in phase {role}")
+            raise LLMError(f"Empty LLM response from provider for role={role}; possible content filter or API error")
 
         # Extract cost info from metadata and accumulate in state
         cost_usd = metadata.get("cost_usd", 0.0)
@@ -337,10 +342,11 @@ class ARAPipeline(
         if cost_usd > 0:
             state.total_cost_usd += cost_usd
             state.phase_costs[role] = cost_usd
+        prior = state.detailed_token_usage.get(role, {"input": 0, "output": 0, "total": 0})
         state.detailed_token_usage[role] = {
-            "input": input_tokens,
-            "output": output_tokens,
-            "total": input_tokens + output_tokens,
+            "input": prior["input"] + input_tokens,
+            "output": prior["output"] + output_tokens,
+            "total": prior["total"] + input_tokens + output_tokens,
         }
         # Per-phase token and model tracking
         phase_key = getattr(state, '_current_phase_key', None)
@@ -350,12 +356,10 @@ class ARAPipeline(
             state.phase_tokens[phase_key]["input"] += input_tokens
             state.phase_tokens[phase_key]["output"] += output_tokens
             # Track models used in this phase
-            if not hasattr(state, '_phase_models_by_key'):
-                state._phase_models_by_key = {}
-            if phase_key not in state._phase_models_by_key:
-                state._phase_models_by_key[phase_key] = []
-            if model not in state._phase_models_by_key[phase_key]:
-                state._phase_models_by_key[phase_key].append(model)
+            if phase_key not in state.cost_state._phase_models_by_key:
+                state.cost_state._phase_models_by_key[phase_key] = []
+            if model not in state.cost_state._phase_models_by_key[phase_key]:
+                state.cost_state._phase_models_by_key[phase_key].append(model)
 
         # Store in cache
         if token_cache and TOKEN_OPTIMIZATION["caching"]:
@@ -391,6 +395,7 @@ class ARAPipeline(
         if "tot" in preset: return "tot"
         if "pot" in preset: return "pot"
         if "writing" in preset or "article" in preset or "essay" in preset: return "writing"
+        if "cross-language" in preset or "cross_language" in preset: return "cross_language"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
@@ -453,6 +458,10 @@ class ARAPipeline(
         if method == "research" or _is_knowledge_dense:
             await self._phase_deep_read(state)
         
+        # --- CROSS-LANGUAGE TRANSLATION (Optional) ---
+        if self.preset_name and ("cross-language" in self.preset_name or "cross_language" in self.preset_name):
+            await self._phase_cross_language_translate_in(state)
+
         # --- CROSS-PHASE VALIDATION ---
         self._validate_evidence_coverage(state)
 
@@ -469,7 +478,11 @@ class ARAPipeline(
         # --- OPTIONAL POST-SYNTHESIS CROSS-MODEL VERIFICATION ---
         if getattr(self, 'post_synthesis_verify', False) or (state.preset_name and "cove" in state.preset_name):
             await self._phase_post_synthesis_verify(state)
-        
+
+        # --- CROSS-LANGUAGE BACK-TRANSLATION (Optional) ---
+        if self.preset_name and ("cross-language" in self.preset_name or "cross_language" in self.preset_name):
+            await self._phase_cross_language_translate_out(state)
+
         return state
 
     def _validate_enhancement(self, original: str, enhanced: str) -> bool:
@@ -669,8 +682,9 @@ class ARAPipeline(
 
         # ── Legacy monolithic path ─────────────────────────────────────
         # TOKEN OPTIMIZATION: Use synthesis-specific token budget + caching (highest budget)
-        lang_instruction = phases.get_language_instruction(state)
-        system_prompt = f"{lang_instruction}\n\n{phases.SYNTHESIS_SYSTEM}"
+        # Language instruction is already included in synthesis_prompt() via get_language_instruction()
+        # and SYNTHESIS_SYSTEM contains its own LANGUAGE RULE block, so we don't inject it here too.
+        system_prompt = phases.SYNTHESIS_SYSTEM
         raw, _ = await self._call_llm_cached(
             role="synthesis",
             system_prompt=system_prompt,
@@ -806,3 +820,83 @@ class ARAPipeline(
         except Exception as e:
             self._log("POST-SYNTHESIS", f"Verification failed: {e}", state)
             state.errors.append(f"Post-synthesis verification error: {e}")
+
+    async def _phase_cross_language_translate_in(self, state: PipelineState) -> None:
+        """Translate the problem into English before reasoning.
+
+        Stores the original problem and detected language in
+        ``state.cross_language_state`` so the synthesis can be
+        translated back later.
+        """
+        from reasoner.infrastructure.translation import get_deepl_client
+
+        source_lang = state.language
+        # Skip if already English or unknown
+        if not source_lang or source_lang.lower() in ("english", "en", "unknown", ""):
+            self._log("CROSS-LANG", "Source language is English — skipping translation in.", state)
+            return
+
+        original_problem = state.problem
+        original_enhanced = state.enhanced_problem
+
+        self._log("CROSS-LANG", f"Translating problem from {source_lang} to English...", state)
+        try:
+            client = get_deepl_client()
+            result = await client.translate(original_problem, target_lang="EN")
+            translated = result["text"]
+            detected = result.get("detected_source_language", source_lang)
+
+            state.problem = translated
+            if original_enhanced and original_enhanced != original_problem:
+                enh_result = await client.translate(original_enhanced, target_lang="EN")
+                state.enhanced_problem = enh_result["text"]
+            else:
+                state.enhanced_problem = translated
+
+            state.cross_language_state = {
+                "original_problem": original_problem,
+                "original_enhanced": original_enhanced,
+                "source_language": detected,
+                "translated_problem": translated,
+                "direction": "in",
+            }
+            self._log("CROSS-LANG", f"Translated ({len(original_problem)} → {len(translated)} chars)", state)
+        except Exception as e:
+            self._log("CROSS-LANG", f"Translation in failed: {e} — continuing with original text.", state)
+            state.errors.append(f"Cross-language translation-in error: {e}")
+
+    async def _phase_cross_language_translate_out(self, state: PipelineState) -> None:
+        """Translate the final synthesis back to the original language."""
+        from reasoner.infrastructure.translation import get_deepl_client
+
+        if not state.cross_language_state or not state.cross_language_state.get("source_language"):
+            self._log("CROSS-LANG", "No source language recorded — skipping translation out.", state)
+            return
+
+        source_lang = state.cross_language_state["source_language"]
+        target_lang = source_lang.upper()
+
+        synthesis_text = ""
+        if state.final_solution and state.final_solution.core_solution:
+            synthesis_text = state.final_solution.core_solution
+        elif state.candidates:
+            synthesis_text = state.candidates[0].content
+
+        if not synthesis_text:
+            self._log("CROSS-LANG", "No synthesis text to translate back.", state)
+            return
+
+        self._log("CROSS-LANG", f"Translating synthesis back to {target_lang}...", state)
+        try:
+            client = get_deepl_client()
+            result = await client.translate(synthesis_text, target_lang=target_lang, source_lang="EN")
+            translated = result["text"]
+
+            if state.final_solution:
+                state.final_solution.core_solution = translated
+            state.cross_language_state["translated_synthesis"] = translated
+            state.cross_language_state["direction"] = "out"
+            self._log("CROSS-LANG", f"Back-translated ({len(synthesis_text)} → {len(translated)} chars)", state)
+        except Exception as e:
+            self._log("CROSS-LANG", f"Translation out failed: {e} — leaving synthesis in English.", state)
+            state.errors.append(f"Cross-language translation-out error: {e}")

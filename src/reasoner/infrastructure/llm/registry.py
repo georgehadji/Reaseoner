@@ -38,6 +38,7 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "gemma-4-31b":      {"model": "google/gemma-4-31b-it"},
     # xAI
     "grok-4.20":        {"model": "x-ai/grok-4.20"},
+    "grok-4.1-fast":    {"model": "x-ai/grok-4.1-fast"},
     "grok-4":           {"model": "x-ai/grok-4"},
     "grok-3":           {"model": "x-ai/grok-3"},
     "grok-3-mini":      {"model": "x-ai/grok-3-mini"},
@@ -54,7 +55,9 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "ministral-3b":     {"model": "mistralai/ministral-3b"},
     # DeepSeek
     "deepseek-v3":      {"model": "deepseek/deepseek-v3.2"},
+    "deepseek-v3.1-nex-n1": {"model": "nex-agi/deepseek-v3.1-nex-n1"},
     "deepseek-r1":      {"model": "deepseek/deepseek-r1-0528"},
+    "deepseek-r1t2-chimera": {"model": "tngtech/deepseek-r1t2-chimera"},
     # Qwen
     "qwen3-max":        {"model": "qwen/qwen3.6-plus"},
     "qwen3.6-plus":     {"model": "qwen/qwen3.6-plus"},
@@ -89,6 +92,17 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "minimax-m2.5":     {"model": "minimax/minimax-m2.5"},
     "minimax-m2.5-free": {"model": "minimax/minimax-m2.5:free"},
     "minimax-m2.7":     {"model": "minimax/minimax-m2.7"},
+    # Baidu
+    "qianfan-ocr-fast": {"model": "baidu/qianfan-ocr-fast:free"},
+    # inclusionAI (Ant Group)
+    "ling-2.6-flash-free": {"model": "inclusionai/ling-2.6-flash:free"},
+    # NVIDIA NIM (direct, not via OpenRouter)
+    "nvidia-nemotron-super": {
+        "cls": "compat",
+        "model": "nvidia/nemotron-3-super-120b-a12b",
+        "base": "https://integrate.api.nvidia.com/v1",
+        "env": "NVIDIA_API_KEY",
+    },
     # Image generation models (OpenRouter multimodal image output)
     "gemini-flash-image":            {"model": "google/gemini-2.5-flash-image", "extra_body": {"include_images": True}},
     "gemini-pro-image":              {"model": "google/gemini-3-pro-image-preview", "extra_body": {"include_images": True}},
@@ -124,8 +138,8 @@ _REGISTRY: dict[str, dict[str, Any]] = {}
 for _mid, _cfg in _MODEL_WHITELIST.items():
     _entry: dict[str, Any] = dict(_cfg)
     if not _entry.get("is_local"):
-        _entry["cls"] = "openrouter"
-        _entry["env"] = "OPENROUTER_API_KEY"
+        _entry.setdefault("cls", "openrouter")
+        _entry.setdefault("env", "OPENROUTER_API_KEY")
     _REGISTRY[_mid] = _entry
 
 
@@ -173,10 +187,13 @@ def build_provider(model_id: str, api_key: str | None = None) -> "BaseLLMProvide
 
 def list_models() -> dict[str, list[str]]:
     """Return all model IDs grouped by ecosystem."""
-    groups: dict[str, list[str]] = {"openrouter": [], "ollama": []}
+    groups: dict[str, list[str]] = {"openrouter": [], "ollama": [], "direct": []}
     for mid in sorted(_REGISTRY):
-        if _REGISTRY[mid].get("is_local"):
+        cfg = _REGISTRY[mid]
+        if cfg.get("is_local"):
             groups["ollama"].append(mid)
-        else:
+        elif cfg.get("cls") == "openrouter":
             groups["openrouter"].append(mid)
+        else:
+            groups["direct"].append(mid)
     return groups

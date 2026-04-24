@@ -176,12 +176,10 @@ class PhaseSubAgent(ABC):
         # Track models under the current phase key so the API can report per-phase models
         phase_key = getattr(state, '_current_phase_key', None)
         if phase_key:
-            if not hasattr(state, '_phase_models_by_key'):
-                state._phase_models_by_key = {}
-            if phase_key not in state._phase_models_by_key:
-                state._phase_models_by_key[phase_key] = []
-            if out.model and out.model not in state._phase_models_by_key[phase_key]:
-                state._phase_models_by_key[phase_key].append(out.model)
+            if phase_key not in state.cost_state._phase_models_by_key:
+                state.cost_state._phase_models_by_key[phase_key] = []
+            if out.model and out.model not in state.cost_state._phase_models_by_key[phase_key]:
+                state.cost_state._phase_models_by_key[phase_key].append(out.model)
 
         # Also track under agent-specific key for transparency
         agent_key = f"subagent:{self.AGENT_NAME}"

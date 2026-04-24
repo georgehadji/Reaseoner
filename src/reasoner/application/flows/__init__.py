@@ -159,4 +159,11 @@ def build_default_flow_registry(pipeline: ARAPipeline) -> PipelineFlow:
         PhaseStep(5,    "Final Assembly",       pipeline._phase_article_assemble,       _ser_5),
     ])
 
+    # ── Cross-Language (Translate → Multi-Perspective → Back-Translate) ─
+    flow.register("cross_language", [
+        PhaseStep(2, "Perspectives",       pipeline._phase_2_perspectives, _ser_2),
+        PhaseStep(3, "Critique & Pruning", pipeline._phase_3_critique,     _ser_3, critical=True),
+        PhaseStep(4, "Stress Testing",     pipeline._phase_4_stress_test,  _ser_4),
+    ])
+
     return flow

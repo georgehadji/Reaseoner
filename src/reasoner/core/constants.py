@@ -90,7 +90,8 @@ PHASE_TOKEN_BUDGETS: dict[str, int] = {
     # Phase 4: Stress testing - scenario results
     "stress_testing": 1024,
     # Phase 5: Synthesis - comprehensive final output
-    "synthesis": 12288,
+    # Budget increased to 32K to leverage qwen3.6-plus's 1M context window
+    "synthesis": 32768,
     # Method-specific phases
     "debate_opening": 1024,
     "debate_rebuttal": 1024,
@@ -184,9 +185,9 @@ class TruncationLimits:
     SESSION_LOG: int = 200
     SESSION_EXCERPT: int = 100
     ASSUMPTION: int = 150
-    SOLUTION: int = 1000
+    SOLUTION: int = 4000
     PROMPT: int = 300
-    LARGE_CONTENT: int = 4000
+    LARGE_CONTENT: int = 16000
     DEEP_READ: int = 8000
 
 

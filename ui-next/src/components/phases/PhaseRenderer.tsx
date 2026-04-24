@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, memo } from 'react';
 import { RenderedPhase } from '@/components/chat/ChatFeed';
 import { DEFAULTS } from '@/lib/config';
 import { TypewriterMarkdown } from '@/components/chat/TypewriterMarkdown';
@@ -104,7 +104,7 @@ function getVettedContext(data: unknown): Array<Record<string, unknown>> {
   return context.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
 }
 
-export function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null, errorPhases = [] }: PhaseRendererProps) {
+export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null, errorPhases = [] }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
   const tokens = getTokens(data);
   const models = getModels(data);
@@ -331,7 +331,7 @@ export function PhaseRenderer({ phase, onComplete, animationKey, animated = true
       )}
     </PhaseCard>
   );
-}
+});
 
 function VettedContextBlock({ items }: { items: Array<Record<string, unknown>> }) {
   return (

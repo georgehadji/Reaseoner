@@ -118,6 +118,8 @@ def get_method_from_preset(preset: str) -> str:
         return "tot"
     if "pot" in preset:
         return "pot"
+    if "cross-language" in preset or "cross_language" in preset:
+        return "cross_language"
     return "multi-perspective"
 
 

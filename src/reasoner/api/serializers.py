@@ -733,7 +733,7 @@ def _ser_5(state: PipelineState) -> dict:
             "non_obvious_insight": _get_v(meta, 'non_obvious_insight', ''),
         }
 
-    return {
+    result = {
         "core_solution": _get_v(fs, 'core_solution', ''),
         "critical_insights": _get_v(fs, 'critical_insights', []),
         "action_blueprint": clean_bp,
@@ -742,6 +742,17 @@ def _ser_5(state: PipelineState) -> dict:
         "meta_audit": meta_audit,
         "tokens": {"input": total_input, "output": total_output}
     }
+
+    # Cross-language metadata
+    cross_lang = _get_v(state, 'cross_language_state', {})
+    if cross_lang and cross_lang.get("source_language"):
+        result["cross_language"] = {
+            "source_language": cross_lang["source_language"],
+            "original_problem": cross_lang.get("original_problem", ""),
+            "translated": cross_lang.get("direction") == "out",
+        }
+
+    return result
 
 
 def _event(data: dict) -> str:

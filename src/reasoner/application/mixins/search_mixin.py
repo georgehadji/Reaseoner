@@ -176,7 +176,6 @@ class SearchMixin(PipelineMixinProtocol):
             except Exception as exc:
                 self._log("VETTING", f"Disambiguation failed ({exc}) — using original problem.", state)
 
-        max_iterations = 3
         current_results: list[dict] = []
         seen_urls: set[str] = set()
 
@@ -191,119 +190,106 @@ class SearchMixin(PipelineMixinProtocol):
         pre_search_problem = state.problem
         state.problem = disambiguated_problem
 
-        # Iterative search loop
-        for i in range(1, max_iterations + 1):
-            self._log("VETTING", f"Iteration {i}/{max_iterations}: Planning searches...", state)
+        # Pre-planned search: single LLM call generates all search rounds upfront.
+        raw_plan, _ = await self._call_llm_cached(
+            role="primary",
+            phase_key="research",
+            system_prompt=phases.ITERATIVE_PREPLAN_SYSTEM,
+            user_prompt=phases.iterative_preplan_prompt(state),
+            state=state,
+        )
 
-            raw_decision, _ = await self._call_llm_cached(
-                role="primary",
-                phase_key="research",
-                system_prompt=phases.ITERATIVE_CONTEXT_SYSTEM,
-                user_prompt=phases.iterative_context_prompt(state, current_results, i, max_iterations),
-                state=state,
-            )
+        self._log("VETTING", "Search pre-plan received from LLM.", state)
 
-            try:
-                decision_data = extract_json(raw_decision)
-            except ParseError as e:
-                self._log("VETTING", f"Failed to parse iteration decision: {e}", state)
-                break
+        # Parse pre-plan
+        try:
+            plan_data = extract_json(raw_plan)
+        except ParseError as e:
+            self._log("VETTING", f"Failed to parse search pre-plan: {e} — falling back to basic search.", state)
+            plan_data = {}
 
-            action = decision_data.get("action", "done")
-            reasoning = decision_data.get("reasoning", "")
-            self._log("VETTING", f"Action: {action}. Reason: {reasoning}", state)
+        iterations_raw = plan_data.get("iterations", []) if isinstance(plan_data, dict) else []
 
-            if action == "done" or i == max_iterations:
-                break
-
-            # Guard: LLM occasionally returns "queries" as a bare string instead of a list
-            _raw_q = decision_data.get("queries", [])
-            if not isinstance(_raw_q, list):
-                if isinstance(_raw_q, str) and _raw_q.strip():
-                    queries = [_raw_q.strip()[:TRUNCATION.SNIPPET]]
-                    self._log(
-                        "VETTING",
-                        f"LLM returned string query instead of list. Recovered: '{queries[0]}'",
-                        state,
-                    )
+        # Flatten all queries from all iterations, deduplicate
+        all_queries: list[str] = []
+        seen_queries: set[str] = set()
+        for it in iterations_raw:
+            raw_q = it.get("queries", []) if isinstance(it, dict) else []
+            if not isinstance(raw_q, list):
+                if isinstance(raw_q, str) and raw_q.strip():
+                    raw_q = [raw_q.strip()[:TRUNCATION.SNIPPET]]
                 else:
+                    continue
+            for q in raw_q:
+                if isinstance(q, str) and q.strip():
+                    q_norm = q.strip().lower()
+                    if q_norm not in seen_queries:
+                        seen_queries.add(q_norm)
+                        all_queries.append(q.strip())
+
+        if not all_queries:
+            self._log("VETTING", "Pre-plan returned no valid queries — falling back to basic keyword search.", state)
+            all_queries = [_extract_search_keywords(disambiguated_problem, max_keywords=5)]
+            all_queries = [q for q in all_queries if q and q.strip()]
+
+        self._log("VETTING", f"Executing {len(all_queries)} pre-planned queries in parallel: {all_queries}", state)
+
+        # Execute all searches concurrently with query enrichment
+        enriched_queries = [self._enrich_query(q, disambiguated_problem) for q in all_queries]
+
+        async def _search(q: str):
+            try:
+                return await client.search(q, num_results=5, source_type=source_type, domain=self.domain)
+            except Exception as exc:
+                self._log("VETTING", f"Query failed '{q}': {exc}", state)
+                return []
+
+        results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries], return_exceptions=True)
+        results_nested = [r for r in results_nested if not isinstance(r, Exception)]
+
+        # Flatten, deduplicate (by normalised URL), and apply relevance gating
+        dropped = 0
+        for res_list in results_nested:
+            for res in res_list:
+                url = res.get("url")
+                norm = _normalize_url(url) if url else ""
+                if not norm or norm in seen_urls:
+                    continue
+                if not _should_include_result(res):
+                    dropped += 1
+                    continue
+                seen_urls.add(norm)
+                current_results.append(res)
+
+        if dropped:
+            self._log("VETTING", f"Dropped {dropped} low-quality results.", state)
+        self._log("VETTING", f"Found {len(current_results)} unique results from pre-planned search.", state)
+
+        # Low-yield broadening: when results are scarce, try a broad keyword fallback
+        if len(current_results) < 3:
+            self._log(
+                "VETTING",
+                f"Only {len(current_results)} results — attempting broad keyword fallback.",
+                state,
+            )
+            try:
+                broad_q = _extract_search_keywords(disambiguated_problem, max_keywords=5)
+                if broad_q and broad_q not in all_queries:
+                    broad_res = await client.search(broad_q, num_results=5, source_type=source_type)
+                    added = 0
+                    for res in broad_res:
+                        norm = _normalize_url(res.get("url", ""))
+                        if norm and norm not in seen_urls and _should_include_result(res):
+                            seen_urls.add(norm)
+                            current_results.append(res)
+                            added += 1
                     self._log(
                         "VETTING",
-                        f"LLM returned malformed queries (type: {type(_raw_q).__name__}, value: {_raw_q!r}). Skipping this iteration.",
+                        f"Broad fallback added {added} results (total: {len(current_results)}).",
                         state,
                     )
-                    state.errors.append(f"Vetting: LLM returned non-list queries: {_raw_q!r}")
-                    continue
-            else:
-                queries = [q for q in _raw_q[:TRUNCATION.KEY_INSIGHTS] if isinstance(q, str) and q.strip()]
-
-            if not queries:
-                self._log("VETTING", "No valid queries to execute. Breaking search loop.", state)
-                break
-
-            self._log("VETTING", f"Executing queries: {queries}", state)
-
-            # Execute searches concurrently with query enrichment
-            enriched_queries = [self._enrich_query(q, disambiguated_problem) for q in queries]
-
-            async def _search(q: str):
-                try:
-                    return await client.search(
-                        q, num_results=5, source_type=source_type, domain=self.domain
-                    )
-                except Exception as exc:
-                    self._log("VETTING", f"Query failed '{q}': {exc}", state)
-                    return []
-
-            results_nested = await asyncio.gather(*[_search(q) for q in enriched_queries], return_exceptions=True)
-            # Filter out exceptions from nested results
-            results_nested = [r for r in results_nested if not isinstance(r, Exception)]
-
-            # Flatten, deduplicate (by normalised URL), and apply relevance gating
-            dropped = 0
-            for res_list in results_nested:
-                for res in res_list:
-                    url = res.get("url")
-                    norm = _normalize_url(url) if url else ""
-                    if not norm or norm in seen_urls:
-                        continue
-                    if not _should_include_result(res):
-                        dropped += 1
-                        continue
-                    seen_urls.add(norm)
-                    current_results.append(res)
-
-            if dropped:
-                self._log("VETTING", f"Dropped {dropped} low-quality results this iteration.", state)
-            self._log("VETTING", f"Found {len(current_results)} unique results so far.", state)
-
-            # Low-yield broadening: when the first iteration returns fewer than 3 results
-            # (rare/narrow topic), try one broad keyword-only fallback query instead of
-            # stopping outright — this surfaces content that exact phrasing misses.
-            if i == 1 and len(current_results) < 3:
-                self._log(
-                    "VETTING",
-                    f"Only {len(current_results)} results after first pass — attempting broad keyword fallback.",
-                    state,
-                )
-                try:
-                    broad_q = _extract_search_keywords(disambiguated_problem, max_keywords=5)
-                    if broad_q and broad_q != disambiguated_problem:
-                        broad_res = await client.search(broad_q, num_results=5, source_type=source_type)
-                        added = 0
-                        for res in broad_res:
-                            norm = _normalize_url(res.get("url", ""))
-                            if norm and norm not in seen_urls and _should_include_result(res):
-                                seen_urls.add(norm)
-                                current_results.append(res)
-                                added += 1
-                        self._log(
-                            "VETTING",
-                            f"Broad fallback added {added} results (total: {len(current_results)}).",
-                            state,
-                        )
-                except Exception as broad_exc:
-                    self._log("VETTING", f"Broad fallback failed: {broad_exc}", state)
+            except Exception as broad_exc:
+                self._log("VETTING", f"Broad fallback failed: {broad_exc}", state)
 
         # Restore original problem
         state.problem = pre_search_problem
@@ -355,76 +341,61 @@ class SearchMixin(PipelineMixinProtocol):
         # Apply CoT vetting to all results
         await self._vet_results(state, current_results)
 
-    async def _vet_single(self, state: PipelineState, result: dict) -> dict:
-        """Vet a single search result. Mutates and returns the result dict."""
-        retrieved_text = result.get("snippet", "")
-        if not retrieved_text:
-            return result
-        sanitized_text = sanitize_for_prompt(retrieved_text)[0]
+    async def _vet_results(self, state: PipelineState, results: list[dict]) -> None:
+        """Apply CoT vetting to all search results in a single batch LLM call."""
+        self._log("VETTING", f"Applying batch CoT vetting to {len(results)} results...", state)
+
+        # Build the snippet list for the batch prompt
+        snippets = []
+        for i, r in enumerate(results):
+            text = r.get("snippet", "")
+            if text:
+                snippets.append({"index": i, "url": r.get("url", ""), "text": text})
+
+        if not snippets:
+            # Nothing to vet — all results pass through clean
+            state.context_quality = "good"
+            state.vetted_context = results
+            return
+
         try:
-            raw_flags, _ = await self._call_llm_cached(
+            raw_batch, _ = await self._call_llm_cached(
                 role="context_vetting",
                 system_prompt=phases.COT_DETECTION_SYSTEM,
-                user_prompt=phases.cot_detection_prompt(state, sanitized_text),
-                max_tokens=512,
+                user_prompt=phases.cot_detection_batch_prompt(state, snippets),
+                max_tokens=1024,
                 state=state,
             )
-            flags_data = extract_json(raw_flags)
-            result["vetting_flags"] = flags_data.get("flags", [])
-            if result["vetting_flags"]:
-                self._log(
-                    "VETTING",
-                    f"Flagged issues in a retrieved snippet (source: {result.get('source')}).",
-                    state,
-                )
-        except ParseError as e:
-            self._log(
-                "VETTING",
-                f"CoT vetting parse error for snippet (source: {result.get('source')}): {e}",
-                state,
-            )
-            result["vetting_flags"] = [
-                {"statement": "(CoT vetting parse error)", "reasoning": str(e)}
-            ]
-        except Exception as e:
-            self._log(
-                "VETTING",
-                f"CoT vetting failed for snippet (source: {result.get('source')}): {e}",
-                state,
-            )
-            result["vetting_flags"] = [
-                {"statement": "(CoT vetting failed)", "reasoning": str(e)}
-            ]
-        return result
+            batch_data = extract_json(raw_batch)
+            flagged_items = batch_data.get("flagged", []) if isinstance(batch_data, dict) else []
 
-    async def _vet_results(self, state: PipelineState, results: list[dict]) -> None:
-        """Apply CoT vetting to search results in parallel (max 4 concurrent)."""
-        self._log("VETTING", f"Applying CoT vetting to {len(results)} results...", state)
+            # Apply flags to results by index
+            flagged_indices = set()
+            for item in flagged_items:
+                idx = item.get("index")
+                if isinstance(idx, int) and 0 <= idx < len(results):
+                    results[idx]["vetting_flags"] = item.get("flags", [])
+                    flagged_indices.add(idx)
 
-        semaphore = asyncio.Semaphore(4)
+            if flagged_indices:
+                self._log("VETTING", f"Flagged issues in {len(flagged_indices)}/{len(results)} results.", state)
 
-        async def _vet_with_limit(r: dict) -> dict:
-            async with semaphore:
-                return await self._vet_single(state, r)
-
-        vetted_results = await asyncio.gather(*[_vet_with_limit(r) for r in results], return_exceptions=True)
-        # Filter out exceptions from vetted results
-        vetted_results = [r for r in vetted_results if not isinstance(r, Exception)]
+        except (ParseError, Exception) as e:
+            self._log("VETTING", f"Batch vetting failed ({e}) — all results pass through clean.", state)
 
         # Compute context quality for synthesis circuit breaker
-        if not vetted_results:
+        flagged_count = sum(1 for r in results if r.get("vetting_flags"))
+        total = len(results)
+        if not results:
             state.context_quality = "missing"
+        elif flagged_count == total and total > 0:
+            state.context_quality = "contaminated"
+        elif flagged_count > total // 2:
+            state.context_quality = "partial"
         else:
-            flagged_count = sum(1 for r in vetted_results if r.get("vetting_flags"))
-            total = len(vetted_results)
-            if flagged_count == total and total > 0:
-                state.context_quality = "contaminated"
-            elif flagged_count > total // 2:
-                state.context_quality = "partial"
-            else:
-                state.context_quality = "good"
+            state.context_quality = "good"
         self._log("VETTING", f"Context vetting complete. Quality: {state.context_quality}", state)
-        state.vetted_context = vetted_results
+        state.vetted_context = results
 
     # ── Deep read ────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from reasoner.api.auth_deps import check_rate_limit, optional_auth
 from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file, save_uploaded_files
@@ -16,6 +16,7 @@ router = APIRouter()
 @router.post("/api/upload")
 async def upload_file(
     request: Request,
+    force_ocr: bool = Query(False, description="Use OCR for images and scanned PDFs"),
     authenticated=Depends(optional_auth),
     rate_limit_checked=Depends(check_rate_limit),
 ):
@@ -42,10 +43,10 @@ async def upload_file(
                 files.append((content, getattr(item, "filename", "unknown")))
 
         if len(files) == 1:
-            result = await save_uploaded_file(files[0][0], files[0][1])
+            result = await save_uploaded_file(files[0][0], files[0][1], force_ocr=force_ocr)
             return {"success": True, "files": [result]}
         else:
-            results = await save_uploaded_files(files)
+            results = await save_uploaded_files(files, force_ocr=force_ocr)
             return {"success": True, "files": results}
 
     except Exception as e:

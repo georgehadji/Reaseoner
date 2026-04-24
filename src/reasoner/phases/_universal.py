@@ -95,8 +95,11 @@ CIRCUIT BREAKER:
 
 def synthesis_prompt(state: PipelineState) -> str:
     final_context = state.to_context_dict()
+    # Preserve full candidate content when context window allows (qwen3.6-plus: 1M).
+    # Fallback models will truncate server-side if prompt exceeds their context.
     if 'candidates' in final_context:
-        final_context['candidates'] = [{"perspective": c['perspective'], "insights": c['key_insights']} for c in final_context['candidates']]
+        for c in final_context['candidates']:
+            c.pop('raw_scores', None)  # strip numeric internals only
 
     sources_info = ""
     if state.vetted_context:
@@ -141,10 +144,36 @@ Rules:
 def cot_detection_prompt(state: PipelineState, retrieved_text: str) -> str:
     return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nReview the following retrieved text. Identify ONLY statements that are clearly factually incorrect, unsubstantiated, or overly speculative. Do NOT flag minor simplifications or educational summaries. If no clear issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'
 
+
+def cot_detection_batch_prompt(state: PipelineState, snippets: list[dict]) -> str:
+    """Batch vetting prompt — vet multiple search snippets in a single LLM call."""
+    items = "\n\n".join(
+        f'--- Item {s["index"]} ---\nURL: {s.get("url", "N/A")}\nSnippet: {s["text"]}'
+        for s in snippets
+    )
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Review the following retrieved texts (each with an index). For EACH item, '
+        f'identify ONLY statements that are clearly factually incorrect, unsubstantiated, '
+        f'or overly speculative. Do NOT flag minor simplifications or educational summaries. '
+        f'If no clear issues are found for an item, omit it from the flagged list.\n\n'
+        f'{items}\n\n'
+        f'Output JSON: {{"flagged": [{{"index": 0, "flags": [{{"statement": "<problematic statement>", "reasoning": "<why>"}}], "reasoning": "<summary>"}}]}}'
+    )
+
 ITERATIVE_CONTEXT_SYSTEM = (
     "You are an analytical research assistant. Your job is to gather high-quality, "
     "verifiable external sources for a reasoning problem. You must NOT rely on your "
     "internal knowledge — always search for external sources. Output ONLY valid JSON."
+)
+
+# Pre-planned search: generates all search rounds upfront so they can execute in parallel.
+ITERATIVE_PREPLAN_SYSTEM = (
+    "You are an analytical research strategist. Your job is to plan ALL search rounds "
+    "upfront so they can be executed in parallel. Plan 2-3 rounds of increasingly "
+    "targeted search queries. Do NOT rely on your internal knowledge — always plan "
+    "to search for external sources. Output ONLY valid JSON."
 )
 
 def iterative_context_prompt(state: PipelineState, current_results: list[dict], iteration: int, max_iterations: int) -> str:
@@ -164,6 +193,25 @@ def iterative_context_prompt(state: PipelineState, current_results: list[dict], 
         f'4. Avoid generic queries (e.g., "AI", "technology", "video"). Be specific to the problem.\n'
         f'5. Prefer authoritative sources: academic papers, reputable news, expert analyses.\n\n'
         f'Output JSON: {{"action": "search|done", "queries": ["<query1>", "<query2>"], "reasoning": "<why you need more info or have enough>"}}'
+    )
+
+
+def iterative_preplan_prompt(state: PipelineState) -> str:
+    """Pre-plan all search rounds upfront for parallel execution."""
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Plan 2-3 rounds of search queries to gather high-quality external sources.\n'
+        f'Each round should contain up to 3 specific, targeted queries.\n'
+        f'Round 1: Broad initial search to understand the landscape.\n'
+        f'Round 2: Follow-up on specific aspects or gaps.\n'
+        f'Round 3: Targeted search for authoritative sources or missing perspectives.\n\n'
+        f'RULES:\n'
+        f'1. All queries will be executed in parallel, so make them self-contained.\n'
+        f'2. Avoid generic queries (e.g., "AI", "technology"). Be specific to the problem.\n'
+        f'3. Prefer authoritative sources: academic papers, reputable news, expert analyses.\n'
+        f'4. Do NOT rely on your internal knowledge — plan searches that will find real sources.\n\n'
+        f'Output JSON: {{"iterations": [{{"queries": ["<q1>", "<q2>"], "reasoning": "<why>"}}, {{"queries": ["<q3>"], "reasoning": "<why>"}}]}}'
     )
 
 CROSS_VERIFICATION_SYSTEM = "You are an analytical assistant. Identify specific factual errors, unsupported claims, or logical inconsistencies in a proposed solution. Be precise and cite exact problems. Output ONLY valid JSON."
@@ -188,7 +236,7 @@ def deep_read_prompt(state: PipelineState, url: str, title: str, content: str) -
         f'{get_language_instruction(state)}\n\n'
         f'Original Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Source:\nURL: {url}\nTitle: {title}\n\n'
-        f'Page Content (first 8000 chars):\n{_wrap_external_content(trimmed)}\n\n'
+        f'Page Content (first {TRUNCATION.DEEP_READ} chars):\n{_wrap_external_content(trimmed)}\n\n'
         f'Extract the key information from this page that is relevant to the problem. '
         f'If the page is irrelevant, too short, or lacks substantive content, set "summary" to "INSUFFICIENT".\n\n'
         f'Output ONLY valid JSON with this exact structure:\n'

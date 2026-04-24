@@ -6,6 +6,7 @@ import {
   sanitizeResponseHeaders,
   readJsonBody,
   rateLimit,
+  requireCsrfToken,
   ValidationError,
 } from '@/lib/security-server';
 
@@ -19,6 +20,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const body = await readJsonBody(req);
 

@@ -1,6 +1,5 @@
 export type MethodId =
   | 'multi-perspective'
-  | 'iterative'
   | 'debate'
   | 'scientific'
   | 'socratic'
@@ -10,7 +9,13 @@ export type MethodId =
   | 'bayesian'
   | 'dialectical'
   | 'analogical'
-  | 'delphi';
+  | 'delphi'
+  | 'cove'
+  | 'sot'
+  | 'tot'
+  | 'pot'
+  | 'self-discover'
+  | 'writing';
 
 export interface TokenCount {
   input: number;

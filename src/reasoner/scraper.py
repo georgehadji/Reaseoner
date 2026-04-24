@@ -7,11 +7,59 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 from typing import Any, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# Shared HTTP connection pool for all scrape operations.
+# Lazily initialized on first use — avoids per-call client creation overhead.
+_shared_scraper_client: "httpx.AsyncClient | None" = None
+_scraper_client_lock: threading.Lock | None = None
+
+
+def _get_scraper_client() -> httpx.AsyncClient:
+    """
+    Return the shared scraper HTTP client, creating it on first call.
+    Thread-safe via double-checked locking.
+    """
+    global _shared_scraper_client, _scraper_client_lock
+    if _shared_scraper_client is None:
+        if _scraper_client_lock is None:
+            _scraper_client_lock = threading.Lock()
+        with _scraper_client_lock:
+            if _shared_scraper_client is None:
+                from reasoner.core.constants import TIMEOUTS
+
+                _shared_scraper_client = httpx.AsyncClient(
+                    limits=httpx.Limits(
+                        max_keepalive_connections=10,
+                        max_connections=20,
+                        keepalive_expiry=60.0,
+                    ),
+                    timeout=TIMEOUTS.SCRAPER,
+                    follow_redirects=True,
+                )
+    return _shared_scraper_client
+
+
+async def close_scraper_client() -> None:
+    """
+    Close the shared scraper HTTP connection pool.
+    Should be called during application shutdown to prevent resource leaks.
+    Safe to call multiple times.
+    """
+    global _shared_scraper_client
+    if _shared_scraper_client is not None:
+        try:
+            await _shared_scraper_client.aclose()
+            logger.info("Shared scraper HTTP client closed successfully")
+        except Exception as e:
+            logger.error(f"Error closing shared scraper HTTP client: {e}")
+        finally:
+            _shared_scraper_client = None
 
 # Simple HTML to Markdown conversion (lightweight alternative to turndown)
 HTML_TAGS_TO_MARKDOWN = {
@@ -104,42 +152,41 @@ async def scrape_url(url: str, max_length: int = 10000) -> dict[str, Any]:
     Returns:
         Dictionary with title, url, content (markdown), and success status
     """
-    from reasoner.core.constants import TIMEOUTS
     try:
-        async with httpx.AsyncClient(timeout=TIMEOUTS.SCRAPER, follow_redirects=True) as client:
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-            }
-            
-            response = await client.get(url, headers=headers)
-            response.raise_for_status()
-            
-            html = response.text
-            
-            # Extract title
-            title_match = re.search(r'<title[^>]*>([^<]+)</title>', html, re.IGNORECASE)
-            title = title_match.group(1).strip() if title_match else ""
-            
-            # Extract meta description as fallback
-            if not title:
-                desc_match = re.search(r'<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']+)["\']', html, re.IGNORECASE)
-                title = desc_match.group(1).strip() if desc_match else ""
-            
-            # Convert to markdown
-            markdown_content = _simple_html_to_markdown(html)
-            
-            # Truncate if too long
-            if len(markdown_content) > max_length:
-                markdown_content = markdown_content[:max_length] + "\n\n... (truncated)"
-            
-            return {
-                "url": url,
-                "title": title,
-                "content": markdown_content,
-                "success": True,
-            }
+        client = _get_scraper_client()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+        }
+
+        response = await client.get(url, headers=headers)
+        response.raise_for_status()
+
+        html = response.text
+
+        # Extract title
+        title_match = re.search(r'<title[^>]*>([^<]+)</title>', html, re.IGNORECASE)
+        title = title_match.group(1).strip() if title_match else ""
+
+        # Extract meta description as fallback
+        if not title:
+            desc_match = re.search(r'<meta[^>]*name=["\']description["\'][^>]*content=["\']([^"\']+)["\']', html, re.IGNORECASE)
+            title = desc_match.group(1).strip() if desc_match else ""
+
+        # Convert to markdown
+        markdown_content = _simple_html_to_markdown(html)
+
+        # Truncate if too long
+        if len(markdown_content) > max_length:
+            markdown_content = markdown_content[:max_length] + "\n\n... (truncated)"
+
+        return {
+            "url": url,
+            "title": title,
+            "content": markdown_content,
+            "success": True,
+        }
             
     except httpx.TimeoutException:
         logger.error(f"Timeout scraping {url}")

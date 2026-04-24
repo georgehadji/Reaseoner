@@ -42,6 +42,7 @@ class Settings:
     )
     OPENROUTER_API_KEY: str | None = os.getenv("OPENROUTER_API_KEY")
     PERPLEXITY_API_KEY: str | None = os.getenv("PERPLEXITY_API_KEY")
+    NVIDIA_API_KEY: str | None = os.getenv("NVIDIA_API_KEY")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     SEARXNG_URL: str = os.getenv("SEARXNG_URL", "http://localhost:8888")
     ADMIN_API_KEY: str | None = os.getenv("ADMIN_API_KEY")
@@ -67,6 +68,9 @@ class Settings:
         "CORS_ORIGINS",
         "http://localhost:3000,http://localhost:8001,http://127.0.0.1:8001"
     )
+
+    # ── DeepL Translation ──
+    DEEPL_API_KEY: str | None = os.getenv("DEEPL_API_KEY")
 
     # ── OpenRouter analytics headers ──
     OPENROUTER_HTTP_REFERER: str = os.getenv(

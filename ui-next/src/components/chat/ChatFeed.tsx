@@ -13,6 +13,7 @@ import { TIMING } from '@/lib/config';
 import { copyToClipboard, cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ManifestationVisuals } from './ManifestationVisuals';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 export interface RenderedPhase {
   index: number;
@@ -101,14 +102,14 @@ function PhaseIndicator({
       {agents && agents.length > 0 && (
         <div className="flex flex-wrap gap-1.5 pl-6">
           {agents.map((a) => (
-            <span
-              key={a.name}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-subtle)]"
-              title={a.task}
-            >
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
-              {a.name}
-            </span>
+            <Tooltip key={a.name} text={a.task}>
+              <span
+                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-subtle)]"
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+                {a.name}
+              </span>
+            </Tooltip>
           ))}
         </div>
       )}
@@ -172,7 +173,7 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
           </div>
           {prompt ? (
             <div className="rounded-2xl border border-[var(--border)] bg-white/70 px-4 py-3 text-sm text-[var(--text)]">
-              <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text-muted)]">Prompt</span>
+              <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text)]">Prompt</span>
               {prompt}
             </div>
           ) : null}
@@ -494,17 +495,20 @@ function ChatFeedComponent({
                 </div>
               ) : phases.length > 0 ? (
                 <div className="w-full">
-                  {visiblePhases.map((phase, idx) => (
-                    <PhaseRenderer
-                      key={`${msg.id}-${phase.phase}`}
-                      phase={phase}
-                      onComplete={() => handlePhaseComplete(msg.id, idx)}
-                      animationKey={`${msg.id}-${phase.index}`}
-                      animated={msg.animated !== false}
-                      forceOpen={forceOpen}
-                      errorPhases={errorPhases}
-                    />
-                  ))}
+                  {visiblePhases.map((phase, idx) => {
+                    const isLastPhase = idx === phases.length - 1;
+                    return (
+                      <PhaseRenderer
+                        key={`${msg.id}-${phase.phase}`}
+                        phase={phase}
+                        onComplete={() => handlePhaseComplete(msg.id, idx)}
+                        animationKey={`${msg.id}-${phase.index}`}
+                        animated={msg.animated !== false && isLastPhase}
+                        forceOpen={forceOpen}
+                        errorPhases={errorPhases}
+                      />
+                    );
+                  })}
                 </div>
               ) : (
                 <MarkdownRenderer>{msg.content || ' '}</MarkdownRenderer>

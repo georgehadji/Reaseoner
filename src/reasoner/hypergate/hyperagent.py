@@ -141,21 +141,6 @@ class HyperGateAgent:
                 action="direct", confidence=1.0, reasoning="Very short prompt, assumed direct"
             )
 
-        # Fast-path: pure creative-writing requests (poems, stories, scripts, etc.)
-        # bypass the full pipeline and go straight to direct answer.
-        if _is_creative_writing(problem):
-            decision = GateDecision(
-                action="direct",
-                confidence=0.95,
-                reasoning="Pure creative writing request (poem, story, script, etc.) — direct generation is sufficient",
-            )
-            self._cache[problem_hash] = decision
-            logger.info(
-                "HyperGateAgent fast-path: creative-writing hash=%s action=direct",
-                problem_hash[:16],
-            )
-            return decision
-
         # Fast-path: research-backed writing (articles/essays/blog posts/reports)
         if _WRITING_INTENT.search(problem) or any(p.search(problem) for p in _RESEARCH_INDICATORS):
             decision = GateDecision(

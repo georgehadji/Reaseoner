@@ -111,6 +111,9 @@ class Settings:
     # ── Rerank ──
     RERANK_API_BASE: str = os.getenv("RERANK_API_BASE", "https://openrouter.ai/api/v1")
 
+    # ── Database ──
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5432/reasoner")
+
     @property
     def internal_api_base_url(self) -> str:
         """Base URL for internal self-calls (e.g., Neuro endpoints from streaming)."""

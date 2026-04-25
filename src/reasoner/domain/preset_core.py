@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, Optional
 
 from reasoner.llm import ProviderRouter, _REGISTRY
+from reasoner.domain.saas import SubscriptionTier
 
 if TYPE_CHECKING:
     from reasoner.core.protocol import PhaseConfig
@@ -123,13 +124,22 @@ def get_method_from_preset(preset: str) -> str:
     return "multi-perspective"
 
 
-def get_preset_tier(preset_id: str) -> Literal["budget", "premium", "unknown"]:
+def get_preset_price_tier(preset_id: str) -> Literal["budget", "premium", "unknown"]:
     """Infer pricing tier from preset ID suffix."""
     if preset_id.endswith("-budget"):
         return "budget"
     if preset_id.endswith("-premium"):
         return "premium"
     return "unknown"
+
+
+def get_preset_tier(preset_id: str) -> SubscriptionTier:
+    """Return the minimum subscription tier required for a preset."""
+    from reasoner.domain.preset_registry import PRESETS
+    preset = PRESETS.get(preset_id)
+    if preset is None:
+        return SubscriptionTier.FREE
+    return preset.required_tier
 
 
 _METHOD_TO_SLUG: dict[str, str] = {
@@ -187,6 +197,7 @@ class PipelinePreset:
     # Per-role fallback model IDs. If a role's provider fails, this model is tried next.
     # Roles absent here fall back to primary automatically (if they use a non-primary model).
     fallback_routing: dict[str, str] = field(default_factory=dict)
+    required_tier: SubscriptionTier = SubscriptionTier.FREE # New field: minimum tier required to use this preset
 
     def __post_init__(self) -> None:
         """Validate routing keys and model IDs at construction time."""

@@ -27,6 +27,7 @@ from reasoner.presets import (
     build_auto_preset,
     get_method_from_preset,
     get_preset_tier,
+    get_preset_price_tier,
 )
 from reasoner.phases._shared import build_followup_context, _wrap_user_input
 
@@ -168,7 +169,7 @@ async def _stream_direct_answer(
         system_prompt = _CREATIVE_SYSTEM_PROMPT
         max_tokens = 4096
         temperature = 0.8
-        tier = get_preset_tier(preset_name)
+        tier = get_preset_price_tier(preset_name)
         creative_models = (
             _CREATIVE_MODELS_PREMIUM if tier == "premium" else _CREATIVE_MODELS_BUDGET
         )
@@ -670,7 +671,7 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
     """Run the full ARA pipeline for a follow-up question with conversation context."""
     from reasoner.presets import FOLLOWUP_AGENT_MODELS
 
-    tier = get_preset_tier(req.preset)
+    tier = get_preset_price_tier(req.preset)
     agent_model = req.agent_model or FOLLOWUP_AGENT_MODELS.get(tier)
     if agent_model:
         logger.info("Follow-up tier=%s -> agent_model=%s", tier, agent_model)

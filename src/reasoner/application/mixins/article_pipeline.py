@@ -437,7 +437,17 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             return
 
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
-        sources_json = json.dumps(sources, indent=2, ensure_ascii=False)
+        
+        # Truncate URLs in sources for the prompt to prevent token limit issues with massive percent-encoded strings
+        sources_for_prompt = []
+        for s in sources:
+            s_copy = s.copy()
+            url = s_copy.get("url", "")
+            if len(url) > 150:
+                s_copy["url"] = url[:150] + "..."
+            sources_for_prompt.append(s_copy)
+        
+        sources_json = json.dumps(sources_for_prompt, indent=2, ensure_ascii=False)
 
         raw, _ = await self._call_llm_cached(
             role="article_verifier",

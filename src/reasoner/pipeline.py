@@ -398,6 +398,9 @@ class ARAPipeline(
 
     async def run(self, problem: str) -> PipelineState:
         """Main entry point. Executes the dynamic pipeline."""
+        if not problem or not str(problem).strip():
+            raise ValueError("Problem cannot be empty")
+
         state = self.initial_state if self.initial_state else PipelineState(problem=problem, preset_name=self.preset_name)
         
         # --- ATTACHMENTS: Inject extracted text into problem ---

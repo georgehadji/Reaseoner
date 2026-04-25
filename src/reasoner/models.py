@@ -817,39 +817,51 @@ class PipelineState:
         
         # Reconstruct candidates with PerspectiveType
         if data.get('candidates'):
-            data['candidates'] = [
-                SolutionCandidate(
-                    perspective=PerspectiveType(c['perspective']),
-                    content=c['content'],
-                    key_insights=c['key_insights'],
-                    model_used=c['model_used']
-                ) for c in data['candidates']
-            ]
+            _candidates = []
+            for c in data['candidates']:
+                try:
+                    _candidates.append(SolutionCandidate(
+                        perspective=PerspectiveType(c['perspective']),
+                        content=c['content'],
+                        key_insights=c['key_insights'],
+                        model_used=c['model_used']
+                    ))
+                except (ValueError, KeyError):
+                    pass # skip malformed candidate
+            data['candidates'] = _candidates
         
         # Reconstruct scores with PerspectiveType
         if data.get('scores'):
-            data['scores'] = [
-                CritiqueScore(
-                    perspective=PerspectiveType(s['perspective']),
-                    logical_consistency=s['logical_consistency'],
-                    evidence_support=s['evidence_support'],
-                    failure_resilience=s['failure_resilience'],
-                    feasibility=s['feasibility'],
-                    bias_flags=s['bias_flags'],
-                    steel_man=s['steel_man']
-                ) for s in data['scores']
-            ]
+            _scores = []
+            for s in data['scores']:
+                try:
+                    _scores.append(CritiqueScore(
+                        perspective=PerspectiveType(s['perspective']),
+                        logical_consistency=s['logical_consistency'],
+                        evidence_support=s['evidence_support'],
+                        failure_resilience=s['failure_resilience'],
+                        feasibility=s['feasibility'],
+                        bias_flags=s['bias_flags'],
+                        steel_man=s['steel_man']
+                    ))
+                except (ValueError, KeyError):
+                    pass # skip malformed score
+            data['scores'] = _scores
         
         # Reconstruct top_candidates
         if data.get('top_candidates'):
-            data['top_candidates'] = [
-                SolutionCandidate(
-                    perspective=PerspectiveType(c['perspective']),
-                    content=c['content'],
-                    key_insights=c['key_insights'],
-                    model_used=c['model_used']
-                ) for c in data['top_candidates']
-            ]
+            _top_candidates = []
+            for c in data['top_candidates']:
+                try:
+                    _top_candidates.append(SolutionCandidate(
+                        perspective=PerspectiveType(c['perspective']),
+                        content=c['content'],
+                        key_insights=c['key_insights'],
+                        model_used=c['model_used']
+                    ))
+                except (ValueError, KeyError):
+                    pass # skip malformed candidate
+            data['top_candidates'] = _top_candidates
         
         # Reconstruct stress_results with ScenarioType.
         # BUG-021: _from_dict used direct subscripts sr['scenario'] etc. — a

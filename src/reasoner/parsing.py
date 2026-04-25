@@ -196,11 +196,30 @@ def _repair_truncated_json(text: str) -> str | None:
 
     suffix = ""
     if in_str:
-        suffix += '"'  # close open string
-    # Trim trailing incomplete key/value (e.g. `"key": ` with no value)
-    tail = (text + suffix).rstrip()
-    tail = re.sub(r',\s*"[^"]*"\s*:\s*$', "", tail)  # drop incomplete key-value
-    tail = re.sub(r',\s*$', "", tail)                  # drop trailing comma
+        # AGGRESSIVE REPAIR: If truncated mid-string, truncate back to the last structural boundary
+        # to avoid partial values (like truncated URLs) breaking the structure.
+        last_boundary = max(text.rfind(","), text.rfind("["), text.rfind("{"))
+        if last_boundary != -1:
+            # If the boundary was an opening bracket or brace, keep it so we can close it as empty
+            if text[last_boundary] in "[{":
+                text = text[:last_boundary + 1]
+            else:
+                text = text[:last_boundary]
+            
+            # Re-calculate stack for the modified text
+            stack = []
+            for ch in text:
+                if ch in "{[": stack.append("}" if ch == "{" else "]")
+                elif ch in "}]" and stack: stack.pop()
+        else:
+            suffix += '"'  # fallback: just close it
+
+    # Trim trailing incomplete items
+    tail = text.rstrip()
+    tail = re.sub(r',\s*$', "", tail)  # drop trailing comma
+    # Drop incomplete key-value pairs (handles both after-comma and first-in-object cases)
+    tail = re.sub(r'([,{])\s*"[^"]*"\s*:\s*$', r'\1', tail)
+    
     suffix = "".join(reversed(stack))
     return tail + suffix
 

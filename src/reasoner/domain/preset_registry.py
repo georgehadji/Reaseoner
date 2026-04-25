@@ -10,6 +10,7 @@ from reasoner.core.constants import (
     MODEL_GEMINI_PRO_IMAGE,
 )
 from reasoner.domain.preset_core import PipelinePreset
+from reasoner.domain.saas import SubscriptionTier
 
 
 # Declarative configuration for all 24 presets (2 per method).
@@ -56,6 +57,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Multi-Perspective (Premium)",
         "description": "Best available model per phase. Perplexity Sonar fact-checks candidates in Phase 3. Gemini Pro and GLM-5.1 dual-check synthesis. Cross-ecosystem for maximum epistemic diversity.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -80,6 +82,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "deepseek-r1",
             "synthesis": "mimo-v2-pro"
         },
+        "required_tier": "pro",
         "notes": [
             "Phase 2: Moonshot + DeepSeek + Anthropic + Mistral — 4 different training lineages",
             "Gemini Pro: 1.6T MoE with 1M context, state-of-the-art reasoning effort.",
@@ -134,6 +137,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Debate (Premium)",
         "description": "Elite debate. Gemini Pro vs Kimi K2.6, judged by Perplexity Sonar Pro. 3 different training paradigms + live fact-checking. GLM-5.1 synthesis fallback for low-hallucination summary.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -158,6 +162,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "glm-5.1"
         },
+        "required_tier": "pro",
         "notes": [
             "Gemini Pro: 1.6T MoE with 1M context, state-of-the-art reasoning effort.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -210,6 +215,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Jury / Orchestrated (Premium)",
         "description": "Elite 6-model jury with live fact-checking. Claude + Kimi K2.6 + DeepSeek + Gemini + Perplexity + GLM. Cross-ecosystem for maximum coverage. GLM-5.1 synthesis fallback for low-hallucination consensus.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -238,6 +244,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "glm-5.1"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro as primary model for strong reasoning in complex phases and an expert role.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -288,6 +295,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Research (Premium)",
         "description": "Elite research with live fact-checking. Claude for reasoning, Perplexity for evidence evaluation, GLM for synthesis.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -312,6 +320,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for deep reasoning and synthesis.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -362,6 +371,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Scientific (Premium)",
         "description": "Elite scientific reasoning. Claude for hypothesis generation, Kimi K2.6 for testing, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -386,6 +396,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for hypothesis generation and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -436,6 +447,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Socratic (Premium)",
         "description": "Elite Socratic dialogue. Claude for questions, Kimi K2.6 for answers, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -460,6 +472,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for Socratic questions and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -510,6 +523,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Pre-Mortem (Premium)",
         "description": "Elite pre-mortem analysis. Claude for failure scenarios, Kimi K2.6 for backtracking, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -534,6 +548,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for failure scenarios and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -584,6 +599,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Bayesian (Premium)",
         "description": "Elite Bayesian reasoning. Claude for priors, Kimi K2.6 for likelihood, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -608,6 +624,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for priors and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -658,6 +675,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Dialectical (Premium)",
         "description": "Elite dialectical reasoning. Claude for thesis, Kimi K2.6 for antithesis, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -682,6 +700,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for thesis and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -732,6 +751,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Analogical (Premium)",
         "description": "Elite analogical reasoning. Claude for abstraction, Kimi K2.6 for domain search, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -756,6 +776,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for abstraction and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -810,6 +831,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Delphi Method (Premium)",
         "description": "Elite Delphi consensus. 4 top models (Claude, Kimi K2.6, DeepSeek, Gemini) with Perplexity Sonar Pro for fact-checking.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -838,6 +860,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro as primary model for strong reasoning in complex phases and an expert role.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -888,6 +911,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Chain-of-Verification (Premium)",
         "description": "Elite CoVe. Claude for drafting, Kimi K2.6 for verification, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -912,6 +936,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for decomposition and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -960,6 +985,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Skeleton-of-Thought (Premium)",
         "description": "Elite SoT. Claude for skeleton, Kimi K2.6 for solving, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -982,6 +1008,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for decomposition and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -1032,6 +1059,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Tree-of-Thought (Premium)",
         "description": "Elite ToT. Claude for decomposition, Kimi K2.6 for generation, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -1056,6 +1084,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for decomposition and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -1104,6 +1133,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Program-of-Thought (Premium)",
         "description": "Elite PoT. Claude for generation, Kimi K2.6 for execution, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -1126,6 +1156,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for decomposition and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -1174,6 +1205,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Self-Discover (Premium)",
         "description": "Elite self-discovery. Claude for selection, Kimi K2.6 for adaptation, Perplexity for evidence evaluation.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -1196,6 +1228,7 @@ _PRESET_CONFIGS: list[dict] = [
             "stress_testing": "qwen3-plus",
             "synthesis": "gpt-5"
         },
+        "required_tier": "pro",
         "notes": [
             "MiMo V2 Pro for decomposition and synthesis: strong reasoning capabilities.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
@@ -1268,6 +1301,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "SubAgent (Premium)",
         "description": "Elite per-subagent routing with top models. Each subagent gets a dedicated top model + fallback.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -1371,6 +1405,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Writing / Article (Premium)",
         "description": "Elite article generation with CoVE, Pre-Mortem, and SoT. Claude Sonnet handles decomposition, CoVE, and verification. GLM-5.1 synthesizes, critiques, and assembles with 200K context and 34% hallucination rate. Estimated $0.15-0.20 per article.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "article_decompose": "mimo-v2-flash",
             "article_claim_extract": "claude-sonnet",
@@ -1454,6 +1489,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Cross-Language (Premium)",
         "description": "Best available multi-perspective reasoning with DeepL translation. Non-English problems are translated to English for reasoning, then the synthesis is translated back with the highest-quality models.",
         "primary_id": "gemini-pro",
+        "required_tier": "pro",
         "routing": {
             "prompt_enhancement": "mimo-v2-flash",
             "classification": "mimo-v2-flash",
@@ -1548,6 +1584,7 @@ _PRESET_CONFIGS: list[dict] = [
         "name": "Image Generation (Premium)",
         "description": "Generate images using Flux 2 Pro and Riverflow v2 Pro as primary models, with Flux 2 Max, Riverflow v2 Max Preview, and Seedream 4.5 as fallbacks.",
         "primary_id": MODEL_GEMINI_PRO_IMAGE,
+        "required_tier": "pro",
         "routing": {},
         "fallback_routing": {},
         "notes": [
@@ -1568,6 +1605,7 @@ PRESETS: dict[str, PipelinePreset] = {
         notes=cfg.get("notes", []),
         required_env_vars=cfg.get("required_env_vars", ["OPENROUTER_API_KEY"]),
         fallback_routing=cfg.get("fallback_routing", {}),
+        required_tier=SubscriptionTier(cfg.get("required_tier", "free")),
     )
     for cfg in _PRESET_CONFIGS
 }

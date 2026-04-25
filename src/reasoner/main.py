@@ -58,13 +58,7 @@ from reasoner.pipeline import ARAPipeline
 from reasoner.renderer import export_to_json, render_pipeline_result
 from reasoner.llm import ProviderRouter, list_models
 from reasoner.core.settings import settings  # triggers dotenv load
-from reasoner.core.constants import (
-    DEFAULT_CLI_PRESET,
-    ANALYTICAL_SYSTEM_PROMPT,
-    DIRECT_ANSWER_MAX_TOKENS,
-    DIRECT_ANSWER_TEMPERATURE,
-    MAX_PROBLEM_DISPLAY_CHARS,
-)
+from reasoner.core.constants import DEFAULT_CLI_PRESET
 from reasoner.presets import (
     PRESETS,
     build_custom_router,
@@ -191,7 +185,7 @@ async def main(args: argparse.Namespace) -> None:
             print(f"\n{'='*60}")
             print(f"  ARA v2.0 — Resumed from saved state")
             print(f"{'='*60}")
-            print(f"  Problem: {state.problem[:MAX_PROBLEM_DISPLAY_CHARS]}...")
+            print(f"  Problem: {state.problem[:120]}...")
             print(f"  Resumed at: {state.task_type.value if state.task_type else 'start'}")
             print(f"{'='*60}\n")
             render_pipeline_result(state)
@@ -201,7 +195,7 @@ async def main(args: argparse.Namespace) -> None:
             sys.exit(1)
     else: # If not resuming, load problem normally
         # Load problem
-        if args.problem_file:
+        if getattr(args, 'problem_file', None) and isinstance(args.problem_file, str):
             problem_path = Path(args.problem_file)
             if not problem_path.exists():
                 print(f"[ERROR] File not found: {args.problem_file}")
@@ -217,104 +211,113 @@ async def main(args: argparse.Namespace) -> None:
 
     router = build_router(args)
 
-    # Determine initial_state for the pipeline
-    initial_state = None
-    if args.resume:
-        try:
-            initial_state = PipelineState.load(args.resume)
-        except Exception as exc:
-            print(f"[ERROR] Failed to load initial state for pipeline: {exc}")
-            sys.exit(1)
-
-    print(f"\n{'='*60}")
-    print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
-    print(f"{'='*60}")
-    short_problem = problem[:MAX_PROBLEM_DISPLAY_CHARS] + ("..." if len(problem) > MAX_PROBLEM_DISPLAY_CHARS else "")
-    print(f"  Problem: {short_problem}")
-    print(f"  Top-K candidates: {args.top_k}")
-    print(f"  Parallel perspectives: {not args.sequential}")
-    print(f"{'='*60}\n")
-
-    # SECURITY: Prompt-injection defense for CLI input
-    from reasoner.sanitization import sanitize_for_prompt
-    problem, _ = sanitize_for_prompt(problem)
-
-    # ── Gate Agent: decide direct answer vs full pipeline ──
-    raw_preset = args.preset or DEFAULT_CLI_PRESET
-    is_auto = raw_preset.startswith("auto")
-    auto_tier = raw_preset.split("-", 1)[1] if is_auto and "-" in raw_preset else "budget"
-    effective_preset_name = f"multi-perspective-{auto_tier}" if is_auto else raw_preset
-
-    if not args.force_pipeline:
-        gate = HyperGateAgent(router)
-        decision = await gate.decide(problem)
-        if decision.action == "direct":
-            print("  [Gate] Direct answer selected.\n")
-            response, _ = await router.call(
-                role="primary",
-                system_prompt=ANALYTICAL_SYSTEM_PROMPT,
-                user_prompt=problem,
-                max_tokens=DIRECT_ANSWER_MAX_TOKENS,
-                temperature=DIRECT_ANSWER_TEMPERATURE,
-            )
-            print(response)
-            return
-        if decision.action == "web_search":
-            print("  [Gate] Web search selected.\n")
-            from reasoner.core.search import get_discovery_client
+    try:
+        # Determine initial_state for the pipeline
+        initial_state = None
+        if args.resume:
             try:
-                client, _ = await get_discovery_client(source_type="general")
-                results = await client.search(problem, num_results=10, source_type="general")
+                initial_state = PipelineState.load(args.resume)
             except Exception as exc:
-                logger.warning("Web search failed: %s", exc)
-                results = []
-            if not results:
-                print("No relevant web search results were found for your query.")
+                print(f"[ERROR] Failed to load initial state for pipeline: {exc}")
+                sys.exit(1)
+
+        print(f"\n{'='*60}")
+        print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
+        print(f"{'='*60}")
+        short_problem = problem[:120] + ("..." if len(problem) > 120 else "")
+        print(f"  Problem: {short_problem}")
+        print(f"  Top-K candidates: {args.top_k}")
+        print(f"  Parallel perspectives: {not args.sequential}")
+        print(f"{'='*60}\n")
+
+        # SECURITY: Prompt-injection defense for CLI input
+        from reasoner.sanitization import sanitize_for_prompt
+        problem, _ = sanitize_for_prompt(problem)
+
+        # ── Gate Agent: decide direct answer vs full pipeline ──
+        raw_preset = args.preset or DEFAULT_CLI_PRESET
+        is_auto = raw_preset.startswith("auto")
+        auto_tier = raw_preset.split("-", 1)[1] if is_auto and "-" in raw_preset else "budget"
+        effective_preset_name = f"multi-perspective-{auto_tier}" if is_auto else raw_preset
+
+        if not args.force_pipeline:
+            gate = HyperGateAgent(router)
+            decision = await gate.decide(problem)
+            if decision.action == "direct":
+                print("  [Gate] Direct answer selected.\n")
+                response, _ = await router.call(
+                    role="primary",
+                    system_prompt="You are an analytical assistant. Provide a clear, concise answer.",
+                    user_prompt=problem,
+                    max_tokens=2048,
+                    temperature=0.7,
+                )
+                print(response)
                 return
-            print("### Web Search Results\n")
-            for i, r in enumerate(results, 1):
-                title = r.get("title") or "Untitled"
-                url = r.get("url") or ""
-                snippet = r.get("snippet") or r.get("content") or ""
-                print(f"{i}. [{title}]({url})")
-                if snippet:
-                    print(f"   > {snippet}")
-                print()
-            return
+            if decision.action == "web_search":
+                print("  [Gate] Web search selected.\n")
+                from reasoner.core.search import get_discovery_client
+                try:
+                    client, _ = await get_discovery_client(source_type="general")
+                    results = await client.search(problem, num_results=10, source_type="general")
+                except Exception as exc:
+                    logger.warning("Web search failed: %s", exc)
+                    results = []
+                if not results:
+                    print("No relevant web search results were found for your query.")
+                    return
+                print("### Web Search Results\n")
+                for i, r in enumerate(results, 1):
+                    title = r.get("title") or "Untitled"
+                    url = r.get("url") or ""
+                    snippet = r.get("snippet") or r.get("content") or ""
+                    print(f"{i}. [{title}]({url})")
+                    if snippet:
+                        print(f"   > {snippet}")
+                    print()
+                return
 
-        # ── Auto-method: rebuild router with gate-selected preset ──
-        if is_auto and decision.method:
-            from reasoner.presets import build_auto_preset, get_preset
-            effective_preset_name = build_auto_preset(decision.method, auto_tier)
-            print(f"  [Gate] Auto-selected method: {decision.method} → preset: {effective_preset_name}\n")
-            method_preset = get_preset(effective_preset_name)
-            router = method_preset.build_router()
-        else:
-            print(f"  [Gate] Pipeline selected ({decision.method or 'multi_perspective'}).\n")
+            # ── Auto-method: rebuild router with gate-selected preset ──
+            if is_auto and decision.method:
+                from reasoner.presets import build_auto_preset, get_preset
+                effective_preset_name = build_auto_preset(decision.method, auto_tier)
+                print(f"  [Gate] Auto-selected method: {decision.method} → preset: {effective_preset_name}\n")
+                method_preset = get_preset(effective_preset_name)
+                router = method_preset.build_router()
+            else:
+                print(f"  [Gate] Pipeline selected ({decision.method or 'multi_perspective'}).\n")
 
-    pipeline = ARAPipeline(
-        router=router,
-        initial_state=initial_state,
-        top_k=args.top_k,
-        parallel_perspectives=not args.sequential,
-        verbose=not args.quiet,
-        preset_name=effective_preset_name,
-        source_type=args.source_type,
-        domain=args.domain or None,
-        enhance_prompt=args.enhance_prompt,
-    )
+        pipeline = ARAPipeline(
+            router=router,
+            initial_state=initial_state,
+            top_k=args.top_k,
+            parallel_perspectives=not args.sequential,
+            verbose=not args.quiet,
+            preset_name=effective_preset_name,
+            source_type=args.source_type,
+            domain=args.domain or None,
+            enhance_prompt=args.enhance_prompt,
+        )
 
-    state = await pipeline.run(problem)
+        state = await pipeline.run(problem)
 
-    render_pipeline_result(state)
+        render_pipeline_result(state)
 
-    if args.output:
-        export_to_json(state, args.output)
-        print(f"\n[OK] Full state exported -> {args.output}")
+        if getattr(args, 'output', None) and isinstance(args.output, str):
+            export_to_json(state, args.output)
+            print(f"\n[OK] Full state exported -> {args.output}")
 
-    if args.save_state:
-        state.save(args.save_state)
-        print(f"\n[OK] State saved -> {args.save_state}")
+        if getattr(args, 'save_state', None) and isinstance(args.save_state, str):
+            state.save(args.save_state)
+            print(f"\n[OK] State saved -> {args.save_state}")
+
+    finally:
+        # ── Cleanup ──
+        from reasoner.scraper import close_scraper_client
+        await close_scraper_client()
+        
+        from reasoner.llm import OpenAICompatibleProvider
+        await OpenAICompatibleProvider.close_shared_pool()
 
 
 # ─────────────────────────────────────────────────────────────────────

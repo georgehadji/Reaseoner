@@ -503,13 +503,13 @@ async def estimate_cost(
     Estimate tokens, cost, and duration for a pipeline run without executing it.
     """
     from reasoner.pricing import calculate_model_cost, get_pricing
-    from reasoner.presets import get_preset_tier
+    from reasoner.presets import get_preset_price_tier
     from reasoner.application.services.preset_service import PresetService
 
     _preset_service = PresetService()
     raw_preset = req.preset or "auto-budget"
     gate_preset_name, is_auto, auto_tier = _preset_service.resolve(raw_preset)
-    tier = get_preset_tier(gate_preset_name)
+    tier = get_preset_price_tier(gate_preset_name)
 
     # Rough token estimation based on prompt length + heuristic overhead
     prompt_tokens = len(req.problem.split()) + 50  # words → tokens approx

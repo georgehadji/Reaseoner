@@ -46,6 +46,18 @@ class EventType(str, Enum):
     ERROR_OCCURRED = "error_occurred"
     RETRY_ATTEMPTED = "retry_attempted"
 
+    # SaaS Events
+    USER_REGISTERED = "user_registered"
+    USER_LOGGED_IN = "user_logged_in"
+    SUBSCRIPTION_CREATED = "subscription_created"
+    SUBSCRIPTION_UPDATED = "subscription_updated"
+    SUBSCRIPTION_CANCELLED = "subscription_cancelled"
+    QUOTA_EXCEEDED = "quota_exceeded"
+    QUOTA_RESET = "quota_reset"
+    QUERY_LOGGED = "query_logged"
+    PAYMENT_FAILED = "payment_failed"
+    PAYMENT_SUCCEEDED = "payment_succeeded"
+
 
 @dataclass(frozen=True)
 class DomainEvent:
@@ -315,4 +327,14 @@ EVENT_CLASSES: dict[EventType, type[DomainEvent]] = {
     EventType.MEMORY_RECALLED: MemoryRecalled,
     EventType.ERROR_OCCURRED: ErrorOccurred,
     EventType.RETRY_ATTEMPTED: RetryAttempted,
+    EventType.USER_REGISTERED: DomainEvent,
+    EventType.USER_LOGGED_IN: DomainEvent,
+    EventType.SUBSCRIPTION_CREATED: DomainEvent,
+    EventType.SUBSCRIPTION_UPDATED: DomainEvent,
+    EventType.SUBSCRIPTION_CANCELLED: DomainEvent,
+    EventType.QUOTA_EXCEEDED: DomainEvent,
+    EventType.QUOTA_RESET: DomainEvent,
+    EventType.QUERY_LOGGED: DomainEvent,
+    EventType.PAYMENT_FAILED: DomainEvent,
+    EventType.PAYMENT_SUCCEEDED: DomainEvent,
 }

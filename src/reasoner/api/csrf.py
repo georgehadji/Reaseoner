@@ -21,19 +21,21 @@ _CSRF_TOKEN_MAX_AGE = 86400
 
 
 def _get_csrf_secret() -> bytes:
-    """Get or derive the CSRF signing secret."""
-    raw = os.environ.get("CSRF_SECRET") or os.environ.get("ADMIN_API_KEY") or ""
+    """Get the CSRF signing secret. CSRF_SECRET must be set independently of ADMIN_API_KEY."""
+    raw = os.environ.get("CSRF_SECRET") or ""
     if not raw:
         raise RuntimeError(
-            "CSRF_SECRET or ADMIN_API_KEY must be set for CSRF protection. "
-            "Set CSRF_SECRET in your .env file."
+            "CSRF_SECRET must be set for CSRF protection. "
+            "Set CSRF_SECRET in your .env file (do not reuse ADMIN_API_KEY)."
         )
     return hashlib.sha256(raw.encode()).digest()
 
 
 def generate_csrf_token() -> str:
-    """Generate a random 32-byte hex token."""
-    return secrets.token_hex(32)
+    """Generate a token that embeds the current timestamp for expiry validation."""
+    ts = int(time.time())
+    rand = secrets.token_hex(24)
+    return f"{ts}:{rand}"
 
 
 def sign_csrf_token(token: str) -> str:
@@ -44,7 +46,7 @@ def sign_csrf_token(token: str) -> str:
 
 
 def verify_csrf_token(signed: str) -> bool:
-    """Verify a signed CSRF token using constant-time comparison."""
+    """Verify a signed CSRF token: signature validity + expiry check."""
     if not signed or "." not in signed:
         return False
     # Split on the last dot to handle token values that may contain dots
@@ -56,7 +58,18 @@ def verify_csrf_token(signed: str) -> bool:
     expected_sig = hmac.new(secret, token.encode("utf-8"), hashlib.sha256).hexdigest()
 
     # Constant-time comparison to prevent timing attacks
-    return hmac.compare_digest(provided_sig, expected_sig)
+    if not hmac.compare_digest(provided_sig, expected_sig):
+        return False
+
+    # Validate embedded timestamp to enforce token max-age
+    try:
+        ts_str, _ = token.split(":", 1)
+        if time.time() - int(ts_str) > _CSRF_TOKEN_MAX_AGE:
+            return False
+    except (ValueError, IndexError):
+        return False
+
+    return True
 
 
 def generate_signed_csrf_token() -> str:

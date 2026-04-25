@@ -70,3 +70,4 @@ class CachedQuotaRepository(QuotaRepository):
 
     async def log_query(self, user_id: str, preset: str, method: str, tokens_in: int, tokens_out: int, cost_usd: float) -> None:
         await self._underlying.log_query(user_id, preset, method, tokens_in, tokens_out, cost_usd)
+        await self._redis.delete(self._cache_key(user_id))

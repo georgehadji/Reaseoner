@@ -514,10 +514,6 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
                     yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
                     return
             except Exception as exc:
-                import traceback
-
-                tb = traceback.format_exc()
-                print(f"Phase {num} error: {str(exc)}\n{tb}")
                 logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
                 err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
                 state.errors.append(err_msg)
@@ -658,11 +654,10 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
             pass
 
     except Exception as exc:
-        import traceback
-
-        print(f"Pipeline error: {str(exc)}\n{traceback.format_exc()}")
-        await _broadcast_ws(run_id, {"type": "done", "errors": [f"Pipeline processing error: {str(exc)}"]})
-        yield _event({"type": "done", "errors": [f"Pipeline processing error: {str(exc)}"]})
+        logger.error("Pipeline error for run %s: %s", run_id, exc, exc_info=True)
+        err_msg = f"Pipeline processing error: {type(exc).__name__}: {str(exc)[:120]}"
+        await _broadcast_ws(run_id, {"type": "done", "errors": [err_msg]})
+        yield _event({"type": "done", "errors": [err_msg]})
     finally:
         await _run_store.remove(run_id)
 

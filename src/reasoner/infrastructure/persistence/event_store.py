@@ -354,8 +354,14 @@ class EventStore:
             return event
             
         except Exception as e:
+            logger.warning(
+                "Failed to deserialize event (aggregate %s v%s): %s",
+                row["aggregate_id"] if row else "?",
+                row["version"] if row else "?",
+                e,
+            )
             return None
-    
+
     async def list_pipelines(
         self,
         limit: int = 50,

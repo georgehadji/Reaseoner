@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 class StripeBillingAdapter(BillingPort):
     def __init__(self, api_key: str | None = None):
-        stripe.api_key = api_key or os.environ["STRIPE_SECRET_KEY"]
+        stripe.api_key = api_key or os.environ.get("STRIPE_SECRET_KEY", "")
 
     async def create_checkout_session(
         self,
@@ -83,15 +83,19 @@ class StripeBillingAdapter(BillingPort):
         )
 
     def _price_id_for_tier(self, tier: SubscriptionTier) -> str:
+        if tier == SubscriptionTier.FREE:
+            return ""
         mapping = {
-            SubscriptionTier.PRO: os.environ["STRIPE_PRO_PRICE_ID"],
-            SubscriptionTier.ENTERPRISE: os.environ["STRIPE_ENTERPRISE_PRICE_ID"],
+            SubscriptionTier.PRO: os.environ.get("STRIPE_PRO_PRICE_ID", ""),
+            SubscriptionTier.ENTERPRISE: os.environ.get("STRIPE_ENTERPRISE_PRICE_ID", ""),
         }
-        return mapping[tier]
+        return mapping.get(tier, "")
 
     async def _handle_checkout_completed(self, session: dict) -> Subscription:
         # Extract user_id from client_reference_id
         user_id = session.get("client_reference_id")
+        if not user_id:
+            raise ValueError("Missing client_reference_id in checkout session")
         # Subscription object is in subscription field
         sub_id = session.get("subscription")
         stripe_sub = await asyncio.to_thread(stripe.Subscription.retrieve, sub_id)
@@ -103,6 +107,8 @@ class StripeBillingAdapter(BillingPort):
             stripe.Customer.retrieve, stripe_sub["customer"]
         )
         user_id = customer.metadata.get("reasoner_user_id")
+        if not user_id:
+            raise ValueError("Missing reasoner_user_id in customer metadata")
         return self._stripe_sub_to_domain(stripe_sub, UUID(user_id))
 
     async def _handle_subscription_deleted(self, stripe_sub: dict) -> Subscription:
@@ -112,7 +118,7 @@ class StripeBillingAdapter(BillingPort):
         user_id = customer.metadata.get("reasoner_user_id")
         return Subscription(
             id=uuid4(),
-            user_id=UUID(user_id),
+            user_id=UUID(user_id) if user_id else uuid4(),
             tier=SubscriptionTier.FREE,
             status=SubscriptionStatus.CANCELLED,
             stripe_subscription_id=stripe_sub["id"],

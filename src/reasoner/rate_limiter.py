@@ -114,7 +114,7 @@ except Exception:
         """
         async with self._lock:
             bucket = self._get_bucket(client_id)
-            self._refill_tokens(bucket, multiplier)
+            self._refill_tokens(bucket, 1.0)
             self._reset_windows_if_needed(bucket)
             
             info = {

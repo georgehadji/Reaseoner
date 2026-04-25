@@ -393,7 +393,7 @@ async def handle_websocket_message(
     elif msg_type == 'stop':
         pipeline_id = message.get('pipeline_id')
         if pipeline_id:
-            from reasoner.api.run_state import _run_store
+            from reasoner.infrastructure.redis.run_state import _run_state_manager as _run_store
             await _run_store.request_cancel(pipeline_id)
             await manager.send_to_connection(
                 connection_id,

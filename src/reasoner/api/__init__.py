@@ -850,6 +850,7 @@ async def health_check(request: Request):
         REASONER_POSTGRES_POOL_FREE.set(_health_postgres_pool.get_size() - _health_postgres_pool.get_idle_size())
     except Exception as e:
         health["checks"]["postgres"] = {"status": "error", "reason": str(e)}
+        _health_postgres_pool = None
 
     # Redis check
     try:

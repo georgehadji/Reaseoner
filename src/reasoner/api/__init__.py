@@ -259,8 +259,9 @@ def _filter_routing(routing: dict[str, str], primary_id: str) -> dict[str, str]:
     return filtered
 
 # Per-run cancellation tracking.
-# Encapsulated in RunStateStore for testability and safe async locking.
-from .run_state import _run_store
+# Encapsulated in RunStateManager for testability and safe async locking.
+# Redis-backed with in-memory fallback (Critical Enhancement 9.1–9.3, 9.7).
+from reasoner.infrastructure.redis.run_state import _run_state_manager as _run_store
 
 # ─────────────────────────────────────────────────────────────────────
 # CACHE

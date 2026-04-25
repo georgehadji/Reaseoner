@@ -33,7 +33,7 @@ from reasoner.phases._shared import build_followup_context, _wrap_user_input
 
 from .cache import CACHE_DIR, _cache_key, _load_cache, _save_cache
 from .history import HISTORY_DIR, HistoryEntry, _save_history_entry
-from .run_state import _run_store
+from reasoner.infrastructure.redis.run_state import _run_state_manager as _run_store
 from .schemas import FollowupRequest, RunRequest
 from .serializers import (
     _event,

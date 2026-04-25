@@ -8,6 +8,7 @@ All write operations are transactional to prevent race conditions.
 from __future__ import annotations
 
 import logging
+import os
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -22,9 +23,11 @@ logger = logging.getLogger(__name__)
 class PostgresQuotaRepository(QuotaRepository):
     """Atomic quota storage in PostgreSQL."""
 
-    def __init__(self, dsn: str, pool_size: int = 10):
+    def __init__(self, dsn: str, pool_size: int | None = None):
         self._dsn = dsn
-        self._pool_size = pool_size
+        self._pool_size = pool_size if pool_size is not None else int(
+            os.environ.get("DB_POOL_SIZE", "10")
+        )
         self._pool: asyncpg.Pool | None = None
 
     async def _get_pool(self) -> asyncpg.Pool:

@@ -5,7 +5,8 @@ import { useAppStore } from '@/stores/app-store';
 import { EXAMPLE_PROMPTS, LIMITS, TIMING, API } from '@/lib/config';
 import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
-import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon, Upload } from 'lucide-react';
+import { useSubscription } from '@/hooks/useSubscription';
+import { ArrowUp, Sparkles, Plus, X, FileText, Image as ImageIcon, Upload, Lock } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 
 interface ComposerProps {
@@ -89,8 +90,12 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   function autoResize() {
     const el = textareaRef.current;
     if (!el) return;
+    // Defer the read-after-write to avoid forcing a synchronous layout recalculation.
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+    });
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -240,30 +245,41 @@ function AttachmentChip({ att, onRemove }: AttachmentChipProps) {
 
   /** Tier toggle button — shared between centered and non-centered layouts */
   function TierToggle() {
+    const { subscription } = useSubscription();
     const isPremium = tier === 'premium';
+    const isLocked = !subscription?.tier || subscription.tier === 'free';
     const costNum = estimate ? parseFloat(estimate.cost) : NaN;
     const costDisplay = Number.isFinite(costNum) ? costNum.toFixed(3) : '0.000';
-    const tooltipText = estimate
-      ? isPremium
-        ? `Premium: ~$${costDisplay} · Budget would be ~$${(costNum * 0.15).toFixed(3)}`
-        : `Budget: ~$${costDisplay} · Premium would be ~$${(costNum * 6.5).toFixed(3)}`
-      : isPremium
-        ? 'Premium mode active — click to switch to Budget'
-        : 'Budget mode active — click to switch to Premium';
+
+    const tooltipText = isLocked
+      ? 'Premium presets require a Pro subscription'
+      : estimate
+        ? isPremium
+          ? `Premium: ~$${costDisplay} · Budget would be ~$${(costNum * 0.15).toFixed(3)}`
+          : `Budget: ~$${costDisplay} · Premium would be ~$${(costNum * 6.5).toFixed(3)}`
+        : isPremium
+          ? 'Premium mode active — click to switch to Budget'
+          : 'Budget mode active — click to switch to Premium';
 
     return (
       <Tooltip text={tooltipText}>
         <button
           type="button"
-          onClick={toggleTier}
+          onClick={() => {
+            if (!isLocked) toggleTier();
+          }}
+          disabled={isLocked && !isPremium}
           className={cn(
             'flex h-8 items-center gap-1 rounded-full border px-3 text-xs font-medium transition-colors',
             isPremium
               ? 'border-[var(--border-strong)] bg-[var(--surface-2)] text-[var(--text)]'
-              : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+              : isLocked
+                ? 'cursor-not-allowed border-[var(--border)] bg-transparent text-[var(--text-subtle)] opacity-50'
+                : 'border-[var(--border)] bg-transparent text-[var(--text-muted)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
           )}
+          aria-disabled={isLocked && !isPremium}
         >
-          <Sparkles className="h-3.5 w-3.5" />
+          {isLocked && !isPremium ? <Lock className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
           <span>Premium</span>
         </button>
       </Tooltip>

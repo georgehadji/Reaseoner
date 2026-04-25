@@ -1,49 +1,211 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { useQuota } from '@/hooks/useQuota';
+import { useSubscription } from '@/hooks/useSubscription';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from 'recharts';
 
-export default function DashboardPage() {
-  const { quota } = useQuota();
-  const [subscription, setSubscription] = useState<any>(null);
+interface HistoryEntry {
+  timestamp: string;
+  tokens?: { total?: number };
+}
+
+function isValidPortalUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname.endsWith('.stripe.com');
+  } catch {
+    return false;
+  }
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="animate-pulse rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+      <div className="mb-2 h-4 w-24 rounded bg-[var(--surface-3)]" />
+      <div className="h-8 w-16 rounded bg-[var(--surface-3)]" />
+    </div>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="animate-pulse rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+      <div className="mb-4 h-5 w-32 rounded bg-[var(--surface-3)]" />
+      <div className="h-[200px] rounded bg-[var(--surface-3)]" />
+    </div>
+  );
+}
+
+function DashboardContent() {
+  const { quota, loading: quotaLoading } = useQuota();
+  const { subscription, loading: subLoading } = useSubscription();
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [portalError, setPortalError] = useState('');
 
   useEffect(() => {
-    apiFetch('/api/billing/subscription').then(r => r.json()).then(setSubscription);
+    const controller = new AbortController();
+    setHistoryLoading(true);
+    apiFetch('/api/history')
+      .then((r) => {
+        if (controller.signal.aborted) return null;
+        return r.json();
+      })
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setHistory(data?.entries || []);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setHistory([]);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setHistoryLoading(false);
+        }
+      });
+    return () => controller.abort();
   }, []);
 
+  const chartData = history.slice(-7).map((h: HistoryEntry) => ({
+    date: h.timestamp?.slice(0, 10) || 'unknown',
+    tokens: h.tokens?.total || 0,
+  }));
+
   const openPortal = async () => {
-    const res = await apiFetch('/api/billing/portal', { method: 'POST' });
-    const data = await res.json();
-    window.location.href = data.portal_url;
+    setPortalError('');
+    try {
+      const res = await apiFetch('/api/billing/portal', { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Portal failed (HTTP ${res.status})`);
+      }
+      const data = await res.json();
+      const url = data.portal_url;
+      if (!url || typeof url !== 'string' || !isValidPortalUrl(url)) {
+        throw new Error('Invalid portal URL');
+      }
+      window.location.href = url;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to open billing portal';
+      setPortalError(msg);
+    }
   };
 
+  const percent = quota && quota.max > 0 ? Math.min((quota.used / quota.max) * 100, 100) : 0;
+  const barColor = percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-amber-500' : 'bg-[var(--accent)]';
+
   return (
-    <div className="max-w-4xl mx-auto py-8 px-4">
-      <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border rounded-lg p-6">
-          <h2 className="font-semibold mb-2">Current Plan</h2>
-          <p className="text-lg capitalize">{subscription?.tier || 'Free'}</p>
-          <button onClick={openPortal} className="mt-4 text-blue-600 underline">
-            Manage Billing
-          </button>
-        </div>
-        <div className="border rounded-lg p-6">
-          <h2 className="font-semibold mb-2">Usage</h2>
-          {quota && (
-            <>
-              <p>{quota.used} / {quota.max} queries</p>
-              <div className="w-full bg-gray-200 rounded h-2 mt-2">
-                <div
-                  className="bg-blue-600 h-2 rounded"
-                  style={{ width: `${(quota.used / quota.max) * 100}%` }}
-                />
-              </div>
-            </>
-          )}
-        </div>
+    <div className="mx-auto max-w-5xl px-4 py-8">
+      <h1 className="mb-6 text-2xl font-bold text-[var(--text)]">Dashboard</h1>
+
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {quotaLoading ? (
+          <StatCardSkeleton />
+        ) : (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <p className="text-sm text-[var(--text-muted)]">Queries This Month</p>
+            <p className="mt-1 text-2xl font-bold text-[var(--text)]">
+              {quota?.used ?? 0} / {quota?.max ?? 20}
+            </p>
+            <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
+              <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${percent}%` }} />
+            </div>
+          </div>
+        )}
+
+        {quotaLoading ? (
+          <StatCardSkeleton />
+        ) : (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <p className="text-sm text-[var(--text-muted)]">Remaining</p>
+            <p className="mt-1 text-2xl font-bold text-[var(--text)]">{quota?.remaining ?? '-'}</p>
+          </div>
+        )}
+
+        {subLoading ? (
+          <StatCardSkeleton />
+        ) : (
+          <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+            <p className="text-sm text-[var(--text-muted)]">Plan</p>
+            <p className="mt-1 text-2xl font-bold text-[var(--text)] capitalize">
+              {subscription?.tier || 'Free'}
+            </p>
+            {subscription?.tier && subscription.tier !== 'free' && (
+              <button
+                onClick={openPortal}
+                className="mt-2 text-sm text-[var(--accent)] hover:underline"
+              >
+                Manage Billing
+              </button>
+            )}
+          </div>
+        )}
       </div>
+
+      {portalError && (
+        <div className="mb-4 rounded-lg bg-red-500/10 p-3 text-sm text-red-600" role="alert">
+          {portalError}
+        </div>
+      )}
+
+      {historyLoading ? (
+        <ChartSkeleton />
+      ) : chartData.length > 0 ? (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6">
+          <h2 className="mb-4 font-semibold text-[var(--text)]">Recent Activity</h2>
+          <div className="h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="date" tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 12 }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: 'var(--surface)',
+                    border: '1px solid var(--border)',
+                    borderRadius: '0.5rem',
+                    color: 'var(--text)',
+                  }}
+                />
+                <Bar dataKey="tokens" fill="var(--accent)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-6 text-center text-[var(--text-muted)]">
+          No activity yet. Start a conversation to see your usage.
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <div className="mb-6 h-8 w-48 animate-pulse rounded bg-[var(--surface-3)]" />
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+          <StatCardSkeleton />
+        </div>
+        <ChartSkeleton />
+      </div>
+    }>
+      <DashboardContent />
+    </Suspense>
   );
 }

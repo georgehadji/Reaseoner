@@ -1,53 +1,119 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { apiFetch } from '@/lib/api-client';
+import { Check, X } from 'lucide-react';
 
 const plans = [
-  { name: 'Free', price: '$0', queries: '20 / month', features: ['Budget presets only', 'Basic support'] },
-  { name: 'Pro', price: '$12/mo', queries: '500 / month', features: ['All presets', 'Priority support', 'Advanced analytics'] },
-  { name: 'Enterprise', price: '$49/mo', queries: 'Unlimited', features: ['Custom models', 'SLA', 'Dedicated support'] },
+  {
+    name: 'Free',
+    tier: 'free',
+    price: '$0',
+    queries: '20 / month',
+    features: ['Budget presets only', 'Basic support'],
+  },
+  {
+    name: 'Pro',
+    tier: 'pro',
+    price: '$12/mo',
+    queries: '500 / month',
+    features: ['All presets', 'Priority support', 'Advanced analytics'],
+  },
+  {
+    name: 'Enterprise',
+    tier: 'enterprise',
+    price: '$49/mo',
+    queries: 'Unlimited',
+    features: ['Custom models', 'SLA', 'Dedicated support'],
+  },
 ];
 
+function isValidCheckoutUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname.endsWith('.stripe.com');
+  } catch {
+    return false;
+  }
+}
+
 export default function PricingPage() {
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
+  const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [error, setError] = useState('');
 
   const handleUpgrade = async (tier: string) => {
-    setLoading(true);
+    setError('');
+    setLoadingTier(tier);
     try {
       const res = await apiFetch(`/api/billing/checkout?tier=${encodeURIComponent(tier)}`, {
         method: 'POST',
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Checkout failed (HTTP ${res.status})`);
+      }
       const data = await res.json();
-      window.location.href = data.checkout_url;
-    } finally {
-      setLoading(false);
+      const url = data.checkout_url;
+      if (!url || typeof url !== 'string' || !isValidCheckoutUrl(url)) {
+        throw new Error('Invalid checkout URL received');
+      }
+      window.location.href = url;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Checkout failed';
+      setError(msg);
+      setLoadingTier(null);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto py-12 px-4">
-      <h1 className="text-3xl font-bold text-center mb-8">Choose Your Plan</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="mx-auto max-w-5xl px-4 py-12">
+      <div className="mb-8 text-center">
+        <h1 className="text-3xl font-bold text-[var(--text)]">Choose Your Plan</h1>
+        <p className="mt-2 text-[var(--text-muted)]">Upgrade to unlock more queries and premium features</p>
+      </div>
+
+      {error && (
+        <div className="mx-auto mb-6 max-w-lg rounded-lg bg-red-500/10 p-3 text-sm text-red-600" role="alert">
+          <div className="flex items-center gap-2">
+            <X className="h-4 w-4 shrink-0" />
+            {error}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
         {plans.map((plan) => (
-          <div key={plan.name} className="border rounded-lg p-6 text-center">
-            <h2 className="text-xl font-semibold">{plan.name}</h2>
-            <p className="text-2xl font-bold my-2">{plan.price}</p>
-            <p className="text-gray-600 mb-4">{plan.queries}</p>
-            <ul className="text-sm text-left space-y-2 mb-6">
+          <div
+            key={plan.name}
+            className="flex flex-col rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 text-center transition-shadow hover:shadow-[var(--shadow-lg)]"
+          >
+            <h2 className="text-xl font-semibold text-[var(--text)]">{plan.name}</h2>
+            <p className="my-2 text-3xl font-bold text-[var(--text)]">{plan.price}</p>
+            <p className="mb-4 text-sm text-[var(--text-muted)]">{plan.queries}</p>
+            <ul className="mb-6 flex-1 space-y-2 text-left text-sm text-[var(--text-2)]">
               {plan.features.map((f) => (
-                <li key={f}>✓ {f}</li>
+                <li key={f} className="flex items-start gap-2">
+                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-green-500" />
+                  {f}
+                </li>
               ))}
             </ul>
-            {plan.name !== 'Free' && (
+            {plan.tier !== 'free' && (
               <button
-                onClick={() => handleUpgrade(plan.name.toLowerCase())}
-                disabled={loading}
-                className="w-full py-2 bg-blue-600 text-white rounded disabled:opacity-50"
+                onClick={() => handleUpgrade(plan.tier)}
+                disabled={!!loadingTier}
+                className="w-full rounded-lg bg-[var(--accent)] py-2.5 text-[var(--accent-text)] font-medium transition-opacity hover:opacity-90 disabled:opacity-40"
+                aria-busy={loadingTier === plan.tier}
               >
-                {loading ? 'Loading...' : 'Upgrade'}
+                {loadingTier === plan.tier ? 'Loading…' : 'Upgrade'}
+              </button>
+            )}
+            {plan.tier === 'free' && (
+              <button
+                disabled
+                className="w-full rounded-lg border border-[var(--border)] bg-[var(--surface-2)] py-2.5 text-[var(--text-muted)] font-medium cursor-default"
+              >
+                Current Plan
               </button>
             )}
           </div>

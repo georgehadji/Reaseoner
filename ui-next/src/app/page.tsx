@@ -15,6 +15,9 @@ import { CommandPalette } from '@/components/layout/CommandPalette';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
+import { UserMenu } from '@/components/layout/UserMenu';
+import { UpgradeModal } from '@/components/layout/UpgradeModal';
+import { PipelineError } from '@/hooks/usePipelineStream';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
 import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '@/lib/types';
@@ -203,6 +206,7 @@ export default function Home() {
   const serverOnline = useServerStatus();
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   // REFACTOR: Replace useState with useReducer for messages state
   const [messages, dispatchMessages] = useReducer(messagesReducer, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -218,6 +222,8 @@ export default function Home() {
   const [phaseDurations, setPhaseDurations] = useState<Record<number, number>>({});
   const [phaseOpenMode, setPhaseOpenMode] = useState<'auto' | 'expand' | 'collapse'>('auto');
   const phaseStartTimesRef = useRef<Record<number, number>>({});
+  const chunkBufferRef = useRef('');
+  const chunkFlushRafRef = useRef<number | null>(null);
 
   const isContinuation = (text: string) => CONTINUATION_RE.test(text);
 
@@ -263,6 +269,11 @@ export default function Home() {
     setAutoSelectedMethod(PIPELINE_DEFAULTS.method);
     setPhaseOpenMode('auto');
     phaseStartTimesRef.current = {};
+    chunkBufferRef.current = '';
+    if (chunkFlushRafRef.current !== null) {
+      cancelAnimationFrame(chunkFlushRafRef.current);
+      chunkFlushRafRef.current = null;
+    }
 
     // Upload attachments before running
     let uploadedAttachments: { file_id: string; filename: string; mime_type: string; extracted_text: string; size: number }[] = [];
@@ -494,7 +505,17 @@ export default function Home() {
           break;
         case 'text_chunk':
           if (typeof ev.text === 'string') {
-            dispatchMessages({ type: 'ADD_STREAMING_CONTENT', payload: { messageId: assistantId, text: ev.text } });
+            chunkBufferRef.current += ev.text;
+            if (chunkFlushRafRef.current === null) {
+              chunkFlushRafRef.current = requestAnimationFrame(() => {
+                const buffered = chunkBufferRef.current;
+                chunkBufferRef.current = '';
+                chunkFlushRafRef.current = null;
+                if (buffered) {
+                  dispatchMessages({ type: 'ADD_STREAMING_CONTENT', payload: { messageId: assistantId, text: buffered } });
+                }
+              });
+            }
           }
           break;
         case 'phase_complete':
@@ -543,7 +564,17 @@ export default function Home() {
             setCurrentPhase(undefined);
           }
           break;
-        case 'error':
+        case 'error': {
+          // Flush any remaining buffered text before stopping
+          if (chunkFlushRafRef.current !== null) {
+            cancelAnimationFrame(chunkFlushRafRef.current);
+            chunkFlushRafRef.current = null;
+          }
+          const errorChunk = chunkBufferRef.current;
+          chunkBufferRef.current = '';
+          if (errorChunk) {
+            dispatchMessages({ type: 'ADD_STREAMING_CONTENT', payload: { messageId: assistantId, text: errorChunk } });
+          }
           // Add an error message and stop streaming
           dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false, currentPhaseName: undefined } } });
           dispatchMessages({ type: 'ADD_MESSAGES', payload: [{
@@ -556,6 +587,7 @@ export default function Home() {
           }] });
           setCurrentPhase(undefined);
           break;
+        }
         case 'recall_used':
           if (ev.memory_count && ev.memory_count > 0) {
             dispatchMessages({
@@ -586,12 +618,32 @@ export default function Home() {
             });
           }
           break;
-        case 'cancelled':
+        case 'cancelled': {
+          if (chunkFlushRafRef.current !== null) {
+            cancelAnimationFrame(chunkFlushRafRef.current);
+            chunkFlushRafRef.current = null;
+          }
+          const cancelledChunk = chunkBufferRef.current;
+          chunkBufferRef.current = '';
+          if (cancelledChunk) {
+            dispatchMessages({ type: 'ADD_STREAMING_CONTENT', payload: { messageId: assistantId, text: cancelledChunk } });
+          }
           // Add a cancellation message
           dispatchMessages({ type: 'ADD_MESSAGES', payload: [{ id: 'info-' + Date.now(), role: 'error', content: ev.message || 'Stopped by user' }] });
           setCurrentPhase(undefined);
           break;
-        case 'done':
+        }
+        case 'done': {
+          // Flush any remaining buffered text before final update
+          if (chunkFlushRafRef.current !== null) {
+            cancelAnimationFrame(chunkFlushRafRef.current);
+            chunkFlushRafRef.current = null;
+          }
+          const doneChunk = chunkBufferRef.current;
+          chunkBufferRef.current = '';
+          if (doneChunk) {
+            dispatchMessages({ type: 'ADD_STREAMING_CONTENT', payload: { messageId: assistantId, text: doneChunk } });
+          }
           finalErrors = ev.errors || [];
           finalTokens = ev.total_tokens || { input: 0, output: 0, total: 0 };
           const totalDuration = ev.duration;
@@ -639,6 +691,7 @@ export default function Home() {
           };
           saveConversation(conv).then(refreshHistory).catch(console.error);
           break;
+        }
       }
     };
 
@@ -690,6 +743,22 @@ export default function Home() {
         await startRun(req, onEvent);
       }
     } catch (err) {
+      if (err instanceof PipelineError && err.status === 429) {
+        try {
+          const data = JSON.parse(err.body);
+          if (data.detail?.upgrade_url) {
+            setShowUpgradeModal(true);
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false } } });
+            wsDisconnect();
+            clientRunIdRef.current = null;
+            setRunning(false);
+            clearAttachments();
+            return;
+          }
+        } catch {
+          // body wasn't JSON, fall through to generic error
+        }
+      }
       const msg = err instanceof Error ? err.message : 'Connection error';
       // Update assistant message with connection error
       dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { isStreaming: false } } });
@@ -898,7 +967,10 @@ export default function Home() {
               </div>
             )}
           </div>
-          <ThemeToggle />
+          <div className="flex items-center gap-3">
+            <UserMenu />
+            <ThemeToggle />
+          </div>
         </header>
 
         {hasMessages && activeAssistantMsg && (
@@ -948,6 +1020,7 @@ export default function Home() {
         )}
       </div>
 
+      <UpgradeModal open={showUpgradeModal} onClose={() => setShowUpgradeModal(false)} />
       <ShortcutModal isOpen={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <CommandPalette
         isOpen={commandPaletteOpen}

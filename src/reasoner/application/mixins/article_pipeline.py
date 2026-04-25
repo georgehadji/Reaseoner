@@ -255,10 +255,12 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             q_text = sq.get("question", "") if isinstance(sq, dict) else sq.question
             self._log("ARTICLE", f"Searching: {q_text[:60]}...", state)
             query_variants = [q_text]
-            if len(q_text.split()) >= 4:
-                query_variants.append(f"{q_text} evidence analysis")
-            if "overview" not in q_text.lower():
-                query_variants.append(f"{q_text} overview")
+            lang = (getattr(state, "detected_language", None) or "en").lower()
+            if lang.startswith("en"):
+                if len(q_text.split()) >= 4:
+                    query_variants.append(f"{q_text} evidence analysis")
+                if "overview" not in q_text.lower():
+                    query_variants.append(f"{q_text} overview")
             try:
                 for query_text in query_variants:
                     results = await client.search(
@@ -298,10 +300,11 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         state.writing_state["retrieved_sources"] = ranked_sources
         self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources from {len(all_sources)} unique hits", state)
 
-        # Hard rule: abort if no sources
+        # Hard rule: mark aborted if no sources (downstream phases handle the fallback)
         if not ranked_sources:
+            state.writing_state["aborted"] = True
             state.errors.append("Article pipeline: ABORT — no sources found")
-            self._log("ARTICLE", "ABORT: no sources found", state)
+            self._log("ARTICLE", "ABORT: no sources found — will fall back to knowledge-only synthesis", state)
         elif len(ranked_sources) < ARTICLE_MIN_SOURCE_COUNT:
             self._log(
                 "ARTICLE",
@@ -564,8 +567,8 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         usable_claims = [c for c in claims if c.get("id", "") in verified_ids]
 
         if not usable_claims:
-            self._log("ARTICLE", "No usable claims — cannot synthesize", state)
-            state.errors.append("Article synthesize: no usable claims after verification")
+            self._log("ARTICLE", "No usable claims — falling back to knowledge-only synthesis", state)
+            await self._phase_article_synthesize_monolithic(state, "[]")
             return
 
         claims_json = json.dumps(usable_claims, indent=2, ensure_ascii=False)
@@ -703,16 +706,30 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         self._log("ARTICLE", f"Monolithic synthesis: {len(data.get('sections', []))} sections", state)
 
     def _synthesizer_prompt(self, state: PipelineState, claims_json: str) -> str:
+        has_claims = claims_json.strip() not in ("[]", "", "null")
+        if has_claims:
+            evidence_section = (
+                f'Verified Claims (use ONLY these):\n{claims_json}\n\n'
+                f'Rules:\n'
+                f'- Inline [Source: URL] citations required\n'
+                f'- Mark uncertainty explicitly\n'
+                f'- Do not generalize beyond the claims\n'
+                f'- No filler or stylistic fluff\n'
+                f'- If coverage is incomplete, state gaps clearly\n\n'
+            )
+        else:
+            evidence_section = (
+                f'No external sources were retrieved. Write from expert knowledge.\n\n'
+                f'Rules:\n'
+                f'- Do not fabricate citations or URLs\n'
+                f'- Mark claims that would benefit from empirical support with (unverified)\n'
+                f'- Write with authority but epistemic honesty\n'
+                f'- Note in gaps_noted that no sources were available\n\n'
+            )
         return (
             f'{phases.get_language_instruction(state)}\n\n'
             f'Topic: {state.problem}\n\n'
-            f'Verified Claims (use ONLY these):\n{claims_json}\n\n'
-            f'Rules:\n'
-            f'- Inline [Source: URL] citations required\n'
-            f'- Mark uncertainty explicitly\n'
-            f'- Do not generalize beyond the claims\n'
-            f'- No filler or stylistic fluff\n'
-            f'- If coverage is incomplete, state gaps clearly\n\n'
+            f'{evidence_section}'
             f'Output JSON: {{'
             f'"title": "...", '
             f'"abstract": "...", '

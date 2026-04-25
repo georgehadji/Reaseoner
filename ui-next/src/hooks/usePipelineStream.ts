@@ -6,6 +6,17 @@ import { readSSEStream } from '@/lib/sse-reader';
 import { PhaseEvent, RunRequest, RunFollowupRequest } from '@/lib/types';
 import { API } from '@/lib/config';
 
+export class PipelineError extends Error {
+  status: number;
+  body: string;
+  constructor(status: number, body: string, message: string) {
+    super(message);
+    this.status = status;
+    this.body = body;
+    this.name = 'PipelineError';
+  }
+}
+
 function getDevErrorMessage(status: number, text: string): string {
   if (status === 504) {
     return 'Backend unreachable. Run: uvicorn asgi:app --reload';
@@ -38,7 +49,7 @@ export function usePipelineStream() {
           : `HTTP ${resp.status}: ${text.slice(0, 200)}`;
         // eslint-disable-next-line no-console
         console.error('Pipeline HTTP error:', resp.status, text);
-        throw new Error(message);
+        throw new PipelineError(resp.status, text, message);
       }
       if (!resp.body) throw new Error('No response body');
 

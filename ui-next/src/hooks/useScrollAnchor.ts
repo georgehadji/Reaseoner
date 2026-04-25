@@ -53,21 +53,30 @@ export function useScrollAnchor(containerRef: React.RefObject<HTMLElement | null
     return () => el.removeEventListener('scroll', checkPosition);
   }, [checkPosition]);
 
-  // When content grows and we were near bottom, stay near bottom
+  // When content grows and we were near bottom, stay near bottom.
+  // RAF-debounced to avoid forcing layout on every streaming text mutation.
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
+    let pendingRaf: number | null = null;
     const observer = new MutationObserver(() => {
-      if (isNearBottomRef.current) {
-        scrollToBottom({ behavior: 'smooth' });
-      } else {
-        setShowNewContentIndicator(true);
-      }
+      if (pendingRaf !== null) return;
+      pendingRaf = requestAnimationFrame(() => {
+        pendingRaf = null;
+        if (isNearBottomRef.current) {
+          scrollToBottom({ behavior: 'smooth' });
+        } else {
+          setShowNewContentIndicator(true);
+        }
+      });
     });
 
     observer.observe(el, { childList: true, subtree: true });
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (pendingRaf !== null) cancelAnimationFrame(pendingRaf);
+    };
   }, [containerRef, scrollToBottom]);
 
   return {

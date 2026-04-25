@@ -174,6 +174,41 @@ class RateLimiter:
         if client_id in self._buckets:
             del self._buckets[client_id]
     
+    async def is_allowed_for_user(
+        self,
+        client_id: str,
+        tier: str = "default",
+    ) -> tuple[bool, dict]:
+        """
+        Check rate limit for an authenticated user.
+        Uses user_id as bucket key instead of IP.
+        """
+        # Premium tiers get higher limits
+        tier_multipliers = {
+            "default": 1.0,
+            "free": 1.0,
+            "pro": 2.0,
+            "enterprise": 5.0,
+        }
+        multiplier = tier_multipliers.get(tier, 1.0)
+
+        # Temporarily adjust config for this check
+        original_config = self.config
+        adjusted = RateLimitConfig(
+            requests_per_minute=int(original_config.requests_per_minute * multiplier),
+            requests_per_hour=int(original_config.requests_per_hour * multiplier),
+            burst_size=int(original_config.burst_size * multiplier),
+        )
+
+        # Save/restore around check
+        self.config = adjusted
+        try:
+            result = await self.is_allowed(client_id)
+        finally:
+            self.config = original_config
+
+        return result
+
     def reset_all(self) -> None:
         """Reset all rate limits."""
         self._buckets.clear()

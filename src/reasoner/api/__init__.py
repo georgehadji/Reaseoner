@@ -260,7 +260,9 @@ from reasoner.api.streaming import (
     run_stream_cached,
 )
 
-from reasoner.api.auth_deps import check_rate_limit, optional_auth, require_csrf
+from reasoner.api.auth_deps import optional_auth, require_csrf
+from reasoner.api.dependencies import check_rate_limit, get_current_user, get_optional_user
+from reasoner.domain.saas import User
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -278,15 +280,18 @@ async def get_csrf_token():
 async def run_pipeline(
     request: Request,
     req: RunRequest,
+    user: User | None = Depends(get_optional_user),
     authenticated = Depends(optional_auth),
     rate_limit_checked = Depends(check_rate_limit),
     csrf_checked = Depends(require_csrf),
 ):
     """
     Run pipeline with optional authentication and rate limiting.
-    
+
     Authenticated users get higher rate limits and priority processing.
     """
+    # TODO Phase 3: if user is None and ENABLE_LEGACY_API_KEY=false → 401
+    # TODO Phase 3: use user.id for rate limit bucket and quota check
     return StreamingResponse(
         run_stream_cached(req),
         media_type="text/event-stream",
@@ -446,6 +451,10 @@ app.include_router(websocket_router)
 
 from reasoner.api.routes.keys import router as keys_router
 app.include_router(keys_router)
+
+# Mount SaaS router
+from reasoner.api import saas_router
+app.include_router(saas_router.router)
 
 
 # ─────────────────────────────────────────────────────────────────────

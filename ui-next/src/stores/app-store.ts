@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { Conversation } from '@/lib/types';
 import { STORAGE_KEYS, LIMITS } from '@/lib/config';
 
@@ -34,6 +35,11 @@ interface AppState {
   } | null;
   recentCommands: string[];
 
+  // Auth
+  user: SupabaseUser | null;
+  isAuthenticated: boolean;
+  isAuthLoading: boolean;
+
   // Actions
   setRunning: (running: boolean) => void;
   toggleTier: () => void;
@@ -52,6 +58,11 @@ interface AppState {
   clearActiveRun: () => void;
   getAutoPreset: () => string;
   addRecentCommand: (id: string) => void;
+
+  // Auth actions
+  setUser: (user: SupabaseUser | null) => void;
+  setAuthLoading: (loading: boolean) => void;
+  logout: () => void;
 }
 
 export const useAppStore = create<AppState>()(
@@ -68,6 +79,11 @@ export const useAppStore = create<AppState>()(
       history: [],
       activeRun: null,
       recentCommands: [],
+
+      // Auth defaults
+      user: null,
+      isAuthenticated: false,
+      isAuthLoading: true,
 
       setRunning: (running) => set({ running }),
 
@@ -137,6 +153,11 @@ export const useAppStore = create<AppState>()(
           return { recentCommands: next };
         }),
 
+      // Auth actions
+      setUser: (user) => set({ user, isAuthenticated: !!user }),
+      setAuthLoading: (loading) => set({ isAuthLoading: loading }),
+      logout: () => set({ user: null, isAuthenticated: false }),
+
       /** Returns the preset string to send to the API: "auto-budget" or "auto-premium". */
       getAutoPreset: () => `auto-${get().tier}`,
     }),
@@ -160,6 +181,7 @@ export const useAppStore = create<AppState>()(
         sidebarCollapsed: state.sidebarCollapsed,
         recentCommands: state.recentCommands,
         // Do not persist isImageMode so it defaults to false on next load
+        // Do NOT persist user/session — let Supabase handle that
       }),
     }
   )

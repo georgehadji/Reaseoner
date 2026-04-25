@@ -51,8 +51,9 @@ Reasoner/
 ├── docker-compose.searxng.yml # SearXNG container setup
 ├── mempalace.yaml             # Memory palace configuration
 ├── tests/                     # 60+ pytest files
-├── src/reasoner/              # Main Python package (~120 files)
+├── src/reasoner/              # Main Python package (~125 files)
 ├── ui-next/                   # Next.js frontend
+├── migrations/                # Database migrations (Postgres/SaaS)
 ├── cache/                     # Run-related cache artifacts
 ├── history/                   # Persisted run/conversation artifacts
 ├── docs/                      # Markdown documentation
@@ -83,6 +84,14 @@ Reasoner/
 | `src/reasoner/core/aggregates/widget.py` | Core | `WidgetAggregate` for widget lifecycle events |
 | `src/reasoner/domain/preset_core.py` | Domain | `_KNOWN_ROUTING_ROLES`, `PipelinePreset`, `build_auto_preset()` |
 | `src/reasoner/domain/preset_registry.py` | Domain | 42 preset configs with model routing and fallbacks |
+| `src/reasoner/domain/saas.py` | Domain | SaaS Entities: `User`, `Subscription`, `UsageQuota`, `QueryAuditLog`, `QuotaResult` |
+| `src/reasoner/application/ports/auth_port.py` | Application | Port for user authentication providers |
+| `src/reasoner/application/ports/billing_port.py` | Application | Port for subscription billing providers (e.g. Stripe) |
+| `src/reasoner/application/ports/quota_repository.py` | Application | Port for usage quota persistence |
+| `src/reasoner/application/services/auth_service.py` | Application | Service for user authentication orchestration |
+| `src/reasoner/application/services/billing_service.py` | Application | Service for subscription lifecycle orchestration |
+| `src/reasoner/application/services/quota_service.py` | Application | Service for enforcing multi-tier query limits |
+| `src/reasoner/application/services/audit_service.py` | Application | Service for asynchronous query auditing |
 | `src/reasoner/application/flows/__init__.py` | Application | `build_default_flow_registry()` — binds 17 methods to `ARAPipeline` |
 | `src/reasoner/application/event_bus/bus.py` | Application | In-memory `EventBus` with typed subscribers |
 | `src/reasoner/application/handlers/handlers.py` | Application | CQRS handlers: `RunPipelineCommandHandler`, `ResumePipelineCommandHandler`, etc. |
@@ -334,10 +343,12 @@ The backend follows a **Hexagonal (Ports & Adapters) DDD architecture** with fou
 │  EventBus, CQRS Handlers, Flows, Mixins (12), Services          │
 │  Files: application/flows/, application/handlers/,              │
 │         application/mixins/, application/services/               │
-├─────────────────────────────────────────────────────────────────┤
+├─────────────────────────────────────────────────────────────────┐
 │                        DOMAIN LAYER                              │
 │  PresetCore, PresetRegistry — declarative routing configs       │
-│  Files: domain/preset_core.py, domain/preset_registry.py         │
+│  SaaS Entities — User, Subscription, Quota, Audit Log           │
+│  Files: domain/preset_core.py, domain/preset_registry.py,       │
+│         domain/saas.py                                           │
 ├─────────────────────────────────────────────────────────────────┤
 │                         CORE LAYER                               │
 │  Protocols, Constants, Settings, Events, Aggregates, Search,    │

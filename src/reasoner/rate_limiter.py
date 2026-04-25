@@ -180,10 +180,10 @@ class RateLimiter:
         tier: str = "default",
     ) -> tuple[bool, dict]:
         """
-        Check rate limit for an authenticated user.
-        Uses user_id as bucket key instead of IP.
+        Check rate limit for an authenticated user with tier-scaled limits.
+        Runs the full check inside a single lock acquisition to avoid mutating
+        shared config state that concurrent callers would race on.
         """
-        # Premium tiers get higher limits
         tier_multipliers = {
             "default": 1.0,
             "free": 1.0,
@@ -192,22 +192,46 @@ class RateLimiter:
         }
         multiplier = tier_multipliers.get(tier, 1.0)
 
-        # Temporarily adjust config for this check
-        original_config = self.config
-        adjusted = RateLimitConfig(
-            requests_per_minute=int(original_config.requests_per_minute * multiplier),
-            requests_per_hour=int(original_config.requests_per_hour * multiplier),
-            burst_size=int(original_config.burst_size * multiplier),
-        )
+        async with self._lock:
+            bucket = self._get_bucket(client_id)
+            self._refill_tokens(bucket)
+            self._reset_windows_if_needed(bucket)
 
-        # Save/restore around check
-        self.config = adjusted
-        try:
-            result = await self.is_allowed(client_id)
-        finally:
-            self.config = original_config
+            rpm = int(self.config.requests_per_minute * multiplier)
+            rph = int(self.config.requests_per_hour * multiplier)
 
-        return result
+            info: dict = {
+                "limit_minute": rpm,
+                "limit_hour": rph,
+                "remaining_minute": rpm - bucket.requests_minute,
+                "remaining_hour": rph - bucket.requests_hour,
+                "retry_after": None,
+            }
+
+            if bucket.requests_minute >= rpm:
+                info["retry_after"] = 60 - (time.time() - bucket.minute_window_start)
+                info["reason"] = "per_minute_limit"
+                return False, info
+
+            if bucket.requests_hour >= rph:
+                info["retry_after"] = 3600 - (time.time() - bucket.hour_window_start)
+                info["reason"] = "per_hour_limit"
+                return False, info
+
+            if bucket.tokens < 1:
+                tokens_needed = 1 - bucket.tokens
+                refill_rate = self.config.requests_per_minute / 60.0
+                info["retry_after"] = tokens_needed / refill_rate
+                info["reason"] = "burst_limit"
+                return False, info
+
+            bucket.tokens -= 1
+            bucket.requests_minute += 1
+            bucket.requests_hour += 1
+
+            info["remaining_minute"] = rpm - bucket.requests_minute
+            info["remaining_hour"] = rph - bucket.requests_hour
+            return True, info
 
     def reset_all(self) -> None:
         """Reset all rate limits."""

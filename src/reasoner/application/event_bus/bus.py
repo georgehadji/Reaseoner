@@ -92,10 +92,8 @@ class EventBus:
         Args:
             event: Domain event to publish
         """
-        handlers = (
-            self._handlers.get(event.event_type, []) + 
-            self._global_handlers
-        )
+        # Snapshot handler lists to avoid racing with concurrent subscribe() calls
+        handlers = list(self._handlers.get(event.event_type, [])) + list(self._global_handlers)
         
         if not handlers:
             logger.debug(f"No handlers for {event.event_type.value}")

@@ -194,7 +194,7 @@ class HyperGateAgent:
 
         def _unwrap(res: SubAgentOutput | BaseException, name: str) -> SubAgentOutput:
             if isinstance(res, BaseException):
-                logger.warning("[phase1/%s] exception: %s", name, res)
+                logger.error("[phase1/%s] sub-agent failed: %s", name, res, exc_info=res)
                 return _failed_output(name, res)
             return res
 

@@ -310,8 +310,8 @@ class TokenAwareCache:
                 "last_accessed": entry.last_accessed,
             }
             await asyncio.to_thread(f.write_text, json.dumps(data))
-        except (IOError, OSError):
-            pass  # Ignore disk write errors
+        except (IOError, OSError) as exc:
+            logger.warning("Failed to persist cache entry %s to disk: %s", key, exc)
 
 
 # Global cache instance

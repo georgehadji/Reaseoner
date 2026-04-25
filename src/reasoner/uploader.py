@@ -248,6 +248,9 @@ async def save_uploaded_file(
             "error": f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB",
         }
 
+    # Extract extension here so it's available for MIME validation below
+    ext = _get_file_extension(filename)
+
     # Validate MIME type (defense against extension spoofing)
     if _MAGIC_AVAILABLE:
         detected_mime = magic.from_buffer(content, mime=True)

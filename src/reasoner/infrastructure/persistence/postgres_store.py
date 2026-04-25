@@ -327,35 +327,45 @@ class PostgreSQLEventStore:
         from_version: int = 0,
     ) -> list[DomainEvent]:
         """Get events for an aggregate."""
-        pool = self._read_pool if self.use_read_replica else self._pool
-        
+        pool = self._read_pool if (self.use_read_replica and self._read_pool is not None) else self._pool
+
         async with pool.acquire() as conn:
             rows = await conn.fetch("""
-                SELECT * FROM events 
+                SELECT * FROM events
                 WHERE aggregate_id = $1 AND version > $2
                 ORDER BY version ASC
             """, aggregate_id, from_version)
             
-            return [self._deserialize_event(row) for row in rows]
+            return [e for e in (self._deserialize_event(row) for row in rows) if e is not None]
     
-    def _deserialize_event(self, row: Any) -> DomainEvent:
-        """Deserialize database row to event."""
+    def _deserialize_event(self, row: Any) -> DomainEvent | None:
+        """Deserialize database row to event. Returns None and logs on corruption."""
         from reasoner.core.events.domain_events import make_event
-        
-        payload = json.loads(row["payload"])
-        
-        event = make_event(
-            EventType(row["event_type"]),
-            aggregate_id=row["aggregate_id"],
-            version=row["version"],
-            **payload,
-        )
-        
-        # Override fields
-        object.__setattr__(event, 'event_id', row["event_id"])
-        object.__setattr__(event, 'timestamp', row["timestamp"])
-        
-        return event
+
+        try:
+            payload = json.loads(row["payload"])
+
+            event = make_event(
+                EventType(row["event_type"]),
+                aggregate_id=row["aggregate_id"],
+                version=row["version"],
+                **payload,
+            )
+
+            # Override fields
+            object.__setattr__(event, 'event_id', row["event_id"])
+            object.__setattr__(event, 'timestamp', row["timestamp"])
+
+            return event
+        except Exception as exc:
+            logger.error(
+                "Failed to deserialize event %s (aggregate %s v%s): %s",
+                row.get("event_id"),
+                row.get("aggregate_id"),
+                row.get("version"),
+                exc,
+            )
+            return None
     
     async def list_pipelines(
         self,
@@ -550,7 +560,14 @@ class PostgreSQLEventStore:
             """, model_name, model_key)
             
             if row:
-                return json.loads(row["data"])
+                try:
+                    return json.loads(row["data"])
+                except (json.JSONDecodeError, ValueError) as exc:
+                    logger.error(
+                        "Corrupted read model data for %s/%s: %s",
+                        model_name, model_key, exc,
+                    )
+                    return None
             return None
     
     async def get_stats(self) -> dict[str, Any]:

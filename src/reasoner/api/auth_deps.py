@@ -38,7 +38,8 @@ async def get_client_id(request: Request) -> str:
     else:
         ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("User-Agent", "")
-    return f"{ip}:{hashlib.md5(user_agent.encode()).hexdigest()[:8]}"
+    # SHA-256 with 16 hex chars (64-bit) to make collision-based bypass impractical
+    return f"{ip}:{hashlib.sha256(user_agent.encode()).hexdigest()[:16]}"
 
 
 async def check_rate_limit(

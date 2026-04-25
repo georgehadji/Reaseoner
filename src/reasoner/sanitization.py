@@ -203,12 +203,19 @@ def sanitize_for_logging(text: str, max_length: int = 200) -> str:
     """
     Sanitize text for logging (removes sensitive patterns).
     """
-    # Remove potential API keys
+    # Broader regex for secrets (SEC-025)
     sanitized = re.sub(
-        r"(api[_-]?key|token|secret|password)[=:]\s*[\w\-]{8,}",
+        r"(api[_-]?key|token|secret|password|bearer|authorization)[\s=:]+[^\s&]{4,}",
         r"\1=***REDACTED***",
         text,
         flags=re.IGNORECASE,
+    )
+
+    # Catch JWT-like patterns
+    sanitized = re.sub(
+        r"eyJ[A-Za-z0-9_-]*\.eyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]*",
+        "***JWT_REDACTED***",
+        sanitized,
     )
 
     # Truncate if too long

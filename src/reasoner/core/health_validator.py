@@ -141,5 +141,20 @@ async def validate_all() -> HealthReport:
         reason=f"Responding at {searxng_url}" if searxng_ok else f"Unreachable at {searxng_url} — web search will return empty results",
     ))
 
+    # ── 6. SearXNG Secret (SEC-026) ──
+    searxng_secret = settings.SEARXNG_SECRET_KEY
+    if not searxng_secret or searxng_secret == "!not_set_change_me!":
+        report.results.append(ValidationResult(
+            feature="SearXNG Security",
+            enabled=False,
+            reason="SEARXNG_SECRET_KEY is not set or uses default — set a strong secret in .env",
+        ))
+    else:
+        report.results.append(ValidationResult(
+            feature="SearXNG Security",
+            enabled=True,
+            reason="SEARXNG_SECRET_KEY is configured",
+        ))
+
     logger.info("\n%s", report.summary())
     return report

@@ -18,6 +18,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 
 from reasoner.domain.saas import User, SubscriptionTier
 from reasoner.application.services.quota_service import TIER_LIMITS
+from reasoner.api.middleware import _anonymize_ip
 from reasoner.api.dependencies import (
     get_current_user,
     get_optional_user,
@@ -135,17 +136,29 @@ async def export_data(
     repo = PostgresQuotaRepository(dsn, pool_size=2)
     pool = await repo._get_pool()
 
-    profile = await pool.fetchrow("SELECT * FROM users WHERE id = $1", str(user.id))
-    subscriptions = await pool.fetch("SELECT * FROM subscriptions WHERE user_id = $1", str(user.id))
-    quotas = await pool.fetchrow("SELECT * FROM usage_quotas WHERE user_id = $1", str(user.id))
+    # Explicit allowlists for GDPR export (SEC-010)
+    PROFILE_FIELDS = ["id", "email", "display_name", "created_at"]
+    SUBSCRIPTION_FIELDS = ["tier", "status", "current_period_end", "stripe_subscription_id"]
+    QUOTA_FIELDS = ["tier", "used_queries", "max_queries", "period_start"]
+    QUERY_FIELDS = ["preset", "method", "tokens_in", "tokens_out", "cost_usd", "timestamp"]
+
+    profile = await pool.fetchrow(
+        f"SELECT {', '.join(PROFILE_FIELDS)} FROM users WHERE id = $1", str(user.id)
+    )
+    subscriptions = await pool.fetch(
+        f"SELECT {', '.join(SUBSCRIPTION_FIELDS)} FROM subscriptions WHERE user_id = $1", str(user.id)
+    )
+    quotas = await pool.fetchrow(
+        f"SELECT {', '.join(QUOTA_FIELDS)} FROM usage_quotas WHERE user_id = $1", str(user.id)
+    )
     queries = await pool.fetch(
-        "SELECT * FROM query_audit_logs WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 1000",
+        f"SELECT {', '.join(QUERY_FIELDS)} FROM query_audit_logs WHERE user_id = $1 ORDER BY timestamp DESC LIMIT 1000",
         str(user.id),
     )
 
     await _log_auth_event(
         user.id, "data_export",
-        request.client.host if request.client else None,
+        _anonymize_ip(request.client.host if request.client else None),
         request.headers.get("User-Agent"),
     )
 
@@ -191,14 +204,68 @@ async def delete_account(
                 sub_row["external_subscription_id"], user.id, exc,
             )
 
+    # Comprehensive deletion: DB + uploads + history + vectors + cache (SEC-009)
+    deleted = {"db": False, "uploads": 0, "history": 0, "vectors": 0, "cache": 0}
+
+    # 1. Database cascade
+    await pool.execute("DELETE FROM users WHERE id = $1", str(user.id))
+    deleted["db"] = True
+
+    # 2. Uploads
+    try:
+        from reasoner.uploader import list_uploads, delete_file
+        user_uploads = list_uploads(user_id=str(user.id))
+        for upload in user_uploads:
+            if delete_file(upload["file_id"]):
+                deleted["uploads"] += 1
+    except Exception:
+        pass
+
+    # 3. History files
+    try:
+        from reasoner.api.history import HISTORY_DIR
+        import json as _json
+        for f in HISTORY_DIR.glob("*.json"):
+            try:
+                data = _json.loads(f.read_text(encoding="utf-8"))
+                if data.get("user_id") == str(user.id):
+                    f.unlink(missing_ok=True)
+                    deleted["history"] += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 4. Vector store (best-effort)
+    try:
+        from reasoner.documents.vector_store import DocumentVectorStore
+        store = DocumentVectorStore()
+        for upload in user_uploads:
+            try:
+                store.delete_index(upload["file_id"])
+                deleted["vectors"] += 1
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    # 5. Redis cache keys (best-effort)
+    try:
+        from reasoner.infrastructure.redis.client import get_redis
+        redis = get_redis()
+        pattern = f"user:{user.id}:*"
+        keys = await redis.keys(pattern)
+        if keys:
+            await redis.delete(*keys)
+            deleted["cache"] = len(keys)
+    except Exception:
+        pass
+
     # Audit log before deletion
     await _log_auth_event(
         user.id, "account_delete",
-        request.client.host if request.client else None,
+        _anonymize_ip(request.client.host if request.client else None),
         request.headers.get("User-Agent"),
     )
 
-    # Cascade delete handled by ON DELETE CASCADE in schema
-    await pool.execute("DELETE FROM users WHERE id = $1", str(user.id))
-
-    return {"status": "deleted", "user_id": str(user.id)}
+    return {"status": "deleted", "user_id": str(user.id), "deleted": deleted}

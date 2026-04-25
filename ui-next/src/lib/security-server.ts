@@ -32,7 +32,14 @@ export function generateCsrfToken(): string {
 }
 
 async function getCsrfSecret(): Promise<ArrayBuffer> {
-  const raw = process.env.CSRF_SECRET || process.env.API_BASE_URL || 'fallback-secret';
+  const raw = process.env.CSRF_SECRET;
+  if (!raw) {
+    throw new Error(
+      'CSRF_SECRET must be set in the server environment. ' +
+      'It must be a cryptographically random string of at least 32 bytes. ' +
+      'Do not reuse API_BASE_URL or any predictable value.'
+    );
+  }
   const enc = new TextEncoder().encode(raw);
   return crypto.subtle.digest('SHA-256', enc);
 }

@@ -21,7 +21,7 @@ try:
         if not _dotenv_loaded:
             # override=True ensures the .env file is the authoritative source
             # and that updating the file is reflected without restarting the shell.
-            load_dotenv(Path(__file__).parent.parent.parent.parent / ".env", override=True)
+            load_dotenv(Path(__file__).parent.parent.parent.parent / ".env", override=False)
             _dotenv_loaded = True
 
     _ensure_dotenv()
@@ -45,6 +45,7 @@ class Settings:
     NVIDIA_API_KEY: str | None = os.getenv("NVIDIA_API_KEY")
     OLLAMA_BASE_URL: str = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
     SEARXNG_URL: str = os.getenv("SEARXNG_URL", "http://localhost:8888")
+    SEARXNG_SECRET_KEY: str = os.getenv("SEARXNG_SECRET_KEY", "")
     ADMIN_API_KEY: str | None = os.getenv("ADMIN_API_KEY")
     REASONER_DEEP_READ_LLM: bool = os.getenv("REASONER_DEEP_READ_LLM", "1") != "0"
 
@@ -61,7 +62,7 @@ class Settings:
     # ── Server bind configuration ──
     SERVER_HOST: str = os.getenv("SERVER_HOST", "127.0.0.1")
     SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8000"))
-    UVICORN_HOST: str = os.getenv("UVICORN_HOST", "0.0.0.0")
+    UVICORN_HOST: str = os.getenv("UVICORN_HOST", "127.0.0.1")
 
     # ── CSRF ──
     CSRF_SECRET: str | None = os.getenv("CSRF_SECRET")

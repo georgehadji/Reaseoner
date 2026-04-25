@@ -32,7 +32,13 @@ class LocalAuthAdapter(AuthPort):
     """
 
     def __init__(self, secret: str | None = None):
-        self._secret = secret or os.environ.get("JWT_SECRET_KEY", "dev-secret-do-not-use")
+        raw_secret = secret or os.environ.get("JWT_SECRET_KEY")
+        if not raw_secret or len(raw_secret) < 32:
+            raise RuntimeError(
+                "JWT_SECRET_KEY must be set and at least 32 characters long. "
+                "Generate with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+            )
+        self._secret = raw_secret
         self._algorithm = "HS256"
 
     def create_token(
@@ -51,6 +57,7 @@ class LocalAuthAdapter(AuthPort):
             "iat": now,
             "exp": now + timedelta(hours=expires_in_hours),
             "iss": "reasoner-local",
+            "aud": "reasoner-api",
         }
         return jwt.encode(payload, self._secret, algorithm=self._algorithm)
 
@@ -61,6 +68,8 @@ class LocalAuthAdapter(AuthPort):
                 self._secret,
                 algorithms=[self._algorithm],
                 options={"require": ["sub", "exp"]},
+                audience="reasoner-api",
+                issuer="reasoner-local",
             )
             return User(
                 id=UUID(payload["sub"]),

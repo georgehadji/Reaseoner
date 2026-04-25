@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import os
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from reasoner.domain.saas import User, SubscriptionTier
 from reasoner.api.dependencies import get_current_user
 from reasoner.infrastructure.billing.stripe_adapter import StripeBillingAdapter
@@ -24,11 +24,15 @@ async def create_checkout(
     user: User = Depends(get_current_user),
 ):
     """Create a Stripe Checkout session for upgrading."""
+    try:
+        tier_enum = SubscriptionTier(tier.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {tier}. Must be one of: free, pro, enterprise.")
     service = _get_billing_service()
     app_url = os.environ.get("APP_URL", "http://localhost:3000")
     url = await service.create_checkout(
         str(user.id),
-        SubscriptionTier(tier),
+        tier_enum,
         success_url=f"{app_url}/dashboard?checkout=success",
         cancel_url=f"{app_url}/pricing?checkout=cancel",
     )

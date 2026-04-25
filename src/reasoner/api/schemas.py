@@ -245,6 +245,13 @@ class ContextAnalysisRequest(BaseModel):
             raise ValueError("Problem cannot be empty")
         return v
 
+    @field_validator("context")
+    @classmethod
+    def validate_context_length(cls, v: list) -> list:
+        if len(v) > 100:
+            raise ValueError("Context list cannot exceed 100 items")
+        return v
+
     @field_validator("method")
     @classmethod
     def validate_method(cls, v: str) -> str:

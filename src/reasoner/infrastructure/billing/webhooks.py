@@ -38,16 +38,14 @@ async def handle_stripe_webhook(request: Request) -> dict:
             logger.warning("Stripe webhook: invalid payload")
             return {"status": "ok"}
         except stripe.error.SignatureVerificationError:
+            from reasoner.api.metrics import STRIPE_WEBHOOK_SIG_FAILURES
+            STRIPE_WEBHOOK_SIG_FAILURES.inc()
             logger.warning("Stripe webhook: invalid signature")
             return {"status": "ok"}
     else:
-        # Dev/test mode: parse JSON directly
-        import json
-        try:
-            event = json.loads(payload)
-        except json.JSONDecodeError:
-            logger.warning("Stripe webhook: invalid JSON payload")
-            return {"status": "ok"}
+        logger.error("Stripe webhook: STRIPE_WEBHOOK_SECRET not configured. Event ignored.")
+        # Return 200 to prevent Stripe retries, but do NOT process the event
+        return {"status": "misconfigured"}
 
     event_id = event.get("id", "unknown")
     event_type = event.get("type", "unknown")

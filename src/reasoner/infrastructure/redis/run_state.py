@@ -102,13 +102,13 @@ class RunStateManager:
 
     # ── Public API ──
 
-    async def add(self, run_id: str) -> asyncio.Event:
+    async def add(self, run_id: str, user_id: str | None = None) -> asyncio.Event:
         """Register a new run and return its cancel event."""
         try:
             await self._redis_op(lambda: self._add_redis(run_id))
         except _RedisUnavailable:
             pass
-        return await self._get_fallback().add(run_id)
+        return await self._get_fallback().add(run_id, user_id=user_id)
 
     async def _add_redis(self, run_id: str) -> None:
         redis = self._get_redis()
@@ -178,6 +178,10 @@ class RunStateManager:
     def is_active(self, run_id: str) -> bool:
         """Check if a run is currently active (non-locking, best-effort)."""
         return self._get_fallback().is_active(run_id)
+
+    def get_owner(self, run_id: str) -> str | None:
+        """Return the user_id that owns a run, or None if anonymous/not found."""
+        return self._get_fallback().get_owner(run_id)
 
     @property
     def active_runs(self) -> set[str]:

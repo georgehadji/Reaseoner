@@ -6,7 +6,9 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-from reasoner.api.auth_deps import check_rate_limit, optional_auth, require_csrf
+from reasoner.api.auth_deps import check_rate_limit, require_csrf
+from reasoner.api.dependencies import get_current_user
+from reasoner.domain.saas import User
 from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file, save_uploaded_files
 
 logger = logging.getLogger(__name__)
@@ -17,7 +19,7 @@ router = APIRouter()
 async def upload_file(
     request: Request,
     force_ocr: bool = Query(False, description="Use OCR for images and scanned PDFs"),
-    authenticated=Depends(optional_auth),
+    user: User = Depends(get_current_user),
     rate_limit_checked=Depends(check_rate_limit),
     csrf_checked=Depends(require_csrf),
 ):
@@ -44,10 +46,10 @@ async def upload_file(
                 files.append((content, getattr(item, "filename", "unknown")))
 
         if len(files) == 1:
-            result = await save_uploaded_file(files[0][0], files[0][1], force_ocr=force_ocr)
+            result = await save_uploaded_file(files[0][0], files[0][1], user_id=str(user.id), force_ocr=force_ocr)
             return {"success": True, "files": [result]}
         else:
-            results = await save_uploaded_files(files, force_ocr=force_ocr)
+            results = await save_uploaded_files(files, user_id=str(user.id), force_ocr=force_ocr)
             return {"success": True, "files": results}
 
     except Exception as e:
@@ -57,21 +59,21 @@ async def upload_file(
 
 @router.get("/api/uploads")
 async def get_uploads(
-    authenticated=Depends(optional_auth),
+    user: User = Depends(get_current_user),
     rate_limit_checked=Depends(check_rate_limit),
 ):
-    """List all uploaded files."""
-    return {"files": list_uploads()}
+    """List uploaded files for the current user."""
+    return {"files": list_uploads(user_id=str(user.id))}
 
 
 @router.get("/api/upload/{file_id}")
 async def get_uploaded_file(
     file_id: str,
-    authenticated=Depends(optional_auth),
+    user: User = Depends(get_current_user),
     rate_limit_checked=Depends(check_rate_limit),
 ):
     """Get text content of an uploaded file."""
-    text = await get_file_text(file_id)
+    text = await get_file_text(file_id, user_id=str(user.id))
     if text is None:
         raise HTTPException(status_code=404, detail="File not found")
     return {"file_id": file_id, "text": text}
@@ -80,11 +82,11 @@ async def get_uploaded_file(
 @router.delete("/api/upload/{file_id}")
 async def delete_uploaded_file(
     file_id: str,
-    authenticated=Depends(optional_auth),
+    user: User = Depends(get_current_user),
     rate_limit_checked=Depends(check_rate_limit),
 ):
     """Delete an uploaded file."""
-    success = delete_file(file_id)
+    success = delete_file(file_id, user_id=str(user.id))
     if not success:
         raise HTTPException(status_code=404, detail="File not found")
     return {"status": "deleted"}

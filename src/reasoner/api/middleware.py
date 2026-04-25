@@ -23,9 +23,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
         # Critical Enhancement 6.5: CSP header
+        # Interim CSP: removed unsafe-eval (SEC-014). Full nonce-based CSP
+        # requires frontend coordination and is planned for Phase 4+.
         csp = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "img-src 'self' data: blob:; "
             "font-src 'self' data:; "
@@ -36,6 +38,25 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         response.headers["Content-Security-Policy"] = csp
         return response
+
+
+def _anonymize_ip(ip: str | None) -> str | None:
+    """Mask the last octet of IPv4 or last 64 bits of IPv6 for GDPR compliance (SEC-018)."""
+    if not ip:
+        return None
+    # IPv4: mask last octet
+    if "." in ip:
+        parts = ip.split(".")
+        if len(parts) == 4:
+            return f"{parts[0]}.{parts[1]}.{parts[2]}.0"
+        return ip
+    # IPv6: mask last 64 bits (only if we can identify 4+ parts)
+    if ":" in ip:
+        parts = [p for p in ip.split(":") if p]
+        if len(parts) >= 4:
+            return ":".join(parts[:4]) + ":0000:0000:0000:0000"
+        return ip
+    return ip
 
 
 def _sanitize_url_for_audit(url_path: str, url_query: str) -> str:
@@ -71,7 +92,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 path,
                 str(user.id) if user else None,
                 response.status_code,
-                request.client.host if request.client else None,
+                _anonymize_ip(request.client.host if request.client else None),
             )
 
         return response

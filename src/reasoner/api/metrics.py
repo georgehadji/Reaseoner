@@ -32,6 +32,11 @@ REASONER_LLM_ERRORS_TOTAL = Counter(
     ["provider"],
 )
 
+STRIPE_WEBHOOK_SIG_FAILURES = Counter(
+    "stripe_webhook_signature_failures_total",
+    "Stripe webhook signature verification failures",
+)
+
 # Latency histograms
 REASONER_QUERY_DURATION = Histogram(
     "reasoner_query_duration_seconds",

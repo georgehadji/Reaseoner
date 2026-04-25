@@ -17,11 +17,11 @@ logger = logging.getLogger(__name__)
 
 # Try to import optional dependencies
 try:
-    import PyPDF2
+    from pypdf import PdfReader
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
-    logger.warning("PyPDF2 not available - PDF extraction disabled")
+    logger.warning("pypdf not available - PDF extraction disabled")
 
 try:
     import docx
@@ -79,11 +79,10 @@ def _extract_txt(content: bytes) -> str:
 def _extract_pdf(content: bytes) -> str:
     """Extract text from PDF file."""
     if not PDF_AVAILABLE:
-        return "[PDF extraction not available - install PyPDF2]"
-    
+        return "[PDF extraction not available - install pypdf]"
+
     try:
         import io
-        from PyPDF2 import PdfReader
         reader = PdfReader(io.BytesIO(content))
         text_parts = []
         for page in reader.pages:
@@ -201,13 +200,14 @@ async def extract_text(content: bytes, filename: str, *, force_ocr: bool = False
 
 
 async def save_uploaded_files(
-    files: list[tuple[bytes, str]], *, force_ocr: bool = False
+    files: list[tuple[bytes, str]], user_id: str | None = None, *, force_ocr: bool = False
 ) -> list[dict[str, Any]]:
     """
     Save multiple uploaded files and extract their text content.
 
     Args:
         files: List of (content, filename) tuples
+        user_id: Owner user ID
         force_ocr: If True, use OCR for images and scanned PDFs
 
     Returns:
@@ -215,13 +215,13 @@ async def save_uploaded_files(
     """
     results = []
     for content, filename in files:
-        result = await save_uploaded_file(content, filename, force_ocr=force_ocr)
+        result = await save_uploaded_file(content, filename, user_id=user_id, force_ocr=force_ocr)
         results.append(result)
     return results
 
 
 async def save_uploaded_file(
-    content: bytes, filename: str, *, force_ocr: bool = False
+    content: bytes, filename: str, user_id: str | None = None, *, force_ocr: bool = False
 ) -> dict[str, Any]:
     """
     Save an uploaded file and extract its text content.
@@ -334,6 +334,14 @@ async def save_uploaded_file(
             ".webp": "image/webp",
         }.get(ext, "application/octet-stream")
 
+        # Persist ownership metadata
+        meta_path = UPLOAD_DIR / f"{file_id}.meta.json"
+        import json
+        meta_path.write_text(
+            json.dumps({"user_id": user_id, "filename": filename, "created_at": str(uuid.uuid4())}),
+            encoding="utf-8",
+        )
+
         return {
             "success": True,
             "file_id": file_id,
@@ -342,6 +350,7 @@ async def save_uploaded_file(
             "mime_type": mime_type,
             "text": text_content,
             "path": str(file_path),
+            "user_id": user_id,
         }
 
     except Exception as e:
@@ -352,19 +361,38 @@ async def save_uploaded_file(
         }
 
 
-async def get_file_text(file_id: str) -> Optional[str]:
+def _get_upload_meta(file_id: str) -> dict | None:
+    """Read upload metadata if it exists."""
+    meta_path = UPLOAD_DIR / f"{file_id}.meta.json"
+    if meta_path.exists():
+        import json
+        try:
+            return json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            return None
+    return None
+
+
+async def get_file_text(file_id: str, user_id: str | None = None) -> Optional[str]:
     """
     Retrieve extracted text from a previously uploaded file.
     
     Args:
         file_id: The file ID returned from save_uploaded_file
+        user_id: If provided, enforce ownership check
         
     Returns:
-        Extracted text content or None if not found
+        Extracted text content or None if not found or not authorized
     """
     # Validate file_id to prevent glob injection (e.g., empty string -> '*', '*' -> '**')
     if not file_id or not re.match(r'^[a-f0-9-]+$', file_id):
         return None
+    
+    # Ownership check
+    if user_id is not None:
+        meta = _get_upload_meta(file_id)
+        if meta is None or meta.get("user_id") != user_id:
+            return None
     
     # Look for exact file by known extensions instead of globbing
     for ext in SUPPORTED_EXTENSIONS:
@@ -379,19 +407,26 @@ async def get_file_text(file_id: str) -> Optional[str]:
     return None
 
 
-def delete_file(file_id: str) -> bool:
+def delete_file(file_id: str, user_id: str | None = None) -> bool:
     """
     Delete an uploaded file and its vector sidecar.
 
     Args:
         file_id: The file ID to delete
+        user_id: If provided, enforce ownership check
 
     Returns:
-        True if deleted, False if not found
+        True if deleted, False if not found or not authorized
     """
     # Validate file_id to prevent glob injection
     if not file_id or not re.match(r'^[a-f0-9-]+$', file_id):
         return False
+
+    # Ownership check
+    if user_id is not None:
+        meta = _get_upload_meta(file_id)
+        if meta is None or meta.get("user_id") != user_id:
+            return False
 
     deleted = False
     # Look for exact file by known extensions instead of globbing
@@ -403,6 +438,14 @@ def delete_file(file_id: str) -> bool:
                 deleted = True
             except Exception as e:
                 logger.error(f"Failed to delete file {file_id}: {e}")
+
+    # Clean up metadata sidecar
+    meta_path = UPLOAD_DIR / f"{file_id}.meta.json"
+    if meta_path.exists():
+        try:
+            meta_path.unlink()
+        except Exception as e:
+            logger.warning(f"Failed to delete metadata for {file_id}: {e}")
 
     # Clean up vector sidecar if present
     if deleted:
@@ -416,21 +459,29 @@ def delete_file(file_id: str) -> bool:
     return deleted
 
 
-def list_uploads() -> list[dict[str, Any]]:
+def list_uploads(user_id: str | None = None) -> list[dict[str, Any]]:
     """
-    List all uploaded files.
+    List uploaded files.
     
+    Args:
+        user_id: If provided, filter to this user's uploads
+        
     Returns:
         List of file info dictionaries
     """
     files = []
     for f in UPLOAD_DIR.iterdir():
-        if f.is_file():
-            stat = f.stat()
-            files.append({
-                "file_id": f.stem[:12],
-                "filename": f.name[12:],  # Remove ID prefix
-                "size": stat.st_size,
-                "created": stat.st_ctime,
-            })
+        if not f.is_file() or f.suffix == ".json":
+            continue
+        file_id = f.stem[:12]
+        meta = _get_upload_meta(file_id)
+        if user_id is not None and (meta is None or meta.get("user_id") != user_id):
+            continue
+        stat = f.stat()
+        files.append({
+            "file_id": file_id,
+            "filename": meta.get("filename", f.name[12:]) if meta else f.name[12:],
+            "size": stat.st_size,
+            "created": stat.st_ctime,
+        })
     return sorted(files, key=lambda x: x["created"], reverse=True)

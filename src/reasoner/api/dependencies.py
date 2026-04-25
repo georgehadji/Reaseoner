@@ -73,6 +73,12 @@ async def _resolve_auth_token(token: str) -> User:
 
     # Legacy API key path (only if explicitly enabled)
     if os.environ.get("ENABLE_LEGACY_API_KEY", "false").lower() == "true":
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(
+            "Legacy API key authentication is enabled. This is deprecated and will be removed in v2.3. "
+            "Migrate to JWT authentication."
+        )
         from reasoner.auth import get_auth_manager
         auth_manager = get_auth_manager()
         try:
@@ -179,7 +185,7 @@ async def check_rate_limit(
         else:
             ip = request.client.host if request.client else "unknown"
         user_agent = request.headers.get("User-Agent", "")
-        client_id = f"{ip}:{hashlib.md5(user_agent.encode()).hexdigest()[:8]}"
+        client_id = f"{ip}:{hashlib.sha256(user_agent.encode()).hexdigest()[:8]}"
         allowed, info = await rate_limiter.is_allowed(client_id)
 
     request.state.rate_limit_info = info
@@ -268,11 +274,29 @@ async def check_preset_access(
     Raises HTTPException 403 if preset requires higher tier.
     """
     required = get_preset_tier(preset)
-    # TODO Phase 4: fetch user's actual tier and compare
-    # For Phase 3, we only gate if the preset is premium (placeholder logic)
-    if required == SubscriptionTier.PRO:
-        # Allow through for now; full enforcement in Phase 4 after Stripe integration
+    if required == SubscriptionTier.FREE:
+        return
+
+    tier_order = {SubscriptionTier.FREE: 0, SubscriptionTier.PRO: 1, SubscriptionTier.ENTERPRISE: 2}
+
+    # Fetch user's subscription tier from DB
+    user_tier = SubscriptionTier.FREE
+    try:
+        from reasoner.infrastructure.persistence.subscription_repo import PostgresSubscriptionRepository
+        dsn = settings.DATABASE_URL.replace("+asyncpg", "")
+        repo = PostgresSubscriptionRepository(dsn, pool_size=2)
+        sub = await repo.get_subscription_by_user(str(user.id))
+        if sub is not None and sub.status.value == "active":
+            user_tier = sub.tier
+    except Exception:
+        # If DB is unavailable, fall back to free tier (conservative)
         pass
+
+    if tier_order[user_tier] < tier_order[required]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Preset '{preset}' requires {required.value} tier. Upgrade at /pricing.",
+        )
 
 
 async def check_quota_if_authenticated(

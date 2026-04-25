@@ -26,14 +26,16 @@ class RunStateStore:
     def __init__(self) -> None:
         self._cancel_events: dict[str, asyncio.Event] = {}
         self._active_runs: set[str] = set()
+        self._run_owners: dict[str, str | None] = {}
         self._lock = asyncio.Lock()
 
-    async def add(self, run_id: str) -> asyncio.Event:
+    async def add(self, run_id: str, user_id: str | None = None) -> asyncio.Event:
         """Register a new run and return its cancel event."""
         async with self._lock:
             event = asyncio.Event()
             self._cancel_events[run_id] = event
             self._active_runs.add(run_id)
+            self._run_owners[run_id] = user_id
             return event
 
     async def remove(self, run_id: str) -> None:
@@ -41,6 +43,7 @@ class RunStateStore:
         async with self._lock:
             self._active_runs.discard(run_id)
             self._cancel_events.pop(run_id, None)
+            self._run_owners.pop(run_id, None)
 
     async def get_cancel_event(self, run_id: str) -> asyncio.Event | None:
         """Get the cancel event for a run, or None if not found."""
@@ -76,6 +79,10 @@ class RunStateStore:
         """Check if a run is currently active (non-locking, best-effort)."""
         return run_id in self._active_runs
 
+    def get_owner(self, run_id: str) -> str | None:
+        """Return the user_id that owns a run, or None if anonymous/not found."""
+        return self._run_owners.get(run_id)
+
     @property
     def active_runs(self) -> set[str]:
         """Return a snapshot of active run IDs."""
@@ -88,6 +95,7 @@ class RunStateStore:
                 event.set()
             self._cancel_events.clear()
             self._active_runs.clear()
+            self._run_owners.clear()
 
 
 # Module-level singleton — shared across the API layer.

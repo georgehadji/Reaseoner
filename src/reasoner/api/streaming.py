@@ -314,9 +314,13 @@ async def _recall_neuro_context(problem: str, agent_id: str | None = None) -> li
     return []
 
 
-async def run_stream(req: RunRequest, initial_state: PipelineState | None = None) -> AsyncGenerator[str, None]:
+async def run_stream(
+    req: RunRequest,
+    initial_state: PipelineState | None = None,
+    user_id: str | None = None,
+) -> AsyncGenerator[str, None]:
     run_id = req.client_run_id or str(uuid.uuid4())
-    cancel_event = await _run_store.add(run_id)
+    cancel_event = await _run_store.add(run_id, user_id=user_id)
     try:
         # ── Neuro Recall ──
         recalled_chunks: list[dict[str, Any]] = []
@@ -592,6 +596,7 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
 
             entry = HistoryEntry(
                 id=hashlib.sha256(f"{req.problem}{datetime.now().isoformat()}".encode()).hexdigest()[:16],
+                user_id=user_id,
                 problem=req.problem[:TRUNCATION.API_STORAGE],
                 preset=req.preset,
                 method=get_method_from_preset(req.preset),
@@ -662,7 +667,9 @@ async def run_stream(req: RunRequest, initial_state: PipelineState | None = None
         await _run_store.remove(run_id)
 
 
-async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]:
+async def run_followup_stream(
+    req: FollowupRequest, user_id: str | None = None
+) -> AsyncGenerator[str, None]:
     """Run the full ARA pipeline for a follow-up question with conversation context."""
     from reasoner.presets import FOLLOWUP_AGENT_MODELS
 
@@ -692,7 +699,7 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
         attachments=getattr(req, "attachments", []) or [],
         client_run_id=req.client_run_id,
     )
-    async for chunk in run_stream(run_req, initial_state=state):
+    async for chunk in run_stream(run_req, initial_state=state, user_id=user_id):
         yield chunk
 
     try:
@@ -724,7 +731,7 @@ async def run_followup_stream(req: FollowupRequest) -> AsyncGenerator[str, None]
         pass
 
 
-async def run_stream_cached(req: RunRequest) -> AsyncGenerator[str, None]:
+async def run_stream_cached(req: RunRequest, user_id: str | None = None) -> AsyncGenerator[str, None]:
     key = _cache_key(req)
     if not req.no_cache:
         cached = await _load_cache(key)
@@ -740,7 +747,7 @@ async def run_stream_cached(req: RunRequest) -> AsyncGenerator[str, None]:
                 logger.info(f"Ignoring cached result for {key} due to stored errors.")
 
     collected: list[dict] = []
-    async for chunk in run_stream(req):
+    async for chunk in run_stream(req, user_id=user_id):
         yield chunk
         if chunk.startswith("data: "):
             try:

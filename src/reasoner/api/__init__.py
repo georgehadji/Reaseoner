@@ -148,6 +148,11 @@ if _env == "production":
     _allowed_origins = [_app_url] if _app_url else []
 else:
     _allowed_origins = settings.cors_origins_list
+    logger.warning(
+        "CORS is in development mode with allow_credentials=True. "
+        "Ensure no malicious sites are running on allowed origins: %s",
+        _allowed_origins,
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -346,7 +351,7 @@ async def _run_stream_with_metrics(req: RunRequest, user: User | None):
 
     has_error = False
     try:
-        async for chunk in run_stream_cached(req):
+        async for chunk in run_stream_cached(req, user_id=str(user.id) if user else None):
             yield chunk
     except Exception:
         has_error = True
@@ -358,6 +363,15 @@ async def _run_stream_with_metrics(req: RunRequest, user: User | None):
             preset=preset,
             status="error" if has_error else "success",
         ).inc()
+
+
+def _require_auth_if_legacy_disabled(user: User | None) -> None:
+    """Backward-compat gate: require auth when legacy API key mode is disabled."""
+    if user is None and os.environ.get("ENABLE_LEGACY_API_KEY", "false").lower() != "true":
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required. Set ENABLE_LEGACY_API_KEY=true for v1 backward compatibility.",
+        )
 
 
 @app.post("/api/run")
@@ -375,7 +389,7 @@ async def run_pipeline(
 
     Authenticated users get higher rate limits and priority processing.
     """
-    # TODO Phase 3: if user is None and ENABLE_LEGACY_API_KEY=false → 401
+    _require_auth_if_legacy_disabled(user)
     # TODO Phase 4: use actual user tier from subscription DB
     return StreamingResponse(
         _run_stream_with_metrics(req, user),
@@ -393,14 +407,16 @@ async def run_pipeline(
 async def run_followup_pipeline(
     request: Request,
     req: FollowupRequest,
+    user: User | None = Depends(get_optional_user),
     rate_limit_checked = Depends(check_rate_limit),
     csrf_checked = Depends(require_csrf),
 ):
     """
     Run the ARA pipeline for a follow-up question with full conversation context.
     """
+    _require_auth_if_legacy_disabled(user)
     return StreamingResponse(
-        run_followup_stream(req),
+        run_followup_stream(req, user_id=str(user.id) if user else None),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -414,8 +430,10 @@ async def run_followup_pipeline(
 @app.post("/api/search")
 async def search_web(
     req: SearchRequest,
+    user: User | None = Depends(get_optional_user),
     rate_limit_checked = Depends(check_rate_limit)
 ):
+    _require_auth_if_legacy_disabled(user)
     """
     Advanced web search via SearXNG.
     Returns raw discovery results. When smart=True, the query is decomposed
@@ -467,13 +485,40 @@ async def clear_cache(
 @app.post("/api/stop")
 async def stop_pipeline(
     run_id: str | None = None,
+    user: User | None = Depends(get_optional_user),
     csrf_checked = Depends(require_csrf),
 ):
+    """Cancel a running pipeline.
+
+    Authenticated users can only cancel their own runs.
+    Global stop (no run_id) requires admin scope.
+    """
+    # Detect whether we're in a real FastAPI call or a direct function call.
+    # In direct calls, Depends() objects are passed through instead of resolved.
+    from fastapi import params
+    is_authenticated = isinstance(user, User)
+
     # If a specific run_id is provided, cancel only that run.
-    # Otherwise cancel all active runs (global stop, e.g. from the UI stop button).
     if run_id:
-        targets = [run_id] if _run_store.is_active(run_id) else []
+        if not _run_store.is_active(run_id):
+            return {"status": "not found", "cancelled": []}
+        run_owner = _run_store.get_owner(run_id)
+        # If the run has an owner, only that owner (or admin) can cancel it
+        if run_owner and (not is_authenticated or str(user.id) != run_owner):
+            # TODO: check admin scope when role-based auth is added
+            raise HTTPException(
+                status_code=403,
+                detail="Cannot cancel another user's run",
+            )
+        targets = [run_id]
     else:
+        # Global stop: only allow if user is authenticated
+        # TODO Phase 4: restrict to admin scope
+        if not is_authenticated:
+            raise HTTPException(
+                status_code=401,
+                detail="Authentication required for global stop",
+            )
         targets = list(_run_store.active_runs)
 
     for rid in targets:

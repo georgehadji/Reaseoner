@@ -8,6 +8,8 @@ import time
 from fastapi import APIRouter, Depends
 
 from reasoner.api.auth_deps import require_csrf
+from reasoner.api.dependencies import get_current_user
+from reasoner.domain.saas import User
 
 from reasoner.application.queries import GetPipelineStatusQuery
 
@@ -16,7 +18,7 @@ router = APIRouter()
 
 
 @router.get("/api/events/stats")
-async def get_event_stats():
+async def get_event_stats(user: User = Depends(get_current_user)):
     """Get event store statistics."""
     try:
         from reasoner.api import get_architecture_components
@@ -31,6 +33,7 @@ async def get_event_stats():
 
 @router.get("/api/pipelines")
 async def list_pipelines(
+    user: User = Depends(get_current_user),
     limit: int = 50,
     offset: int = 0,
     status: str | None = None,
@@ -52,7 +55,10 @@ async def list_pipelines(
 
 
 @router.get("/api/pipelines/{pipeline_id}")
-async def get_pipeline_status(pipeline_id: str):
+async def get_pipeline_status(
+    pipeline_id: str,
+    user: User = Depends(get_current_user),
+):
     """Get pipeline status from event store."""
     try:
         from reasoner.api import get_architecture_components
@@ -75,6 +81,7 @@ async def get_pipeline_status(pipeline_id: str):
 @router.post("/api/pipelines/{pipeline_id}/resume")
 async def resume_pipeline(
     pipeline_id: str,
+    user: User = Depends(get_current_user),
     csrf_checked=Depends(require_csrf),
 ):
     """Resume a paused/failed pipeline from event history."""
@@ -100,6 +107,7 @@ async def resume_pipeline(
 @router.post("/api/pipelines/{pipeline_id}/resume-stream")
 async def resume_pipeline_stream(
     pipeline_id: str,
+    user: User = Depends(get_current_user),
     csrf_checked=Depends(require_csrf),
 ):
     """Resume a pipeline by reconstructing its context and starting a fresh stream.
@@ -153,7 +161,7 @@ async def resume_pipeline_stream(
             "phases_completed": result.get("phases_completed", []),
             "previous_synthesis": result.get("previous_synthesis", ""),
         })
-        async for chunk in run_stream(req):
+        async for chunk in run_stream(req, user_id=str(user.id)):
             yield chunk
 
     return StreamingResponse(
@@ -169,6 +177,7 @@ async def resume_pipeline_stream(
 @router.delete("/api/pipelines/{pipeline_id}")
 async def delete_pipeline(
     pipeline_id: str,
+    user: User = Depends(get_current_user),
     csrf_checked=Depends(require_csrf),
 ):
     """Delete pipeline and all events (GDPR compliance)."""

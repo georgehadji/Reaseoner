@@ -33,7 +33,6 @@ class QuotaService:
     async def check(
         self,
         user_id: str,
-        preset: str,
         tier: SubscriptionTier,
     ) -> QuotaResult:
         """
@@ -68,14 +67,14 @@ class QuotaService:
 
         return QuotaResult(allowed=True, remaining=remaining)
 
-    async def increment(self, user_id: str) -> QuotaResult:
+    async def increment(self, user_id: str, preset: str = "") -> QuotaResult:
         """
         Increment used_queries by 1 after a successful pipeline run.
 
         ⚠️ CRITICAL (Enhancement 1.2): This was a no-op stub. Now delegates to repository.
         Must include idempotency key to prevent double-counting on retries.
         """
-        return await self._repository.check_and_increment(user_id, preset="")
+        return await self._repository.check_and_increment(user_id, preset=preset)
 
     def _seconds_until_month_end(self) -> int:
         """Rough estimate for Retry-After header."""

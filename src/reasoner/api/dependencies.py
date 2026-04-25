@@ -17,13 +17,17 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from reasoner.domain.saas import User, SubscriptionTier
+from reasoner.domain.saas import User, SubscriptionTier, QuotaResult
 from reasoner.application.ports.auth_port import AuthPort
 from reasoner.application.services.auth_service import AuthService
+from reasoner.application.services.quota_service import QuotaService, TIER_LIMITS
 from reasoner.infrastructure.auth import get_auth_adapter
+from reasoner.infrastructure.persistence.quota_repo_postgres import PostgresQuotaRepository
+from reasoner.infrastructure.persistence.cached_quota_repo import CachedQuotaRepository
 from reasoner.auth import AuthenticationError as LegacyAuthError
 from reasoner.core.settings import settings
 from reasoner.rate_limiter import RateLimitConfig, get_rate_limiter
+from reasoner.presets import get_preset_tier
 
 security = HTTPBearer(auto_error=False)
 rate_limiter = get_rate_limiter(
@@ -189,3 +193,85 @@ async def check_rate_limit(
             },
         )
     return True
+
+
+# ── Quota Service Singleton ──
+_quota_service: QuotaService | None = None
+
+
+def _get_quota_service() -> QuotaService:
+    """Factory for QuotaService with cached Postgres repository.
+
+    Caches the service instance to avoid creating new connection pools
+    on every request (Critical Enhancement 3.1).
+    """
+    global _quota_service
+    if _quota_service is None:
+        dsn = settings.DATABASE_URL.replace("+asyncpg", "")
+        pg_repo = PostgresQuotaRepository(dsn, pool_size=int(os.environ.get("DB_POOL_SIZE", "10")))
+        cached_repo = CachedQuotaRepository(pg_repo)
+        _quota_service = QuotaService(cached_repo)
+    return _quota_service
+
+
+def _reset_quota_service() -> None:
+    """Reset quota service singleton (useful for tests)."""
+    global _quota_service
+    _quota_service = None
+
+
+async def check_quota(
+    user: User = Depends(get_current_user),
+) -> QuotaResult:
+    """
+    FastAPI dependency: check if user has remaining quota.
+    Raises HTTPException 429 if exceeded.
+    """
+    # TODO Phase 4: fetch actual subscription tier from DB
+    # For now, use free tier as conservative default
+    user_tier = SubscriptionTier.FREE
+
+    service = _get_quota_service()
+    result = await service.check(str(user.id), user_tier)
+
+    if not result.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "Quota exceeded",
+                "message": result.reason,
+                "remaining": result.remaining,
+                "retry_after": result.retry_after,
+                "upgrade_url": "/pricing",
+            },
+            headers={
+                "Retry-After": str(result.retry_after or 3600),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
+    return result
+
+
+async def check_preset_access(
+    preset: str,
+    user: User = Depends(get_current_user),
+) -> None:
+    """
+    FastAPI dependency: enforce preset tier requirements.
+    Raises HTTPException 403 if preset requires higher tier.
+    """
+    required = get_preset_tier(preset)
+    # TODO Phase 4: fetch user's actual tier and compare
+    # For Phase 3, we only gate if the preset is premium (placeholder logic)
+    if required == SubscriptionTier.PRO:
+        # Allow through for now; full enforcement in Phase 4 after Stripe integration
+        pass
+
+
+async def check_quota_if_authenticated(
+    user: User | None = Depends(get_optional_user),
+) -> QuotaResult | None:
+    """Only check quota if user is authenticated."""
+    if user is None:
+        return None
+    return await check_quota(user)

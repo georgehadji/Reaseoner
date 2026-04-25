@@ -261,8 +261,8 @@ from reasoner.api.streaming import (
 )
 
 from reasoner.api.auth_deps import optional_auth, require_csrf
-from reasoner.api.dependencies import check_rate_limit, get_current_user, get_optional_user
-from reasoner.domain.saas import User
+from reasoner.api.dependencies import check_rate_limit, get_current_user, get_optional_user, check_quota_if_authenticated
+from reasoner.domain.saas import User, QuotaResult
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -283,6 +283,7 @@ async def run_pipeline(
     user: User | None = Depends(get_optional_user),
     authenticated = Depends(optional_auth),
     rate_limit_checked = Depends(check_rate_limit),
+    quota: QuotaResult | None = Depends(check_quota_if_authenticated),
     csrf_checked = Depends(require_csrf),
 ):
     """
@@ -291,7 +292,7 @@ async def run_pipeline(
     Authenticated users get higher rate limits and priority processing.
     """
     # TODO Phase 3: if user is None and ENABLE_LEGACY_API_KEY=false → 401
-    # TODO Phase 3: use user.id for rate limit bucket and quota check
+    # TODO Phase 4: use actual user tier from subscription DB
     return StreamingResponse(
         run_stream_cached(req),
         media_type="text/event-stream",

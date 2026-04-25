@@ -52,6 +52,12 @@ class RateLimiter:
     
     from reasoner.core.constants import MAX_RATE_LIMIT_BUCKETS
     _MAX_BUCKETS: int = MAX_RATE_LIMIT_BUCKETS
+
+try:
+    from reasoner.api.metrics import REASONER_RATE_LIMIT_REJECTED
+    _METRICS_AVAILABLE = True
+except Exception:
+    _METRICS_AVAILABLE = False
     
     def __init__(self, config: Optional[RateLimitConfig] = None):
         self.config = config or RateLimitConfig()
@@ -212,11 +218,15 @@ class RateLimiter:
             if bucket.requests_minute >= rpm:
                 info["retry_after"] = 60 - (time.time() - bucket.minute_window_start)
                 info["reason"] = "per_minute_limit"
+                if _METRICS_AVAILABLE:
+                    REASONER_RATE_LIMIT_REJECTED.labels(tier=tier).inc()
                 return False, info
 
             if bucket.requests_hour >= rph:
                 info["retry_after"] = 3600 - (time.time() - bucket.hour_window_start)
                 info["reason"] = "per_hour_limit"
+                if _METRICS_AVAILABLE:
+                    REASONER_RATE_LIMIT_REJECTED.labels(tier=tier).inc()
                 return False, info
 
             if bucket.tokens < 1:
@@ -224,6 +234,8 @@ class RateLimiter:
                 refill_rate = (self.config.requests_per_minute * multiplier) / 60.0
                 info["retry_after"] = tokens_needed / refill_rate
                 info["reason"] = "burst_limit"
+                if _METRICS_AVAILABLE:
+                    REASONER_RATE_LIMIT_REJECTED.labels(tier=tier).inc()
                 return False, info
 
             bucket.tokens -= 1

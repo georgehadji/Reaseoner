@@ -15,6 +15,7 @@ from reasoner.core.constants import (
     TIMEOUTS,
     TRUNCATION,
     VALIDATION_TEST_MAX_TOKENS,
+    get_phase_timeout,
 )
 from reasoner.hypergate import HyperGateAgent
 from reasoner.llm import ProviderRouter, _REGISTRY
@@ -468,12 +469,19 @@ async def run_stream(
                     continue
             return models
 
-        async def _run_phase_cancellable(coro_fn, state: PipelineState) -> bool:
-            """Run a phase coroutine; cancel it if cancel_event fires. Returns True if cancelled."""
+        async def _run_phase_cancellable(
+            coro_fn, state: PipelineState, timeout_seconds: float = 90.0
+        ) -> bool:
+            """Run a phase coroutine; cancel it if cancel_event fires or timeout expires.
+
+            Returns True if cancelled by user, False if completed.
+            Raises asyncio.TimeoutError if the phase exceeds timeout_seconds.
+            """
             phase_task = asyncio.ensure_future(coro_fn(state))
             cancel_task = asyncio.ensure_future(cancel_event.wait())
+            timeout_task = asyncio.ensure_future(asyncio.sleep(timeout_seconds))
             done, pending = await asyncio.wait(
-                {phase_task, cancel_task},
+                {phase_task, cancel_task, timeout_task},
                 return_when=asyncio.FIRST_COMPLETED,
             )
             for t in pending:
@@ -482,8 +490,19 @@ async def run_stream(
                     await t
                 except (asyncio.CancelledError, Exception):
                     pass
+            if timeout_task in done:
+                # Timeout expired — cancel the phase task
+                if not phase_task.done():
+                    phase_task.cancel()
+                    try:
+                        await phase_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                raise asyncio.TimeoutError(
+                    f"Phase timed out after {timeout_seconds}s"
+                )
             if cancel_task in done:
-                # Cancel the phase task if still running
+                # User cancelled — cancel the phase task if still running
                 if not phase_task.done():
                     phase_task.cancel()
                     try:
@@ -513,10 +532,31 @@ async def run_stream(
             yield _event(start_payload)
             phase_start = time.monotonic()
             try:
-                cancelled = await _run_phase_cancellable(fn, state)
+                phase_timeout = get_phase_timeout(name)
+                cancelled = await _run_phase_cancellable(fn, state, timeout_seconds=phase_timeout)
                 if cancelled:
                     yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
                     return
+            except asyncio.TimeoutError as exc:
+                logger.error("Phase %s (%s) timed out after %ss", num, name, phase_timeout)
+                err_msg = f"Phase timeout: {name} exceeded {phase_timeout}s"
+                state.errors.append(err_msg)
+                err_payload = {
+                    "type": "error",
+                    "error_type": "timeout",
+                    "message": err_msg,
+                    "retryable": True,
+                    "retry_after": 5,
+                    "phase": num,
+                    "phase_name": name,
+                }
+                await _broadcast_ws(run_id, err_payload)
+                yield _event(err_payload)
+                await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
+                yield _event({"type": "phase_error", "phase": num, "error": err_msg})
+                if name in CRITICAL_PHASES:
+                    break
+                continue
             except Exception as exc:
                 logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
                 err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"

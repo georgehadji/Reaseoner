@@ -8,6 +8,12 @@ import threading
 import time
 from pathlib import Path
 
+try:
+    from reasoner.api.metrics import REASONER_CACHE_HIT_RATE, REASONER_CACHE_ENTRIES
+    _METRICS_AVAILABLE = True
+except Exception:
+    _METRICS_AVAILABLE = False
+
 CACHE_DIR = Path(__file__).parent.parent / "cache"
 CACHE_DIR.mkdir(exist_ok=True)
 
@@ -87,6 +93,10 @@ async def _load_cache(key: str) -> list[dict] | None:
     with _memory_cache_lock:
         if key in _MEMORY_CACHE:
             _cache_hits += 1
+            if _METRICS_AVAILABLE:
+                total = _cache_hits + _cache_misses
+                REASONER_CACHE_HIT_RATE.set(_cache_hits / total if total > 0 else 0.0)
+                REASONER_CACHE_ENTRIES.set(len(_MEMORY_CACHE))
             return _MEMORY_CACHE[key]
 
     # 2. Fall back to disk
@@ -107,6 +117,10 @@ async def _load_cache(key: str) -> list[dict] | None:
                 pass
     with _memory_cache_lock:
         _cache_misses += 1
+        if _METRICS_AVAILABLE:
+            total = _cache_hits + _cache_misses
+            REASONER_CACHE_HIT_RATE.set(_cache_hits / total if total > 0 else 0.0)
+            REASONER_CACHE_ENTRIES.set(len(_MEMORY_CACHE))
     return None
 
 

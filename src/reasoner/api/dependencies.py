@@ -17,6 +17,7 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from reasoner.api.client_ip import get_client_ip
 from reasoner.domain.saas import User, SubscriptionTier, QuotaResult
 from reasoner.application.ports.auth_port import AuthPort
 from reasoner.application.services.auth_service import AuthService
@@ -179,11 +180,7 @@ async def check_rate_limit(
         allowed, info = await rate_limiter.is_allowed_for_user(client_id, tier="default")
     else:
         # Anonymous — use IP + User-Agent hash
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",")[0].strip()
-        else:
-            ip = request.client.host if request.client else "unknown"
+        ip = get_client_ip(request)
         user_agent = request.headers.get("User-Agent", "")
         client_id = f"{ip}:{hashlib.sha256(user_agent.encode()).hexdigest()[:8]}"
         allowed, info = await rate_limiter.is_allowed(client_id)

@@ -29,6 +29,8 @@ def init_sentry() -> None:
     if not dsn:
         return
 
+    from reasoner.core.settings import settings
+
     sentry_sdk.init(
         dsn=dsn,
         environment=os.environ.get("ENVIRONMENT", "development"),
@@ -36,6 +38,6 @@ def init_sentry() -> None:
             StarletteIntegration(),
             FastApiIntegration(),
         ],
-        traces_sample_rate=1.0,  # Critical Enhancement 7.5: start high, reduce later
+        traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
         profiles_sample_rate=0.1,
     )

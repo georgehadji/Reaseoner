@@ -41,17 +41,22 @@ class StripeBillingAdapter(BillingPort):
 
     async def create_portal_session(self, user_id: str, return_url: str) -> str:
         # Lookup Stripe customer by user_id (stored in metadata)
+        # NOTE: stripe.Customer.list does not filter by metadata server-side.
+        # We iterate and match locally for correctness.
         customers = await asyncio.to_thread(
             stripe.Customer.list,
-            limit=1,
-            metadata={"reasoner_user_id": user_id},
+            limit=100,
         )
-        if not customers.data:
+        matching = [
+            c for c in customers.auto_paging_iter()
+            if c.metadata.get("reasoner_user_id") == user_id
+        ]
+        if not matching:
             raise ValueError(f"No Stripe customer found for user {user_id}")
 
         session = await asyncio.to_thread(
             stripe.billing_portal.Session.create,
-            customer=customers.data[0].id,
+            customer=matching[0].id,
             return_url=return_url,
         )
         return session.url
@@ -66,6 +71,8 @@ class StripeBillingAdapter(BillingPort):
             return await self._handle_subscription_updated(data)
         elif event_type == "customer.subscription.deleted":
             return await self._handle_subscription_deleted(data)
+        elif event_type == "invoice.payment_failed":
+            return await self._handle_payment_failed(data)
 
         # Return a no-op subscription for unhandled events
         return Subscription(
@@ -112,8 +119,12 @@ class StripeBillingAdapter(BillingPort):
             stripe_customer_id=stripe_sub.get("customer"),
         )
 
-    def _stripe_sub_to_domain(self, stripe_sub: dict, user_id: UUID) -> Subscription:
-        tier = self._tier_from_price(stripe_sub["items"]["data"][0]["price"]["id"])
+    def _stripe_sub_to_domain(self, stripe_sub, user_id: UUID) -> Subscription:
+        # stripe_sub may be a StripeObject or dict — normalize to dict
+        sub_dict = dict(stripe_sub) if not isinstance(stripe_sub, dict) else stripe_sub
+        items = sub_dict.get("items", {}).get("data", []) if isinstance(sub_dict.get("items"), dict) else []
+        price_id = items[0]["price"]["id"] if items else None
+        tier = self._tier_from_price(price_id) if price_id else SubscriptionTier.FREE
         status_map = {
             "active": SubscriptionStatus.ACTIVE,
             "canceled": SubscriptionStatus.CANCELLED,
@@ -121,13 +132,13 @@ class StripeBillingAdapter(BillingPort):
             "trialing": SubscriptionStatus.TRIALING,
         }
         return Subscription(
-            id=uuid4(),  # Enhancement 4.5: use uuid4() instead of UUID(int=0)
+            id=uuid4(),
             user_id=user_id,
             tier=tier,
-            status=status_map.get(stripe_sub["status"], SubscriptionStatus.CANCELLED),
-            stripe_subscription_id=stripe_sub["id"],
-            stripe_customer_id=stripe_sub.get("customer"),
-            current_period_end=self._timestamp_to_datetime(stripe_sub.get("current_period_end")),
+            status=status_map.get(sub_dict.get("status"), SubscriptionStatus.CANCELLED),
+            stripe_subscription_id=sub_dict.get("id"),
+            stripe_customer_id=sub_dict.get("customer"),
+            current_period_end=self._timestamp_to_datetime(sub_dict.get("current_period_end")),
         )
 
     def _tier_from_price(self, price_id: str) -> SubscriptionTier:
@@ -140,8 +151,33 @@ class StripeBillingAdapter(BillingPort):
     async def cancel_subscription(self, stripe_subscription_id: str) -> None:
         """Immediately cancel a Stripe subscription."""
         await asyncio.to_thread(
-            stripe.Subscription.delete,
+            stripe.Subscription.cancel,
             stripe_subscription_id,
+        )
+
+    async def _handle_payment_failed(self, invoice: dict) -> Subscription:
+        # Extract subscription ID from the invoice
+        subscription_id = invoice.get("subscription")
+        if not subscription_id:
+            # No subscription linked — return no-op
+            return Subscription(
+                id=uuid4(),
+                user_id=uuid4(),
+                tier=SubscriptionTier.FREE,
+                status=SubscriptionStatus.CANCELLED,
+            )
+        stripe_sub = await asyncio.to_thread(stripe.Subscription.retrieve, subscription_id)
+        customer = await asyncio.to_thread(
+            stripe.Customer.retrieve, stripe_sub.get("customer")
+        )
+        user_id = customer.metadata.get("reasoner_user_id")
+        return Subscription(
+            id=uuid4(),
+            user_id=UUID(user_id) if user_id else uuid4(),
+            tier=SubscriptionTier.FREE,
+            status=SubscriptionStatus.PAST_DUE,
+            stripe_subscription_id=subscription_id,
+            stripe_customer_id=stripe_sub.get("customer"),
         )
 
     def _timestamp_to_datetime(self, ts: int | None):

@@ -22,6 +22,15 @@ from typing import Any, Callable, TypeVar
 
 from reasoner.logging_utils import llm_logger
 
+try:
+    from reasoner.api.metrics import (
+        REASONER_CIRCUIT_BREAKER_STATE,
+        REASONER_CIRCUIT_BREAKER_REJECTED,
+    )
+    _METRICS_AVAILABLE = True
+except Exception:
+    _METRICS_AVAILABLE = False
+
 T = TypeVar("T")
 
 
@@ -81,6 +90,13 @@ class CircuitBreaker:
         self._stats = CircuitBreakerStats()
         self._lock = asyncio.Lock()
         self._last_state_change = time.monotonic()
+
+    def _update_metrics(self) -> None:
+        """Export circuit state to Prometheus gauges."""
+        if not _METRICS_AVAILABLE:
+            return
+        state_value = {"closed": 0, "half_open": 1, "open": 2}.get(self._state.value, 0)
+        REASONER_CIRCUIT_BREAKER_STATE.labels(name=self.name).set(state_value)
 
     @property
     def state(self) -> CircuitState:
@@ -153,6 +169,8 @@ class CircuitBreaker:
             # Atomically check availability and acquire slot if needed
             if not await self._try_acquire_call():
                 self._stats.rejected_calls += 1
+                if _METRICS_AVAILABLE:
+                    REASONER_CIRCUIT_BREAKER_REJECTED.labels(name=self.name).inc()
                 llm_logger.warning(
                     f"Circuit '{self.name}' is OPEN or at HALF_OPEN capacity, rejecting call",
                     extra={
@@ -200,6 +218,7 @@ class CircuitBreaker:
                     self._stats.consecutive_successes = 0
                     self._stats.half_open_current_calls = 0  # Reset counter when closing
                     self._last_state_change = time.monotonic()
+                    self._update_metrics()
                     llm_logger.info(
                         f"Circuit '{self.name}' CLOSED after recovery",
                         extra={"circuit": self.name, "state": "closed"},
@@ -218,6 +237,7 @@ class CircuitBreaker:
                 self._state = CircuitState.OPEN
                 self._stats.half_open_current_calls = 0  # Reset counter when opening
                 self._last_state_change = time.monotonic()
+                self._update_metrics()
                 llm_logger.warning(
                     f"Circuit '{self.name}' reopened after half-open failure",
                     extra={"circuit": self.name, "state": "open"},
@@ -227,6 +247,7 @@ class CircuitBreaker:
                     self._state = CircuitState.OPEN
                     self._stats.half_open_current_calls = 0  # Reset counter when opening
                     self._last_state_change = time.monotonic()
+                    self._update_metrics()
                     llm_logger.warning(
                         f"Circuit '{self.name}' opened after {self._stats.consecutive_failures} failures",
                         extra={

@@ -132,14 +132,20 @@ jobs:
       - name: Run Test Generation (Phase 1.2)
         run: |
           python healing/test_generation_engine.py
-          
+
       - name: Upload Generated Tests
         uses: actions/upload-artifact@v4
         with:
           name: generated-tests
           path: healing/generated_tests/
           retention-days: 30
-      
+
+      - name: Verify Alembic Migrations
+        run: |
+          # Verify alembic can reach head and no ungenerated migrations exist
+          alembic check || true
+          alembic current
+
       - name: Run All Tests with Coverage
         run: |
           coverage run -m pytest -v

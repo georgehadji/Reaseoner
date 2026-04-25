@@ -41,6 +41,10 @@ COPY start_all.py .
 # Create directories for volumes and set ownership
 RUN mkdir -p cache history uploads && chown -R appuser:appuser /app
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh .
+RUN chmod +x docker-entrypoint.sh
+
 USER appuser
 
 EXPOSE 8000
@@ -49,6 +53,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 
-# Use gunicorn + UvicornWorker instead of uvicorn --workers (Critical Enhancement 5.1)
-CMD ["gunicorn", "asgi:app", "-k", "uvicorn.workers.UvicornWorker", \
-     "--bind", "0.0.0.0:8000", "--workers", "2", "--timeout", "120"]
+# Use entrypoint to support env-driven worker count and memory-leak prevention
+ENTRYPOINT ["./docker-entrypoint.sh"]

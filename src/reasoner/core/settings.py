@@ -103,6 +103,9 @@ class Settings:
         "openai/text-embedding-3-small,baai/bge-m3",
     )
 
+    # ── Sentry ──
+    SENTRY_TRACES_SAMPLE_RATE: float = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+
     # ── Scraping ──
     SCRAPE_USER_AGENT: str = os.getenv(
         "SCRAPE_USER_AGENT",
@@ -129,6 +132,11 @@ class Settings:
     def neuro_embedding_fallbacks(self) -> list[str]:
         """Parse NEURO_EMBEDDING_FALLBACK_MODELS into a list."""
         return [m.strip() for m in self.NEURO_EMBEDDING_FALLBACK_MODELS.split(",") if m.strip()]
+
+    # ── Trusted Proxies ──
+    TRUSTED_PROXIES: list[str] = [
+        p.strip() for p in os.getenv("TRUSTED_PROXIES", "").split(",") if p.strip()
+    ]
 
     @property
     def cors_origins_list(self) -> list[str]:

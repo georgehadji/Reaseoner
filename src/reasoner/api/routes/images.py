@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
-from reasoner.api.auth_deps import check_rate_limit, optional_auth
+from reasoner.api.auth_deps import require_csrf
+from reasoner.api.dependencies import (
+    check_quota_if_authenticated,
+    check_rate_limit,
+    get_optional_user,
+)
 from reasoner.api.schemas import GenerateImageRequest
+from reasoner.domain.saas import User
 from reasoner.infrastructure.llm.image_generation import enhance_image_prompt, generate_images
 
 logger = logging.getLogger(__name__)
@@ -18,8 +24,10 @@ router = APIRouter()
 async def generate_image_endpoint(
     request: Request,
     body: GenerateImageRequest,
-    authenticated=Depends(optional_auth),
+    user: User | None = Depends(get_optional_user),
     rate_limit_checked=Depends(check_rate_limit),
+    csrf_checked=Depends(require_csrf),
+    quota=Depends(check_quota_if_authenticated),
 ):
     """Generate images from a text prompt using 2 multimodal models in parallel.
 
@@ -29,6 +37,22 @@ async def generate_image_endpoint(
       - budget: gemini-flash-image + gpt-5-image-mini
       - premium: gemini-pro-image + gpt-5-image
     """
+    if quota is not None and not quota.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "Quota exceeded",
+                "message": quota.reason,
+                "remaining": quota.remaining,
+                "retry_after": quota.retry_after,
+                "upgrade_url": "/pricing",
+            },
+            headers={
+                "Retry-After": str(quota.retry_after or 3600),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
+
     try:
         if body.preview_only:
             enhanced_prompt = await enhance_image_prompt(body.prompt)

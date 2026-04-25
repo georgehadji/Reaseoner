@@ -226,6 +226,40 @@ TIMEOUTS = Timeouts()
 TRUNCATION = TruncationLimits()
 
 # ═════════════════════════════════════════════════════════════════════
+# PHASE TIMEOUTS (SSE streaming — per-phase automatic cancellation)
+# ═════════════════════════════════════════════════════════════════════
+
+PHASE_TIMEOUTS: dict[str, float] = {
+    "Classification": 20.0,
+    "Decomposition": 30.0,
+    "Deep Read": 45.0,
+    "Perspectives": 90.0,
+    "Opening Statements": 60.0,
+    "Rebuttals": 60.0,
+    "Cross-Examination": 60.0,
+    "Hypotheses": 60.0,
+    "Falsification Tests": 60.0,
+    "Maieutic Questions": 60.0,
+    "Dialectic Answers": 60.0,
+    "Generation Pool": 90.0,
+    "Critic Pool": 90.0,
+    "Verification & Meta": 90.0,
+    "Deep Research": 120.0,
+    "Critique & Pruning": 90.0,
+    "Stress Testing": 90.0,
+    "Synthesis": 120.0,
+    "default": 90.0,
+}
+
+
+def get_phase_timeout(phase_name: str) -> float:
+    """Get the automatic timeout for a given phase name.
+
+    If the phase is not explicitly configured, returns the default timeout.
+    """
+    return PHASE_TIMEOUTS.get(phase_name, PHASE_TIMEOUTS["default"])
+
+# ═════════════════════════════════════════════════════════════════════
 # PROMPT / JSON CONSTANTS
 # ═════════════════════════════════════════════════════════════════════
 

@@ -1,5 +1,6 @@
 -- Migration 003: Add composite indexes for query performance (Critical Enhancement 9.4)
--- Run: psql $DATABASE_URL -f migrations/003_add_indexes.sql
+-- NOTE: superseded by Alembic baseline migration df9629e72f17
+-- Use `alembic upgrade head` instead of running this file directly.
 
 -- Speed up user data export and dashboard history queries
 CREATE INDEX IF NOT EXISTS idx_query_log_user_created
@@ -12,7 +13,3 @@ CREATE INDEX IF NOT EXISTS idx_subscriptions_user_status
 -- Speed up quota period-based queries
 CREATE INDEX IF NOT EXISTS idx_usage_quotas_period
     ON usage_quotas (period_start);
-
--- Optional: index for feedback stats
-CREATE INDEX IF NOT EXISTS idx_feedback_timestamp
-    ON feedback (timestamp DESC);

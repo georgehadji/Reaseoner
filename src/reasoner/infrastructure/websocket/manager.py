@@ -20,6 +20,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from reasoner.core.constants import DEFAULT_HEARTBEAT_INTERVAL
 
+try:
+    from reasoner.api.metrics import REASONER_WEBSOCKET_CONNECTIONS
+    _METRICS_AVAILABLE = True
+except Exception:
+    _METRICS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,7 +84,9 @@ class WebSocketManager:
         async with self._lock:
             self.active_connections[connection_id] = websocket
             self.connection_metadata[connection_id] = metadata or {}
-        
+            if _METRICS_AVAILABLE:
+                REASONER_WEBSOCKET_CONNECTIONS.set(len(self.active_connections))
+
         logger.info(f"WebSocket connected: {connection_id}")
         
         # Send welcome message outside the lock to avoid deadlock
@@ -109,7 +117,10 @@ class WebSocketManager:
                 
                 if connection_id in self.connection_metadata:
                     del self.connection_metadata[connection_id]
-            
+
+            if _METRICS_AVAILABLE:
+                REASONER_WEBSOCKET_CONNECTIONS.set(len(self.active_connections))
+
             logger.info(f"WebSocket disconnected: {connection_id}")
         
         # Schedule the async cleanup on the running loop.

@@ -67,6 +67,43 @@ REASONER_REDIS_POOL_SIZE = Gauge(
     "Current Redis connection pool size",
 )
 
+# Cache metrics
+REASONER_CACHE_HIT_RATE = Gauge(
+    "reasoner_cache_hit_rate",
+    "Cache hit rate (0.0–1.0)",
+)
+
+REASONER_CACHE_ENTRIES = Gauge(
+    "reasoner_cache_entries",
+    "Number of cache entries",
+)
+
+# Circuit breaker metrics
+REASONER_CIRCUIT_BREAKER_STATE = Gauge(
+    "reasoner_circuit_breaker_state",
+    "Circuit breaker state (0=closed, 1=half_open, 2=open)",
+    ["name"],
+)
+
+REASONER_CIRCUIT_BREAKER_REJECTED = Counter(
+    "reasoner_circuit_breaker_rejected_total",
+    "Rejected calls due to open circuit",
+    ["name"],
+)
+
+# Rate limiter metrics
+REASONER_RATE_LIMIT_REJECTED = Counter(
+    "reasoner_rate_limit_rejected_total",
+    "Rate limited requests",
+    ["tier"],
+)
+
+# WebSocket metrics
+REASONER_WEBSOCKET_CONNECTIONS = Gauge(
+    "reasoner_websocket_connections",
+    "Active WebSocket connections",
+)
+
 
 async def metrics_endpoint() -> Response:
     """Expose Prometheus metrics.

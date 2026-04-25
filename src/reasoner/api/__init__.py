@@ -505,19 +505,26 @@ async def stop_pipeline(
         run_owner = _run_store.get_owner(run_id)
         # If the run has an owner, only that owner (or admin) can cancel it
         if run_owner and (not is_authenticated or str(user.id) != run_owner):
-            # TODO: check admin scope when role-based auth is added
-            raise HTTPException(
-                status_code=403,
-                detail="Cannot cancel another user's run",
-            )
+            user_scopes = getattr(user, "scopes", None) or []
+            if "admin" not in user_scopes:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Cannot cancel another user's run",
+                )
         targets = [run_id]
     else:
-        # Global stop: only allow if user is authenticated
-        # TODO Phase 4: restrict to admin scope
+        # Global stop: admin only
         if not is_authenticated:
             raise HTTPException(
                 status_code=401,
                 detail="Authentication required for global stop",
+            )
+        # Check admin scope
+        user_scopes = getattr(user, "scopes", None) or []
+        if "admin" not in user_scopes:
+            raise HTTPException(
+                status_code=403,
+                detail="Admin scope required for global stop",
             )
         targets = list(_run_store.active_runs)
 
@@ -593,11 +600,13 @@ app.include_router(billing_router.router)
 # Mount Metrics endpoint (Critical Enhancement 6.1: restrict by IP)
 from reasoner.api.metrics import metrics_endpoint
 
+from reasoner.api.client_ip import get_client_ip
+
+
 async def _metrics_ip_restricted(request: Request):
     allowed = os.environ.get("METRICS_ALLOWED_IPS", "127.0.0.1,::1").split(",")
-    client = request.client.host if request.client else ""
-    forwarded = request.headers.get("X-Forwarded-For", client).split(",")[0].strip()
-    if forwarded not in allowed:
+    client_ip = get_client_ip(request)
+    if client_ip not in allowed:
         raise HTTPException(status_code=403, detail="Metrics access denied")
 
 app.add_api_route("/api/metrics", metrics_endpoint, methods=["GET"], dependencies=[Depends(_metrics_ip_restricted)])
@@ -769,33 +778,43 @@ async def feedback_stats(
 # ─────────────────────────────────────────────────────────────────────
 
 @app.get("/api/health")
-async def health_check():
+async def health_check(request: Request):
     """
     Comprehensive health check endpoint.
 
-    Returns system status, memory usage, and provider availability.
+    Returns system status and subsystem pass/fail.
+    Public response omits internal details (memory bytes, pool sizes, Python version).
+    Full diagnostics available with valid X-Admin-Key header.
     Uses cached connections for Postgres and Redis (Critical Enhancement 5.6).
     """
     import sys
     from datetime import datetime, timezone
+    import secrets
 
-    health = {
+    admin_key = request.headers.get("X-Admin-Key", "")
+    admin_api_key = settings.ADMIN_API_KEY or ""
+    is_admin = bool(admin_api_key and secrets.compare_digest(admin_key, admin_api_key))
+
+    health: dict[str, Any] = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "version": "2.0",
-        "python": sys.version,
         "checks": {},
     }
+
+    # Internal details only for admin
+    if is_admin:
+        health["python"] = sys.version
 
     # Memory check
     try:
         import psutil
         process = psutil.Process()
         memory_mb = process.memory_info().rss / 1024 / 1024
+        status = "ok" if memory_mb < MEMORY_LIMIT_MB else "warning"
         health["checks"]["memory"] = {
-            "status": "ok" if memory_mb < MEMORY_LIMIT_MB else "warning",
-            "used_mb": round(memory_mb, 1),
-            "limit_mb": MEMORY_LIMIT_MB,
+            "status": status,
+            **({"used_mb": round(memory_mb, 1), "limit_mb": MEMORY_LIMIT_MB} if is_admin else {}),
         }
     except ImportError:
         health["checks"]["memory"] = {"status": "unknown", "reason": "psutil not installed"}
@@ -806,15 +825,14 @@ async def health_check():
     open_circuits = [name for name, cb in circuits.items() if cb["state"] == "open"]
     health["checks"]["circuit_breakers"] = {
         "status": "ok" if not open_circuits else "degraded",
-        "open_circuits": open_circuits,
-        "total": len(circuits),
+        **({"open_circuits": open_circuits, "total": len(circuits)} if is_admin else {}),
     }
 
     # Cache status
     cache_files = list(CACHE_DIR.glob("*.json"))
     health["checks"]["cache"] = {
         "status": "ok",
-        "files": len(cache_files),
+        **({"files": len(cache_files)} if is_admin else {}),
     }
 
     # Postgres check — use cached pool (Critical Enhancement 5.6)
@@ -850,7 +868,6 @@ async def health_check():
     try:
         stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
         if stripe_key:
-            # Lightweight check: key is present (avoid actual API call on every health ping)
             health["checks"]["stripe"] = {"status": "ok"}
         else:
             health["checks"]["stripe"] = {"status": "ok", "reason": "not configured"}

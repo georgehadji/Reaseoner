@@ -24,10 +24,12 @@ async def get_history(
     offset: int = Query(0, ge=0),
 ):
     """Get search history for the authenticated user."""
-    all_history = _history_module._list_history(user_id=str(user.id))
+    entries, total = _history_module._list_history(
+        user_id=str(user.id), limit=limit, offset=offset
+    )
     return {
-        "total": len(all_history),
-        "entries": all_history[offset : offset + limit],
+        "total": total,
+        "entries": entries,
     }
 
 

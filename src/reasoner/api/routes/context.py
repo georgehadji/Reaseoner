@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 
+from reasoner.api.auth_deps import require_csrf
+from reasoner.api.dependencies import (
+    check_quota_if_authenticated,
+    check_rate_limit,
+    get_optional_user,
+)
 from reasoner.api.schemas import ContextAnalysisRequest
+from reasoner.domain.saas import User
 from reasoner.models import PipelineState
 from reasoner.pipeline import ARAPipeline
 
@@ -15,13 +22,35 @@ router = APIRouter()
 
 
 @router.post("/api/run-with-context")
-async def run_with_context(req: ContextAnalysisRequest):
+async def run_with_context(
+    req: ContextAnalysisRequest,
+    user: User | None = Depends(get_optional_user),
+    rate_limit_checked=Depends(check_rate_limit),
+    csrf_checked=Depends(require_csrf),
+    quota=Depends(check_quota_if_authenticated),
+):
     """
     Run the Reasoner pipeline with external context.
 
     This endpoint accepts collected research context
     (facts, URLs, summaries) and runs deep, validated analysis.
     """
+    if quota is not None and not quota.allowed:
+        raise HTTPException(
+            status_code=429,
+            detail={
+                "error": "Quota exceeded",
+                "message": quota.reason,
+                "remaining": quota.remaining,
+                "retry_after": quota.retry_after,
+                "upgrade_url": "/pricing",
+            },
+            headers={
+                "Retry-After": str(quota.retry_after or 3600),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
+
     try:
         from reasoner.application.services.preset_service import PresetService
 

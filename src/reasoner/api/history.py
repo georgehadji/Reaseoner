@@ -20,10 +20,15 @@ class HistoryEntry(BaseModel):
     status: str  # "completed", "error", "cancelled"
 
 
-def _list_history(user_id: str | None = None) -> list[HistoryEntry]:
+def _list_history(
+    user_id: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[HistoryEntry], int]:
     """List history entries, sorted by timestamp descending.
 
     If user_id is provided, only entries belonging to that user are returned.
+    Returns (entries, total_count) for client-side pagination.
     """
     entries = []
     for f in HISTORY_DIR.glob("*.json"):
@@ -35,7 +40,10 @@ def _list_history(user_id: str | None = None) -> list[HistoryEntry]:
             entries.append(entry)
         except Exception:
             pass
-    return sorted(entries, key=lambda x: x.timestamp, reverse=True)
+
+    entries = sorted(entries, key=lambda x: x.timestamp, reverse=True)
+    total = len(entries)
+    return entries[offset:offset + limit], total
 
 
 def _save_history_entry(entry: HistoryEntry) -> None:

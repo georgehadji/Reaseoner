@@ -11,6 +11,7 @@ from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from reasoner.auth import AuthenticationError, get_auth_manager
+from reasoner.api.client_ip import get_client_ip
 from reasoner.api.csrf import verify_csrf_token
 
 logger = logging.getLogger(__name__)
@@ -32,11 +33,7 @@ auth_manager = get_auth_manager()
 
 async def get_client_id(request: Request) -> str:
     """Extract client ID from request (IP + User-Agent)."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        ip = forwarded.split(",")[0].strip()
-    else:
-        ip = request.client.host if request.client else "unknown"
+    ip = get_client_ip(request)
     user_agent = request.headers.get("User-Agent", "")
     # SHA-256 with 16 hex chars (64-bit) to make collision-based bypass impractical
     return f"{ip}:{hashlib.sha256(user_agent.encode()).hexdigest()[:16]}"

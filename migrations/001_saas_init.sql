@@ -29,13 +29,15 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 
 -- Usage Quotas Table
+-- NOTE: superseded by Alembic baseline migration df9629e72f17
+-- Use `alembic upgrade head` instead of running this file directly.
 CREATE TABLE IF NOT EXISTS usage_quotas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    hard_limit INTEGER NOT NULL,
-    used_this_month INTEGER DEFAULT 0,
-    resets_at TIMESTAMP WITH TIME ZONE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    tier TEXT NOT NULL,
+    used_queries INTEGER DEFAULT 0,
+    max_queries INTEGER DEFAULT 0,
+    period_start TIMESTAMP WITH TIME ZONE,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id)
 );

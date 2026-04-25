@@ -137,6 +137,13 @@ class StripeBillingAdapter(BillingPort):
             return SubscriptionTier.ENTERPRISE
         return SubscriptionTier.FREE
 
+    async def cancel_subscription(self, stripe_subscription_id: str) -> None:
+        """Immediately cancel a Stripe subscription."""
+        await asyncio.to_thread(
+            stripe.Subscription.delete,
+            stripe_subscription_id,
+        )
+
     def _timestamp_to_datetime(self, ts: int | None):
         from datetime import datetime, timezone
         if ts is None:

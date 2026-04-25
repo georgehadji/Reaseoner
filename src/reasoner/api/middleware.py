@@ -20,8 +20,60 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        # Critical Enhancement 6.5: CSP header
+        csp = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' ws: wss:; "
+            "frame-ancestors 'none'; "
+            "base-uri 'self'; "
+            "form-action 'self';"
+        )
+        response.headers["Content-Security-Policy"] = csp
+        return response
+
+
+def _sanitize_url_for_audit(url_path: str, url_query: str) -> str:
+    """Sanitize PII from URLs before audit logging (Critical Enhancement 6.6)."""
+    from urllib.parse import parse_qs, urlencode
+    sensitive_params = {"token", "api_key", "password", "secret", "session", "jwt", "code"}
+    if not url_query:
+        return url_path
+    try:
+        params = parse_qs(url_query)
+        sanitized = {
+            k: ["[REDACTED]" if k.lower() in sensitive_params else v[0]]
+            for k, v in params.items()
+        }
+        query = urlencode(sanitized, doseq=True)
+        return f"{url_path}?{query}" if query else url_path
+    except Exception:
+        return url_path
+
+
+class AuditMiddleware(BaseHTTPMiddleware):
+    """Log mutating requests for audit trail (Critical Enhancement 6.3 / 6.6)."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+
+        if request.method in ("POST", "DELETE", "PUT", "PATCH"):
+            user = getattr(request.state, "user", None)
+            path = _sanitize_url_for_audit(request.url.path, request.url.query)
+            logger.info(
+                "audit: method=%s path=%s user=%s status=%d ip=%s",
+                request.method,
+                path,
+                str(user.id) if user else None,
+                response.status_code,
+                request.client.host if request.client else None,
+            )
+
         return response
 
 

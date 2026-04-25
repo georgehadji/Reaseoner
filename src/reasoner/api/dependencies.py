@@ -95,12 +95,14 @@ async def _resolve_auth_token(token: str) -> User:
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> User:
     """
     Require valid authentication (JWT or legacy API key).
 
     Raises HTTPException 401 if missing or invalid.
+    Stores resolved user in request.state for audit middleware.
     """
     if not credentials:
         raise HTTPException(
@@ -110,7 +112,9 @@ async def get_current_user(
         )
 
     try:
-        return await _resolve_auth_token(credentials.credentials)
+        user = await _resolve_auth_token(credentials.credentials)
+        request.state.user = user
+        return user
     except HTTPException:
         raise
     except Exception as exc:
@@ -118,13 +122,16 @@ async def get_current_user(
 
 
 async def get_optional_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Optional[User]:
     """Optional authentication — returns None if no valid credentials."""
     if not credentials:
         return None
     try:
-        return await _resolve_auth_token(credentials.credentials)
+        user = await _resolve_auth_token(credentials.credentials)
+        request.state.user = user
+        return user
     except Exception:
         return None
 

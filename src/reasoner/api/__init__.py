@@ -105,12 +105,23 @@ app = FastAPI(title="ARA v2.0", lifespan=lifespan)
 # Add security middleware
 app.add_middleware(SecurityHeadersMiddleware)
 
-# Add CORS middleware with restrictive defaults
+# Add audit middleware (Critical Enhancement 6.3)
+from reasoner.api.middleware import AuditMiddleware
+app.add_middleware(AuditMiddleware)
+
+# Add CORS middleware — production-aware (Critical Enhancement 6.1.2)
+_env = os.environ.get("ENVIRONMENT", "development")
+if _env == "production":
+    _app_url = os.environ.get("APP_URL", "")
+    _allowed_origins = [_app_url] if _app_url else []
+else:
+    _allowed_origins = settings.cors_origins_list
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,  # Configurable via CORS_ORIGINS env var
+    allow_origins=_allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=[
         "authorization",
         "content-type",
@@ -119,7 +130,7 @@ app.add_middleware(
         "x-csrf-token",
         "x-requested-with",
     ],
-    max_age=CORS_MAX_AGE_SECONDS,  # Cache preflight for 1 day
+    max_age=CORS_MAX_AGE_SECONDS,
 )
 
 # Initialize rate limiter

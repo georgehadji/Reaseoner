@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { CSRF_HEADER } from './security-constants';
 import { RunRequest } from './types';
 import { REASONER_API_BASE } from './server-config';
+import { TIMING } from './config';
 
 // Turbopack cache-bust hash — changing this forces a recompile of routes that import it.
 export const SECURITY_SERVER_HASH = 'v1-8001';
@@ -26,9 +27,11 @@ export const SECURITY_CONSTANTS = {
 };
 
 export function generateCsrfToken(): string {
-  const arr = new Uint8Array(32);
+  const ts = Math.floor(Date.now() / 1000);
+  const arr = new Uint8Array(24);
   crypto.getRandomValues(arr);
-  return Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+  const rand = Array.from(arr, (b) => b.toString(16).padStart(2, '0')).join('');
+  return `${ts}:${rand}`;
 }
 
 async function getCsrfSecret(): Promise<ArrayBuffer> {
@@ -61,6 +64,15 @@ export async function verifyCsrfToken(signed: string): Promise<boolean> {
   const idx = signed.lastIndexOf('.');
   if (idx === -1) return false;
   const token = signed.slice(0, idx);
+
+  // Validate embedded timestamp to enforce token max-age
+  const colonIdx = token.indexOf(':');
+  if (colonIdx === -1) return false;
+  const ts = parseInt(token.slice(0, colonIdx), 10);
+  if (!Number.isFinite(ts) || Date.now() / 1000 - ts > TIMING.csrfMaxAgeSeconds) {
+    return false;
+  }
+
   const expected = await signCsrfToken(token);
   if (expected.length !== signed.length) return false;
   let result = 0;

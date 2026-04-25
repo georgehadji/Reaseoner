@@ -69,15 +69,16 @@ class RateLimiter:
             self._buckets[client_id] = bucket
         return self._buckets[client_id]
     
-    def _refill_tokens(self, bucket: ClientBucket) -> None:
+    def _refill_tokens(self, bucket: ClientBucket, multiplier: float = 1.0) -> None:
         """Refill tokens based on elapsed time."""
         now = time.time()
         elapsed = now - bucket.last_update
         
-        # Refill rate: 1 token per (60 / requests_per_minute) seconds
-        refill_rate = self.config.requests_per_minute / 60.0
+        # Refill rate: 1 token per (60 / requests_per_minute) seconds, scaled by tier
+        refill_rate = (self.config.requests_per_minute * multiplier) / 60.0
+        max_tokens = self.config.burst_size * multiplier
         bucket.tokens = min(
-            self.config.burst_size,
+            max_tokens,
             bucket.tokens + (elapsed * refill_rate)
         )
         bucket.last_update = now
@@ -107,7 +108,7 @@ class RateLimiter:
         """
         async with self._lock:
             bucket = self._get_bucket(client_id)
-            self._refill_tokens(bucket)
+            self._refill_tokens(bucket, multiplier)
             self._reset_windows_if_needed(bucket)
             
             info = {
@@ -194,7 +195,7 @@ class RateLimiter:
 
         async with self._lock:
             bucket = self._get_bucket(client_id)
-            self._refill_tokens(bucket)
+            self._refill_tokens(bucket, multiplier)
             self._reset_windows_if_needed(bucket)
 
             rpm = int(self.config.requests_per_minute * multiplier)
@@ -220,7 +221,7 @@ class RateLimiter:
 
             if bucket.tokens < 1:
                 tokens_needed = 1 - bucket.tokens
-                refill_rate = self.config.requests_per_minute / 60.0
+                refill_rate = (self.config.requests_per_minute * multiplier) / 60.0
                 info["retry_after"] = tokens_needed / refill_rate
                 info["reason"] = "burst_limit"
                 return False, info

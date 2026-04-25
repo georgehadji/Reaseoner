@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from contextlib import asynccontextmanager
 
+import asyncio
 from fastapi import FastAPI, Request, Depends, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -25,6 +26,10 @@ import logging
 # Setup logger
 logger = logging.getLogger(__name__)
 
+# Initialize Sentry (Critical Enhancement 7.2)
+from reasoner.api.sentry import init_sentry
+init_sentry()
+
 # Security dependencies
 security = HTTPBearer(auto_error=False)
 
@@ -36,6 +41,23 @@ from reasoner.api.middleware import SecurityHeadersMiddleware
 
 # Module-level singleton for health-check Postgres pool (Critical Enhancement 5.6)
 _health_postgres_pool = None
+
+
+async def _update_active_users_loop() -> None:
+    """Background task to update active users gauge every 60s (Critical Enhancement 7.3)."""
+    from reasoner.api.metrics import REASONER_ACTIVE_USERS
+    while True:
+        try:
+            await asyncio.sleep(60)
+            if _health_postgres_pool is not None:
+                row = await _health_postgres_pool.fetchval(
+                    "SELECT COUNT(DISTINCT user_id) FROM query_audit_logs WHERE timestamp > NOW() - INTERVAL '24 hours'"
+                )
+                REASONER_ACTIVE_USERS.set(row or 0)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("Active users update failed: %s", exc)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -75,7 +97,17 @@ async def lifespan(app: FastAPI):
     logger.info(f"Memory limit: {MEMORY_LIMIT_MB}MB (warning at {MEMORY_WARNING_MB}MB)")
     logger.info(f"Request timeout: {REQUEST_TIMEOUT_SECONDS}s")
 
+    # Background task: update active users gauge (Critical Enhancement 7.3)
+    _active_users_task = asyncio.create_task(_update_active_users_loop())
+
     yield
+
+    # Cancel background task on shutdown
+    _active_users_task.cancel()
+    try:
+        await _active_users_task
+    except asyncio.CancelledError:
+        pass
 
     # ── Shutdown ──
     global _event_store, _health_postgres_pool
@@ -299,6 +331,34 @@ async def get_csrf_token():
     return {"token": generate_signed_csrf_token()}
 
 
+async def _run_stream_with_metrics(req: RunRequest, user: User | None):
+    """Wrap run_stream_cached with Prometheus metrics (Critical Enhancement 7.1)."""
+    from reasoner.api.metrics import REASONER_QUERIES_TOTAL, QueryTimer
+    from reasoner.logging_utils import set_log_context
+
+    tier = "anonymous" if user is None else "free"  # TODO Phase 4: actual tier
+    preset = req.preset or "auto-budget"
+    set_log_context(user_id=str(user.id) if user else None, tier=tier, preset=preset)
+
+    timer = QueryTimer(preset=preset)
+    timer.start()
+
+    has_error = False
+    try:
+        async for chunk in run_stream_cached(req):
+            yield chunk
+    except Exception:
+        has_error = True
+        raise
+    finally:
+        timer.observe()
+        REASONER_QUERIES_TOTAL.labels(
+            tier=tier,
+            preset=preset,
+            status="error" if has_error else "success",
+        ).inc()
+
+
 @app.post("/api/run")
 async def run_pipeline(
     request: Request,
@@ -317,7 +377,7 @@ async def run_pipeline(
     # TODO Phase 3: if user is None and ENABLE_LEGACY_API_KEY=false → 401
     # TODO Phase 4: use actual user tier from subscription DB
     return StreamingResponse(
-        run_stream_cached(req),
+        _run_stream_with_metrics(req, user),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -483,6 +543,18 @@ app.include_router(saas_router.router)
 # Mount Billing router
 from reasoner.api import billing_router
 app.include_router(billing_router.router)
+
+# Mount Metrics endpoint (Critical Enhancement 6.1: restrict by IP)
+from reasoner.api.metrics import metrics_endpoint
+
+async def _metrics_ip_restricted(request: Request):
+    allowed = os.environ.get("METRICS_ALLOWED_IPS", "127.0.0.1,::1").split(",")
+    client = request.client.host if request.client else ""
+    forwarded = request.headers.get("X-Forwarded-For", client).split(",")[0].strip()
+    if forwarded not in allowed:
+        raise HTTPException(status_code=403, detail="Metrics access denied")
+
+app.add_api_route("/api/metrics", metrics_endpoint, methods=["GET"], dependencies=[Depends(_metrics_ip_restricted)])
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -708,6 +780,10 @@ async def health_check():
             _health_postgres_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=2)
         await _health_postgres_pool.fetchval("SELECT 1")
         health["checks"]["postgres"] = {"status": "ok"}
+        # Update pool metrics (Critical Enhancement 7.6)
+        from reasoner.api.metrics import REASONER_POSTGRES_POOL_SIZE, REASONER_POSTGRES_POOL_FREE
+        REASONER_POSTGRES_POOL_SIZE.set(_health_postgres_pool.get_size())
+        REASONER_POSTGRES_POOL_FREE.set(_health_postgres_pool.get_size() - _health_postgres_pool.get_idle_size())
     except Exception as e:
         health["checks"]["postgres"] = {"status": "error", "reason": str(e)}
 
@@ -717,6 +793,10 @@ async def health_check():
         redis = get_redis()
         await redis.ping()
         health["checks"]["redis"] = {"status": "ok"}
+        # Update Redis pool metrics (Critical Enhancement 7.6)
+        from reasoner.api.metrics import REASONER_REDIS_POOL_SIZE
+        pool_info = redis.connection_pool.max_connections
+        REASONER_REDIS_POOL_SIZE.set(pool_info or 0)
     except Exception as e:
         health["checks"]["redis"] = {"status": "error", "reason": str(e)}
 

@@ -18,8 +18,9 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-# Context variable to store correlation ID across async calls
+# Context variables for log context across async calls
 _correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
+_log_context: ContextVar[dict[str, Any]] = ContextVar("log_context", default={})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -135,9 +136,17 @@ class StructuredLogEntry:
     message: str
     correlation_id: str
     extra: dict[str, Any] = field(default_factory=dict)
+    user_id: str | None = None
+    tier: str | None = None
+    preset: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), default=str)
+
+
+def set_log_context(user_id: str | None = None, tier: str | None = None, preset: str | None = None) -> None:
+    """Set request-scoped context for structured logging (Critical Enhancement 7.3)."""
+    _log_context.set({"user_id": user_id, "tier": tier, "preset": preset})
 
 
 def get_correlation_id() -> str:
@@ -173,7 +182,10 @@ class StructuredLogger:
         # CRITICAL: Redact sensitive information before logging
         safe_message = redact_sensitive(message)
         safe_extra = redact_dict(extra) if extra else {}
-        
+
+        # Pull in request-scoped context (Critical Enhancement 7.3)
+        ctx = _log_context.get()
+
         entry = StructuredLogEntry(
             timestamp=datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             level=level.value,
@@ -181,6 +193,9 @@ class StructuredLogger:
             message=safe_message,
             correlation_id=get_correlation_id(),
             extra=safe_extra,
+            user_id=ctx.get("user_id"),
+            tier=ctx.get("tier"),
+            preset=ctx.get("preset"),
         )
 
         # Output as JSON to stdout for log aggregation

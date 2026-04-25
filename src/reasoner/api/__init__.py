@@ -34,6 +34,9 @@ from reasoner.auth import get_auth_manager, AuthenticationError
 
 from reasoner.api.middleware import SecurityHeadersMiddleware
 
+# Module-level singleton for health-check Postgres pool (Critical Enhancement 5.6)
+_health_postgres_pool = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup and shutdown orchestration."""
@@ -75,7 +78,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # ── Shutdown ──
-    global _event_store
+    global _event_store, _health_postgres_pool
     if _event_store and hasattr(_event_store, 'close'):
         _event_store.close()
 
@@ -84,6 +87,15 @@ async def lifespan(app: FastAPI):
 
     from reasoner.scraper import close_scraper_client
     await close_scraper_client()
+
+    # Close Redis connection (Critical Enhancement 5.5.2)
+    from reasoner.infrastructure.redis.client import close_redis
+    await close_redis()
+
+    # Close health-check Postgres pool
+    if _health_postgres_pool is not None:
+        await _health_postgres_pool.close()
+        _health_postgres_pool = None
 
     logger.info("Reasoner shutdown complete")
 
@@ -457,6 +469,10 @@ app.include_router(keys_router)
 from reasoner.api import saas_router
 app.include_router(saas_router.router)
 
+# Mount Billing router
+from reasoner.api import billing_router
+app.include_router(billing_router.router)
+
 
 # ─────────────────────────────────────────────────────────────────────
 # MEMORY LIMITS & REQUEST TIMEOUT MIDDLEWARE
@@ -627,12 +643,13 @@ async def feedback_stats(
 async def health_check():
     """
     Comprehensive health check endpoint.
-    
+
     Returns system status, memory usage, and provider availability.
+    Uses cached connections for Postgres and Redis (Critical Enhancement 5.6).
     """
     import sys
     from datetime import datetime, timezone
-    
+
     health = {
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -640,7 +657,7 @@ async def health_check():
         "python": sys.version,
         "checks": {},
     }
-    
+
     # Memory check
     try:
         import psutil
@@ -653,7 +670,7 @@ async def health_check():
         }
     except ImportError:
         health["checks"]["memory"] = {"status": "unknown", "reason": "psutil not installed"}
-    
+
     # Circuit breaker status
     from reasoner.circuit_breaker import get_all_circuit_breakers
     circuits = get_all_circuit_breakers()
@@ -663,20 +680,52 @@ async def health_check():
         "open_circuits": open_circuits,
         "total": len(circuits),
     }
-    
+
     # Cache status
     cache_files = list(CACHE_DIR.glob("*.json"))
     health["checks"]["cache"] = {
         "status": "ok",
         "files": len(cache_files),
     }
-    
+
+    # Postgres check — use cached pool (Critical Enhancement 5.6)
+    global _health_postgres_pool
+    try:
+        if _health_postgres_pool is None:
+            import asyncpg
+            dsn = settings.DATABASE_URL.replace("+asyncpg", "")
+            _health_postgres_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=2)
+        await _health_postgres_pool.fetchval("SELECT 1")
+        health["checks"]["postgres"] = {"status": "ok"}
+    except Exception as e:
+        health["checks"]["postgres"] = {"status": "error", "reason": str(e)}
+
+    # Redis check
+    try:
+        from reasoner.infrastructure.redis.client import get_redis
+        redis = get_redis()
+        await redis.ping()
+        health["checks"]["redis"] = {"status": "ok"}
+    except Exception as e:
+        health["checks"]["redis"] = {"status": "error", "reason": str(e)}
+
+    # Stripe check (optional — don't fail health if Stripe is down)
+    try:
+        stripe_key = os.environ.get("STRIPE_SECRET_KEY", "")
+        if stripe_key:
+            # Lightweight check: key is present (avoid actual API call on every health ping)
+            health["checks"]["stripe"] = {"status": "ok"}
+        else:
+            health["checks"]["stripe"] = {"status": "ok", "reason": "not configured"}
+    except Exception as e:
+        health["checks"]["stripe"] = {"status": "warning", "reason": str(e)}
+
     # Determine overall status
     if any(c.get("status") == "error" for c in health["checks"].values()):
         health["status"] = "unhealthy"
     elif any(c.get("status") in ("warning", "degraded") for c in health["checks"].values()):
         health["status"] = "degraded"
-    
+
     return health
 
 

@@ -1,0 +1,149 @@
+"""
+Postgres implementation for subscription persistence.
+
+Handles subscription upserts and quota tier synchronization.
+"""
+
+from __future__ import annotations
+
+import logging
+from uuid import UUID, uuid4
+
+import asyncpg
+
+from reasoner.domain.saas import Subscription, SubscriptionTier, SubscriptionStatus
+from reasoner.core.settings import settings
+
+logger = logging.getLogger(__name__)
+
+
+class PostgresSubscriptionRepository:
+    """Atomic subscription storage in PostgreSQL."""
+
+    def __init__(self, dsn: str, pool_size: int = 10):
+        self._dsn = dsn
+        self._pool_size = pool_size
+        self._pool: asyncpg.Pool | None = None
+
+    async def _get_pool(self) -> asyncpg.Pool:
+        if self._pool is None:
+            self._pool = await asyncpg.create_pool(
+                self._dsn,
+                min_size=1,
+                max_size=self._pool_size,
+            )
+        return self._pool
+
+    async def upsert_subscription(self, sub: Subscription) -> None:
+        """Idempotently update subscription in Postgres."""
+        pool = await self._get_pool()
+        await pool.execute(
+            """
+            INSERT INTO subscriptions (user_id, tier, status, stripe_sub_id, stripe_customer_id, current_period_end)
+            VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (stripe_sub_id) DO UPDATE SET
+                user_id = EXCLUDED.user_id,
+                tier = EXCLUDED.tier,
+                status = EXCLUDED.status,
+                stripe_customer_id = EXCLUDED.stripe_customer_id,
+                current_period_end = EXCLUDED.current_period_end,
+                updated_at = NOW()
+            """,
+            str(sub.user_id),
+            sub.tier.value,
+            sub.status.value,
+            sub.stripe_subscription_id,
+            sub.stripe_customer_id,
+            sub.current_period_end,
+        )
+
+    async def sync_quota_for_subscription(self, sub: Subscription) -> None:
+        """Sync quota limits for a subscription without resetting used_queries on update.
+
+        Critical Enhancement 4.2: used_queries is NOT reset on every webhook.
+        It is only reset when the tier changes (upgrade/downgrade).
+        """
+        pool = await self._get_pool()
+        tier_limits = {
+            SubscriptionTier.FREE: 20,
+            SubscriptionTier.PRO: 500,
+            SubscriptionTier.ENTERPRISE: -1,
+        }
+        new_max = tier_limits[sub.tier]
+
+        # Check current tier to decide whether to reset used_queries
+        row = await pool.fetchrow(
+            "SELECT tier, used_queries FROM usage_quotas WHERE user_id = $1",
+            str(sub.user_id),
+        )
+
+        if row is None:
+            # New user — create quota row
+            await pool.execute(
+                """
+                INSERT INTO usage_quotas (user_id, tier, max_queries, used_queries)
+                VALUES ($1, $2, $3, 0)
+                """,
+                str(sub.user_id),
+                sub.tier.value,
+                new_max,
+            )
+        else:
+            old_tier = row["tier"]
+            if old_tier != sub.tier.value:
+                # Tier changed (upgrade/downgrade) — reset usage
+                await pool.execute(
+                    """
+                    UPDATE usage_quotas
+                    SET tier = $2, max_queries = $3, used_queries = 0, updated_at = NOW()
+                    WHERE user_id = $1
+                    """,
+                    str(sub.user_id),
+                    sub.tier.value,
+                    new_max,
+                )
+                logger.info(
+                    "Quota reset for user %s due to tier change: %s -> %s",
+                    sub.user_id, old_tier, sub.tier.value
+                )
+            else:
+                # Same tier — only update max_queries (e.g. plan metadata change)
+                await pool.execute(
+                    """
+                    UPDATE usage_quotas
+                    SET tier = $2, max_queries = $3, updated_at = NOW()
+                    WHERE user_id = $1
+                    """,
+                    str(sub.user_id),
+                    sub.tier.value,
+                    new_max,
+                )
+
+    async def set_subscription_status(self, stripe_sub_id: str, status: str) -> None:
+        """Update subscription status (e.g. past_due, cancelled)."""
+        pool = await self._get_pool()
+        await pool.execute(
+            "UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE stripe_sub_id = $2",
+            status,
+            stripe_sub_id,
+        )
+
+    async def get_subscription_by_user(self, user_id: str) -> Subscription | None:
+        """Fetch the active subscription for a user."""
+        pool = await self._get_pool()
+        row = await pool.fetchrow(
+            "SELECT user_id, tier, status, stripe_sub_id, stripe_customer_id, current_period_end "
+            "FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+            user_id,
+        )
+        if row is None:
+            return None
+        return Subscription(
+            id=uuid4(),  # ephemeral id for domain object
+            user_id=UUID(row["user_id"]),
+            tier=SubscriptionTier(row["tier"]),
+            status=SubscriptionStatus(row["status"]),
+            stripe_subscription_id=row["stripe_sub_id"],
+            stripe_customer_id=row["stripe_customer_id"],
+            current_period_end=row["current_period_end"],
+        )

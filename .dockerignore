@@ -1,0 +1,81 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv
+venv
+ENV
+env
+*.egg-info
+dist
+build
+
+# Node.js
+node_modules
+.next
+out
+
+# IDE / Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets & Environment
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Testing & Coverage
+.pytest_cache
+.coverage
+htmlcov
+tests
+pytest.ini
+
+# Documentation (keep if needed in image, otherwise ignore)
+docs/*.md
+!docs/README.md
+
+# Cache & Temporary
+cache
+history
+uploads
+tmp*
+*.log
+
+# CI / CD
+.github
+.gitlab-ci.yml
+
+# Large data files
+openrouter_models.json
+openrouter_models_formatted.txt
+pytest_full_output*.txt
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Misc
+kill_servers.*
+push_to_github.*
+*.bat
+REFACTORING_CHANGES.*
+autonomous_*.json
+autonomous_*.md

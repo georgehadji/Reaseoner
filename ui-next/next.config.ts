@@ -1,5 +1,12 @@
 import type { NextConfig } from "next";
-import withBundleAnalyzer from "@next/bundle-analyzer";
+
+let withBundleAnalyzer = (config: NextConfig) => config;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  withBundleAnalyzer = require("@next/bundle-analyzer")({ enabled: process.env.ANALYZE === "true" });
+} catch {
+  // @next/bundle-analyzer is optional; skip if not installed
+}
 
 const HSTS_VALUE = 'max-age=31536000; includeSubDomains; preload';
 
@@ -43,6 +50,7 @@ function buildCsp(): string {
 }
 
 const nextConfig: NextConfig = {
+  output: 'standalone',
   async headers() {
     return [
       {
@@ -61,6 +69,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default withBundleAnalyzer({
-  enabled: process.env.ANALYZE === 'true',
-})(nextConfig);
+export default withBundleAnalyzer(nextConfig);

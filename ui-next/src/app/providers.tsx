@@ -18,6 +18,12 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
   const setAuthLoading = useAppStore((s) => s.setAuthLoading);
 
   useEffect(() => {
+    if (!supabase) {
+      // Supabase not configured — skip auth initialization
+      setAuthLoading(false);
+      return;
+    }
+
     // Initial session check
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);

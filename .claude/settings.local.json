@@ -130,7 +130,8 @@
       "Bash(then echo:*)",
       "Bash(fi)",
       "Bash(done)",
-      "Bash(echo \"EXIT_CODE=$?\")"
+      "Bash(echo \"EXIT_CODE=$?\")",
+      "Bash(curl -s http://localhost:3000/api/billing/subscription)"
     ]
   },
   "enableAllProjectMcpServers": true,

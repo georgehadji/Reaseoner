@@ -13,6 +13,7 @@ export function useWebSocketPipeline() {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const onEventRef = useRef<((ev: PhaseEvent) => void) | null>(null);
   const pipelineIdRef = useRef<string | null>(null);
+  const doConnectRef = useRef<(pipelineId: string, onEvent: (ev: PhaseEvent) => void) => void>(undefined);
 
   const [status, setStatus] = useState<ConnectionStatus>('idle');
 
@@ -72,13 +73,17 @@ export function useWebSocketPipeline() {
         // eslint-disable-next-line no-console
         console.debug(`[WebSocket] reconnecting in ${delay}ms (attempt ${reconnectCountRef.current})`);
         reconnectTimerRef.current = setTimeout(() => {
-          if (onEventRef.current) doConnect(pipelineId, onEventRef.current);
+          if (onEventRef.current) doConnectRef.current?.(pipelineId, onEventRef.current);
         }, delay);
       } else {
         setStatus('disconnected');
       }
     };
   }, [clearReconnect]);
+
+  useEffect(() => {
+    doConnectRef.current = doConnect;
+  }, [doConnect]);
 
   const connect = useCallback((pipelineId: string, onEvent: (ev: PhaseEvent) => void) => {
     reconnectCountRef.current = 0;

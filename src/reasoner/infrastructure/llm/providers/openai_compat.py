@@ -108,7 +108,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
     # Note: OpenAI models (gpt-*, o1, o3) do NOT accept temperature parameters - they use temperature=1.0 fixed.
     _TEMPERATURE_SUPPORTED_MODELS = frozenset({
         # DeepSeek
-        'deepseek-v3', 'deepseek-r1', 'deepseek-chat', 'deepseek-coder',
+        'deepseek-v4', 'deepseek-v3', 'deepseek-r1', 'deepseek-chat', 'deepseek-coder',
         # Qwen
         'qwen3-max', 'qwen3-plus', 'qwen3-turbo', 'qwen3.5-flash', 'qwen3.5-9b',
         'qwen3.6-plus', 'qwen2.5', 'qwen-max',

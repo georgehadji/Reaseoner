@@ -1,4 +1,5 @@
 <!-- From: E:\Documents\Vibe-Coding\Reasoner\AGENTS.md -->
+<!-- From: E:\Documents\Vibe-Coding\Reasoner\AGENTS.md -->
 # AGENTS.md — Reasoner (ARA Pipeline v2.2)
 
 > This file is written for AI coding agents. It assumes you know nothing about this project.
@@ -31,8 +32,8 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 | HTTP Client | httpx |
 | LLM Routing | OpenRouter (primary, 350+ models); direct adapters for Anthropic, OpenAI, Google, Perplexity, DeepSeek, Mistral, xAI, Qwen, Kimi, GLM, MiniMax, Ollama |
 | Search | SearXNG (self-hosted via Docker Compose), Perplexity Sonar |
-| Database | SQLite (event store), PostgreSQL support via asyncpg, aiosqlite for async SQLite |
-| File Processing | PyPDF2, python-docx, pymupdf |
+| Database | SQLite (event store, feedback), PostgreSQL support via asyncpg, aiosqlite for async SQLite |
+| File Processing | PyPDF2, python-docx, pymupdf, python-magic |
 | Web Scraping | newspaper3k, lxml |
 | Financial Data | yfinance, yahooquery |
 | Math | simpleeval |
@@ -85,7 +86,7 @@ Reasoner/
 ├── ui-next/                # Next.js frontend
 ├── cache/                  # Run-related cache
 ├── docs/                   # Markdown documentation
-├── scripts/                # Utility scripts (smoke_test_search.py)
+├── scripts/                # Utility scripts
 ├── healing/                # Self-healing codebase (introspection, test generation)
 └── .github/workflows/      # CI/CD (self-healing-ci.yml)
 ```
@@ -145,7 +146,7 @@ src/reasoner/
 │   │   ├── router.py              # ProviderRouter
 │   │   ├── providers/             # Provider adapters (OpenRouter compat)
 │   │   └── extraction/            # JSON extraction utilities
-│   ├── persistence/               # Event store, postgres, snapshots
+│   ├── persistence/               # Event store, postgres, snapshots, feedback store
 │   ├── websocket/                 # WebSocket manager
 │   ├── translation/               # Translation utilities
 │   └── widgets/                   # Widget registry (calculator, stocks, weather, etc.)

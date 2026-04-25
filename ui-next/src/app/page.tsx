@@ -33,6 +33,7 @@ type MessagesAction =
   | { type: 'ADD_STREAMING_CONTENT'; payload: { messageId: string; text: string } }
   | { type: 'UPDATE_PHASE_DATA'; payload: { messageId: string; phaseIndex: number; data: unknown } }
   | { type: 'UPDATE_PHASE_MODELS'; payload: { messageId: string; phaseIndex: number; models: string[] | undefined } }
+  | { type: 'APPEND_WIDGET'; payload: { messageId: string; widget: { widget_type: string; name: string; result: Record<string, unknown>; citations?: string[] } } }
   | { type: 'ADD_ACTIVE_AGENT'; payload: { messageId: string; agent: { name: string; task: string } } }
   | { type: 'REMOVE_ACTIVE_AGENT'; payload: { messageId: string; agentName: string } }
   | { type: 'SET_CURRENT_PHASE'; payload: { phase?: number; phaseName?: string } }
@@ -80,6 +81,12 @@ function messagesReducer(state: ChatFeedMessage[], action: MessagesAction): Chat
       const { messageId, models } = action.payload;
       return state.map(msg =>
         msg.id === messageId ? { ...msg, phaseModels: models } : msg
+      );
+    }
+    case 'APPEND_WIDGET': {
+      const { messageId, widget } = action.payload;
+      return state.map(msg =>
+        msg.id === messageId ? { ...msg, widgets: [...(msg.widgets || []), widget] } : msg
       );
     }
     case 'ADD_ACTIVE_AGENT': {
@@ -149,6 +156,8 @@ function cleanDisplayPrompt(prompt: string): string {
   return prompt.replace(/^(?:\*{2})?[\w\s,'-]+prompt:\*{0,2}\s+/i, '');
 }
 
+const CONTINUATION_RE = /\b(continue|cont\.?|keep going|more|expand|elaborate|extend|add more|next (step|section|part)|again|revise|rewrite|improve|same topic|build on|follow up)\b/i;
+
 function clampImagePrompt(prompt: string) {
   const trimmed = prompt.trim();
   if (trimmed.length <= IMAGE_PROMPT_MAX_CHARS) {
@@ -197,7 +206,6 @@ export default function Home() {
   // REFACTOR: Replace useState with useReducer for messages state
   const [messages, dispatchMessages] = useReducer(messagesReducer, []);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const progressIdRef = useRef<string | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const clientRunIdRef = useRef<string | null>(null);
 
@@ -211,10 +219,7 @@ export default function Home() {
   const [phaseOpenMode, setPhaseOpenMode] = useState<'auto' | 'expand' | 'collapse'>('auto');
   const phaseStartTimesRef = useRef<Record<number, number>>({});
 
-  const isContinuation = (text: string) =>
-    /\b(continue|cont\.?|keep going|more|expand|elaborate|extend|add more|next (step|section|part)|again|revise|rewrite|improve|same topic|build on|follow up)\b/i.test(
-      text,
-    );
+  const isContinuation = (text: string) => CONTINUATION_RE.test(text);
 
   const {
     scrollToBottom,
@@ -305,9 +310,6 @@ export default function Home() {
     };
     // Dispatch action to add user message and initial assistant message
     dispatchMessages({ type: 'ADD_MESSAGES', payload: isImageMode ? [userMsg] : [userMsg, assistantMsg] });
-
-    const progressId = 'prog-' + Date.now();
-    progressIdRef.current = progressId;
 
     // ── Image Generation mode ──
     if (isImageMode) {
@@ -431,7 +433,6 @@ export default function Home() {
         }}});
       } finally {
         setRunning(false);
-        progressIdRef.current = null;
         clearAttachments();
       }
       return;
@@ -522,13 +523,18 @@ export default function Home() {
             const phaseModels = (phaseData as Record<string, unknown>).models as string[] | undefined;
             
             // Update the assistant message with completed phase and markdown content
-            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: {
+            const phaseCompleteUpdates: Partial<ChatFeedMessage> = {
               content: buildMarkdownFromPhases(phases),
               phases: [...phases],
               currentPhaseName: undefined,
-              streamingContent: displayName === 'Synthesis' ? undefined : (messages.find(m => m.id === assistantId)?.streamingContent), // Clear streaming if Synthesis completes
-              phaseModels: phaseModels ?? (messages.find(m => m.id === assistantId)?.phaseModels),
-            }}});
+            };
+            if (displayName === 'Synthesis') {
+              phaseCompleteUpdates.streamingContent = undefined; // Clear streaming if Synthesis completes
+            }
+            if (phaseModels) {
+              phaseCompleteUpdates.phaseModels = phaseModels;
+            }
+            dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: phaseCompleteUpdates } });
           }
           break;
         case 'phase_error':
@@ -571,15 +577,11 @@ export default function Home() {
               result: (ev.data?.result as Record<string, unknown>) || {},
               citations: (ev.data?.citations as string[]) || undefined,
             };
-            const existingMsg = messages.find((m) => m.id === assistantId);
-            const existingWidgets = existingMsg?.widgets || [];
             dispatchMessages({
-              type: 'UPDATE_MESSAGE',
+              type: 'APPEND_WIDGET',
               payload: {
                 messageId: assistantId,
-                updates: {
-                  widgets: [...existingWidgets, widgetData],
-                },
+                widget: widgetData,
               },
             });
           }
@@ -641,7 +643,7 @@ export default function Home() {
     };
 
     // Generate a client-side run ID so WebSocket can subscribe to the same pipeline
-    const clientRunId = 'run-' + crypto.randomUUID();
+    const clientRunId = 'run-' + (crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`);
     clientRunIdRef.current = clientRunId;
 
     try {
@@ -696,7 +698,6 @@ export default function Home() {
     } finally {
       wsDisconnect();
       clientRunIdRef.current = null;
-      progressIdRef.current = null;
       setRunning(false);
       clearAttachments();
     }
@@ -704,6 +705,7 @@ export default function Home() {
 
   function handleStop() {
     stopRun();
+    wsSendStop(clientRunIdRef.current || '');
     setRunning(false);
     setCurrentPhase(undefined);
   }

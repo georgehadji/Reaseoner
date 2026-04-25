@@ -3,14 +3,11 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Sparkles,
-  X,
   Trash2,
   Sun,
   PanelLeft,
   Brain,
-  Search,
   Copy,
-  Download,
   ArrowUpCircle,
   Command,
 } from 'lucide-react';
@@ -78,15 +75,13 @@ export function CommandPalette({
   }, [commands, query]);
 
   useEffect(() => {
-    setSelectedIndex(0);
-  }, [query]);
-
-  useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return;
+    const raf = requestAnimationFrame(() => {
       setQuery('');
       setSelectedIndex(0);
       inputRef.current?.focus();
-    }
+    });
+    return () => cancelAnimationFrame(raf);
   }, [isOpen]);
 
   useEffect(() => {
@@ -131,7 +126,10 @@ export function CommandPalette({
             ref={inputRef}
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setSelectedIndex(0);
+            }}
             placeholder="Type a command..."
             className="flex-1 bg-transparent text-sm text-[var(--text)] outline-none placeholder:text-[var(--text-muted)]"
           />

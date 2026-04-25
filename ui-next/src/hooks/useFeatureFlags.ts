@@ -1,5 +1,7 @@
 'use client';
 
+import { STORAGE_KEYS } from '@/lib/config';
+
 const DEFAULT_FEATURES: Record<string, boolean> = {
   'cost-transparency': true,
   'typed-errors': true,
@@ -15,19 +17,37 @@ const DEFAULT_FEATURES: Record<string, boolean> = {
   'theme-transition': true,
 };
 
-import { STORAGE_KEYS } from '@/lib/config';
-
 const STORAGE_KEY = STORAGE_KEYS.featureFlags;
+
+let _cachedFlags: Record<string, boolean> | null = null;
+let _storageListenerAdded = false;
+
+function _addStorageListener(): void {
+  if (_storageListenerAdded || typeof window === 'undefined') return;
+  _storageListenerAdded = true;
+  window.addEventListener('storage', (e) => {
+    if (e.key === STORAGE_KEY) {
+      _cachedFlags = null;
+    }
+  });
+}
 
 function loadFlags(): Record<string, boolean> {
   if (typeof window === 'undefined') return DEFAULT_FEATURES;
+  _addStorageListener();
+  if (_cachedFlags) return _cachedFlags;
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_FEATURES;
+    if (!raw) {
+      _cachedFlags = DEFAULT_FEATURES;
+      return _cachedFlags;
+    }
     const parsed = JSON.parse(raw) as Record<string, boolean>;
-    return { ...DEFAULT_FEATURES, ...parsed };
+    _cachedFlags = { ...DEFAULT_FEATURES, ...parsed };
+    return _cachedFlags;
   } catch {
-    return DEFAULT_FEATURES;
+    _cachedFlags = DEFAULT_FEATURES;
+    return _cachedFlags;
   }
 }
 
@@ -39,10 +59,12 @@ export function setEnabled(name: string, value: boolean): void {
   if (typeof window === 'undefined') return;
   const flags = loadFlags();
   flags[name] = value;
+  _cachedFlags = { ...flags };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(flags));
 }
 
 export function resetFlags(): void {
   if (typeof window === 'undefined') return;
+  _cachedFlags = null;
   localStorage.removeItem(STORAGE_KEY);
 }

@@ -11,10 +11,12 @@ export interface WidgetData {
   citations?: string[];
 }
 
-const WIDGET_MAP: Record<string, React.FC<any>> = {
-  calculator: CalculationWidget,
-  stock: StockWidget,
-  weather: WeatherWidget,
+type WidgetComponent = React.FC<Record<string, unknown>>;
+
+const WIDGET_MAP: Record<string, WidgetComponent> = {
+  calculator: CalculationWidget as WidgetComponent,
+  stock: StockWidget as WidgetComponent,
+  weather: WeatherWidget as WidgetComponent,
 };
 
 export function WidgetRenderer({ widget }: { widget: WidgetData }) {

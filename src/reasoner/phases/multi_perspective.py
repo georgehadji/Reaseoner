@@ -28,7 +28,26 @@ def critique_prompt(state: PipelineState) -> str:
         {"perspective": c.perspective.value, "one_liner": c.content[:TRUNCATION.API_STORAGE], "key_insights": c.key_insights[:TRUNCATION.MEMORY]}
         for c in state.candidates
     ]
-    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nEvaluate these candidates:\n{json.dumps(candidates_summary, indent=2)}\n\nScore each 0-10 (logical_consistency, evidence_support, etc.) and provide a "steel_man" argument for the weakest.\n\nCRITICAL SCORING: A new critical scoring dimension is CONFIDENCE vs ACCURACY. It is better to state \'UNKNOWN\' or express low confidence than to guess confidently and be wrong. If a candidate makes a claim with high confidence that is factually incorrect or unsubstantiated, apply a significant **negative penalty** (0.0-10.0) to its score. Reward honest uncertainty.\n\nOutput JSON: {{"scores": [{{"perspective": "<p_val>", "logical_consistency": <0-10>, "confidence_vs_accuracy_penalty": <0.0-10.0>, "steel_man": "<arg>"}}]}}'
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n\n'
+        f'Evaluate these candidates:\n{json.dumps(candidates_summary, indent=2)}\n\n'
+        f'Score each candidate on ALL four dimensions (0-10 each). '
+        f'Provide a "steel_man" (strongest counter-argument) for each.\n\n'
+        f'CRITICAL SCORING: If a candidate states confident claims that are factually wrong or unsubstantiated, '
+        f'apply a confidence_vs_accuracy_penalty (0.0-10.0). Reward honest uncertainty over false confidence.\n\n'
+        f'Output JSON (ALL fields required for EVERY score entry):\n'
+        f'{{"scores": [{{'
+        f'"perspective": "<p_val>", '
+        f'"logical_consistency": <0-10>, '
+        f'"evidence_support": <0-10>, '
+        f'"failure_resilience": <0-10>, '
+        f'"feasibility": <0-10>, '
+        f'"confidence_vs_accuracy_penalty": <0.0-10.0>, '
+        f'"steel_man": "<strongest counter-argument>", '
+        f'"bias_flags": ["<bias if any>"]'
+        f'}}]}}'
+    )
 
 STRESS_SYSTEM = "You are an analytical assistant. Simulate adversarial conditions. Be specific about real-world failure mechanics. Output ONLY valid JSON."
 

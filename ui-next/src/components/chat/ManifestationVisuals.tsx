@@ -8,6 +8,14 @@ interface ManifestationVisualsProps {
   progress: number; // 0 to 1
 }
 
+// Module-level random positions — generated once at load time to avoid React 19 purity violations
+const BLOB_POSITIONS = Array.from({ length: 5 }, () => ({
+  x1: Math.random() * 200 - 100,
+  x2: Math.random() * 200 - 100,
+  y1: Math.random() * 200 - 100,
+  y2: Math.random() * 200 - 100,
+}));
+
 export function ManifestationVisuals({ progress }: ManifestationVisualsProps) {
   // Determine state based on progress
   const isDissolved = progress < 0.3;
@@ -38,13 +46,13 @@ export function ManifestationVisuals({ progress }: ManifestationVisualsProps) {
             </div>
 
             {/* Fast moving light blobs */}
-            {[...Array(5)].map((_, i) => (
+            {BLOB_POSITIONS.map((pos, i) => (
               <motion.div
                 key={i}
                 className="absolute h-32 w-32 rounded-full bg-gradient-to-r from-sky-400/30 to-amber-300/30 blur-3xl"
                 animate={{
-                  x: [Math.random() * 200 - 100, Math.random() * 200 - 100],
-                  y: [Math.random() * 200 - 100, Math.random() * 200 - 100],
+                  x: [pos.x1, pos.x2],
+                  y: [pos.y1, pos.y2],
                   scale: [1, 1.5, 0.8],
                   opacity: [0.3, 0.6, 0.3],
                 }}

@@ -505,6 +505,10 @@ class PipelineState:
         def _get_value(obj: Any) -> Any:
             return obj.value if hasattr(obj, "value") else obj
 
+        # Determine content limit based on phase to balance token cost vs quality.
+        # Synthesis legitimately needs full candidate content to merge them correctly.
+        content_limit = TRUNCATION.LARGE_CONTENT if phase in ("synthesis", "stress_testing", "verification") else TRUNCATION.CONTENT
+
         # Balanced compression (default) - progressive truncation
         method_states = {
             "jury_guidelines": self.jury_guidelines,
@@ -547,7 +551,7 @@ class PipelineState:
             "candidates": [
                 {
                     "perspective": _get_value(_get_attr(c, "perspective")),
-                    "content": _get_attr(c, "content", "")[:TRUNCATION.CONTENT],
+                    "content": _get_attr(c, "content", "")[:content_limit],
                     "key_insights": (_get_attr(c, "key_insights", [])[:TRUNCATION.KEY_INSIGHTS] if use_neuro else _get_attr(c, "key_insights", [])),
                 }
                 for c in self.top_candidates or self.candidates

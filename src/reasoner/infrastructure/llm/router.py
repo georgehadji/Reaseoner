@@ -9,6 +9,8 @@ from typing import Any
 from reasoner.core.constants import (
     DEFAULT_MAX_TOKENS,
     DEFAULT_TEMPERATURE,
+    ROLE_TIMEOUTS,
+    TIMEOUTS,
 )
 from reasoner.infrastructure.llm.base import BaseLLMProvider, LLMError
 from reasoner.infrastructure.llm.registry import build_provider
@@ -47,6 +49,12 @@ class ProviderRouter:
             return self.primary
         return provider
 
+    def _timeout_for_role(self, role: str, override: float | None) -> float:
+        if override is not None:
+            return override
+        attr = ROLE_TIMEOUTS.get(role)
+        return getattr(TIMEOUTS, attr) if attr else TIMEOUTS.LLM_CALL
+
     async def call(
         self,
         role: str,
@@ -54,7 +62,7 @@ class ProviderRouter:
         user_prompt: str,
         max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = DEFAULT_TEMPERATURE,
-        timeout_seconds: float = 30.0,
+        timeout_seconds: float | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """
         Call LLM for role. On LLMError or timeout, tries a fallback provider:
@@ -67,33 +75,53 @@ class ProviderRouter:
             metadata includes: input tokens, output tokens, cost (if available)
         """
         assigned = self.get(role)
+        effective_timeout = self._timeout_for_role(role, timeout_seconds)
 
         async def _call(provider: BaseLLMProvider) -> str:
             coro = provider.complete_with_retry(system_prompt, user_prompt, max_tokens, temperature)
-            if timeout_seconds is not None:
-                return await asyncio.wait_for(coro, timeout=timeout_seconds)
-            return await coro
+            return await asyncio.wait_for(coro, timeout=effective_timeout)
 
-        # Resolve fallback provider (explicit beats automatic primary fallback)
+        # Resolve fallback: explicit > primary > none.
+        # Skip any fallback that resolves to the same model as the failing provider —
+        # retrying an identical endpoint after a timeout is guaranteed to waste time.
         explicit = self.fallback_table.get(role)
+        candidates: list[BaseLLMProvider] = []
         if explicit and explicit is not assigned:
-            fallback: BaseLLMProvider | None = explicit
-        elif self.primary is not assigned:
-            fallback = self.primary
-        else:
-            fallback = None
+            candidates.append(explicit)
+        if self.primary is not assigned and self.primary not in candidates:
+            candidates.append(self.primary)
+        # Filter out same-model duplicates so we never retry a timed-out endpoint
+        fallback: BaseLLMProvider | None = next(
+            (p for p in candidates if p.model != assigned.model), None
+        )
 
         actual_provider = assigned
         try:
             response = await _call(assigned)
             if not response or not response.strip():
                 raise LLMError(f"Empty response from {assigned.model} for role={role}")
-        except (LLMError, asyncio.TimeoutError) as exc:
+        except asyncio.TimeoutError:
+            if fallback is None:
+                raise TimeoutError(
+                    f"'{assigned.model}' (role={role}) timed out after {effective_timeout:.0f}s — no fallback available"
+                )
+            logger.warning(
+                "Role '%s' provider '%s' timed out after %.0fs — retrying with fallback '%s'",
+                role, assigned.model, effective_timeout, fallback.model,
+            )
+            try:
+                response = await _call(fallback)
+            except asyncio.TimeoutError:
+                raise TimeoutError(
+                    f"'{assigned.model}' and fallback '{fallback.model}' (role={role}) both timed out after {effective_timeout:.0f}s"
+                )
+            actual_provider = fallback
+        except LLMError as exc:
             if fallback is None:
                 raise
             logger.warning(
                 "Role '%s' provider '%s' failed (%s) — retrying with fallback '%s'",
-                role, assigned.model, type(exc).__name__, fallback.model,
+                role, assigned.model, exc, fallback.model,
             )
             response = await _call(fallback)
             actual_provider = fallback

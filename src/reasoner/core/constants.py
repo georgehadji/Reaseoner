@@ -166,6 +166,13 @@ MODEL_MINIMAX_M27: str = "minimax-m2.7"
 MODEL_MIMO_V2_PRO: str = "mimo-v2-pro"
 MODEL_MIMO_V2_FLASH: str = "mimo-v2-flash"
 
+# DeepSeek (reasoning-effort modes)
+# NOTE: deepseek-v4-pro and deepseek-v4-flash do not exist on OpenRouter.
+# Use gemini-pro / gemini-flash-lite as low-latency replacements.
+MODEL_GEMINI_FLASH_LITE: str = "gemini-flash-lite"
+MODEL_GLM_47_FLASH: str = "glm-4.7-flash"
+MODEL_MISTRAL_SMALL: str = "mistral-small"
+
 # ═════════════════════════════════════════════════════════════════════
 # GROUPED LIMITS (Value Object Pattern via frozen dataclasses)
 # ═════════════════════════════════════════════════════════════════════
@@ -179,8 +186,23 @@ class Timeouts:
     WIDGET: float = 10.0
     WIDGET_SHORT: float = 5.0
     MODEL_VALIDATION: float = 10.0
-    HTTP_TOTAL: float = 60.0
+    HTTP_TOTAL: float = 120.0
     HTTP_CONNECT: float = 10.0
+    LLM_CALL: float = 45.0     # reduced from 90s — most models respond in <30s
+    # Phase-specific timeouts — tighter budgets per role
+    CLASSIFICATION: float = 20.0
+    DECOMPOSITION: float = 30.0
+    SYNTHESIS: float = 120.0   # synthesis legitimately needs more time
+
+
+# Maps routing role names to their specific call timeout.
+# Roles absent from this map use TIMEOUTS.LLM_CALL as the default.
+ROLE_TIMEOUTS: dict[str, str] = {
+    "classification": "CLASSIFICATION",
+    "prompt_enhancement": "CLASSIFICATION",
+    "decomposition": "DECOMPOSITION",
+    "synthesis": "SYNTHESIS",
+}
 
 
 @dataclass(frozen=True)

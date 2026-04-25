@@ -144,12 +144,19 @@ def extract_json(text: str) -> dict[str, Any]:
 
         # Last resort: truncated JSON repair — close any open brackets/strings
         candidate = text[start:]
-        repaired = _repair_truncated_json(candidate)
-        if repaired:
-            try:
-                return json.loads(repaired)
-            except json.JSONDecodeError:
-                pass
+        for _ in range(10):  # Try repairing by progressively dropping the last incomplete item
+            repaired = _repair_truncated_json(candidate)
+            if repaired:
+                try:
+                    return json.loads(repaired)
+                except json.JSONDecodeError:
+                    # Fallback: chop off everything after the last comma and try again
+                    last_comma = candidate.rfind(",")
+                    if last_comma == -1:
+                        break
+                    candidate = candidate[:last_comma]
+            else:
+                break
 
     raise ParseError(
         f"Could not extract valid JSON from response. "

@@ -1,9 +1,10 @@
 {
-  "profile": "openai",
+  "profile": "gemini",
   "env": {
-    "OPENAI_BASE_URL": "https://openrouter.ai/api/v1",
-    "OPENAI_MODEL": "minimax/minimax-m2.7",
-    "OPENAI_API_KEY": "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"
+    "GEMINI_AUTH_MODE": "api-key",
+    "GEMINI_MODEL": "google/gemini-3.1-flash-lite-preview",
+    "GEMINI_API_KEY": "AIzaSyB8dsASIfPlkJBZxKvjwGvbqKG73DXA8Dc",
+    "GEMINI_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai"
   },
-  "createdAt": "2026-04-24T16:28:45.218Z"
+  "createdAt": "2026-04-24T20:21:42.279Z"
 }

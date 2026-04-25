@@ -41,15 +41,14 @@ from reasoner.llm import ProviderRouter
 # to the research-backed writing pipeline.
 _CREATIVE_PATTERNS: list[re.Pattern[str]] = [
     # English — pure creative genres without topic indicators
-    re.compile(r"\b(write|compose|draft|create)\s+(me\s+)?(an?\s+)?(poem|story|narrative|letter|speech|script)\b", re.I),
-    re.compile(r"\b(tell\s+me\s+a\s+story|make\s+up\s+a\s+story|write\s+me\s+a\s+poem)\b", re.I),
+    re.compile(r"\b(write|compose|draft|create|tell)\s+(me\s+)?(an?\s+)?(poem|story|narrative|letter|speech|script|joke|limerick|riddle)\b", re.I),
+    re.compile(r"\b(tell\s+me\s+a\s+(story|joke)|make\s+up\s+a\s+(story|joke)|write\s+me\s+a\s+(poem|joke))\b", re.I),
     # Greek — pure creative genres
-    re.compile(r"\b(γράψε|συνέθεσε|δημιούργησε|σχεδίασε|φτιάξε)\s+(μου\s+)?(ένα\s+|μια\s+)?(ποίημα|ιστορία|λόγο|σενάριο|βιογραφικό|αφήγηση)\b", re.I),
-    re.compile(r"\b(πες\s+μου|φτιάξε\s+μου|γράψε\s+μου)\s+(μια\s+)?(ιστορία|αφήγηση)\b", re.I),
+    re.compile(r"\b(γράψε|συνέθεσε|δημιούργησε|σχεδίασε|φτιάξε|πες)\s+(μου\s+)?(ένα\s+|μια\s+)?(ποίημα|ιστορία|λόγο|σενάριο|βιογραφικό|αφήγηση|ανέκδοτο|αινίγμα)\b", re.I),
+    re.compile(r"\b(πες\s+μου|φτιάξε\s+μου|γράψε\s+μου)\s+(μια\s+)?(ιστορία|αφήγηση|ανέκδοτο)\b", re.I),
 ]
 
-# Research indicators — if these appear with creative verbs, treat as research-backed
-# (requires full pipeline with search, NOT creative fast-path).
+# Research indicators — used to detect if a writing request is research-backed.
 _RESEARCH_INDICATORS: list[re.Pattern[str]] = [
     re.compile(r"\b(research\s+(article|paper|essay)|informative\s+(article|essay)|academic\s+(article|essay))\b", re.I),
     re.compile(r"\b(with\s+(sources|citations|references)|based\s+on\s+(sources|research|data))\b", re.I),
@@ -57,6 +56,15 @@ _RESEARCH_INDICATORS: list[re.Pattern[str]] = [
     # Greek
     re.compile(r"\b(έρευνα|μελέτη|ενημερωτικό|με\s+πηγές|με\s+αναφορές)\b", re.I),
     re.compile(r"\b(για\s+(την|τον|τη|το|τους|τις|τα)\s+\w{4,}|σχετικά\s+με\s+\w{4,})\b", re.I),
+]
+
+# Hard research indicators — if these appear with creative verbs, treat as research-backed
+# (requires full pipeline with search, NOT creative fast-path).
+_HARD_RESEARCH_INDICATORS: list[re.Pattern[str]] = [
+    re.compile(r"\b(research\s+(article|paper|essay)|informative\s+(article|essay)|academic\s+(article|essay))\b", re.I),
+    re.compile(r"\b(with\s+(sources|citations|references)|based\s+on\s+(sources|research|data))\b", re.I),
+    # Greek
+    re.compile(r"\b(έρευνα|μελέτη|ενημερωτικό|με\s+πηγές|με\s+αναφορές)\b", re.I),
 ]
 
 
@@ -70,13 +78,15 @@ def _is_creative_writing(problem: str) -> bool:
     """Return True only for PURE creative tasks (no research needed).
 
     Research-backed requests like "write an article about climate change"
-    return False so they go through the full pipeline with search.
+    return False because they don't match _CREATIVE_PATTERNS.
+    Pure creative requests like "write a poem about cats" return True
+    even with a topic, unless they explicitly ask for sources/research.
     """
     # Must match a creative pattern first
     if not any(p.search(problem) for p in _CREATIVE_PATTERNS):
         return False
-    # If research indicators are present, it's research-backed → NOT pure creative
-    if any(p.search(problem) for p in _RESEARCH_INDICATORS):
+    # If hard research indicators are present (sources, academic, etc.), it's NOT pure creative
+    if any(p.search(problem) for p in _HARD_RESEARCH_INDICATORS):
         return False
     return True
 

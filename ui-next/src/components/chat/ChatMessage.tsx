@@ -3,6 +3,7 @@
 import { memo } from 'react';
 import { Brain } from 'lucide-react';
 import { isEnabled } from '@/hooks/useFeatureFlags';
+import { TIMING } from '@/lib/config';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant';
@@ -38,8 +39,6 @@ export function MemoryBadge({ count }: { count: number }) {
     </div>
   );
 }
-
-import { TIMING } from '@/lib/config';
 
 export function StreamingIndicator() {
   return (

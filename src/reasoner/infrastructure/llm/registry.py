@@ -35,6 +35,7 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     # Google
     MODEL_GEMINI_PRO:   {"model": "google/gemini-2.5-pro"},
     MODEL_GEMINI_FLASH: {"model": "google/gemini-2.5-flash"},
+    "gemini-flash-lite": {"model": "google/gemini-2.5-flash-lite"},
     "gemma-4-26b":      {"model": "google/gemma-4-26b-a4b-it"},
     "gemma-4-31b":      {"model": "google/gemma-4-31b-it"},
     # xAI
@@ -51,6 +52,7 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     # Mistral
     "mistral-large-3":  {"model": "mistralai/mistral-large-2512"},
     "mistral-medium":   {"model": "mistralai/mistral-medium-3.1"},
+    "mistral-small":    {"model": "mistralai/mistral-small-3.2-24b-instruct"},
     "codestral":        {"model": "mistralai/codestral-2501"},
     "ministral-8b":     {"model": "mistralai/ministral-8b"},
     "ministral-3b":     {"model": "mistralai/ministral-3b"},
@@ -59,8 +61,6 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "deepseek-v3.1-nex-n1": {"model": "nex-agi/deepseek-v3.1-nex-n1"},
     "deepseek-r1":      {"model": "deepseek/deepseek-r1-0528"},
     "deepseek-r1t2-chimera": {"model": "tngtech/deepseek-r1t2-chimera"},
-    "deepseek-v4-pro": {"model": "deepseek/deepseek-v4-pro"},
-    "deepseek-v4-flash": {"model": "deepseek/deepseek-v4-flash"},
     # Qwen
     "qwen3-max":        {"model": "qwen/qwen3.6-plus"},
     "qwen3.6-plus":     {"model": "qwen/qwen3.6-plus"},
@@ -79,6 +79,7 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "glm-4-airx":       {"model": "z-ai/glm-4.6"},
     "glm-4-long":       {"model": "z-ai/glm-4-32b"},
     "glm-5.1":          {"model": "z-ai/glm-5.1"},
+    "glm-4.7-flash":    {"model": "z-ai/glm-4.7-flash"},
     # Elephant
     "elephant-alpha":   {"model": "openrouter/elephant-alpha"},
     # Arcee AI

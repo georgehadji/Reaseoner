@@ -131,16 +131,24 @@ _MIN_SNIPPET_LEN = 50
 
 def _normalize_url(url: str) -> str:
     """
-    Strip URL fragment and trailing slash for deduplication.
-    example.com/page#section and example.com/page/ both → example.com/page
+    Normalize URL for deduplication. 
+    Handles protocol, www, trailing slashes (even before query params), and fragments.
     """
     if not url:
-        return url
+        return ""
     try:
-        p = urlparse(url)
-        return urlunparse(p._replace(fragment="", path=p.path.rstrip("/")))
+        p = urlparse(url.lower())
+        # Remove www. from netloc
+        netloc = p.netloc[4:] if p.netloc.startswith("www.") else p.netloc
+        # Clean path: remove trailing slash
+        path = p.path.rstrip("/")
+        # Reconstruct without scheme and fragment
+        # Using a simple string concat to avoid urlunparse adding back scheme://
+        return f"{netloc}{path}{'?' + p.query if p.query else ''}"
     except Exception:
-        return url
+        # Fallback to a simpler version if parsing fails
+        u = url.lower().split("://")[-1].split("#")[0].rstrip("/")
+        return u[4:] if u.startswith("www.") else u
 
 
 # ─────────────────────────────────────────────
@@ -296,7 +304,7 @@ class DiscoveryClient:
         response.raise_for_status()
         data = response.json()
 
-        raw = data.get("results", [])[:num_results]
+        raw = data.get("results", [])
         refined: list[dict[str, Any]] = []
         seen_norm: set[str] = set()
 
@@ -679,8 +687,12 @@ async def get_discovery_client(
 ) -> tuple[DiscoveryClient, Optional[SourceType]]:
     """Get or create the shared discovery client."""
     global _default_client
+    resolved_base = (base_url or get_searxng_base_url()).rstrip("/")
+    
+    if _default_client is not None and _default_client.base_url != resolved_base:
+        reset_discovery_client()
+
     if _default_client is None:
-        resolved_base = (base_url or get_searxng_base_url()).rstrip("/")
         _default_client = DiscoveryClient(base_url=resolved_base)
     return _default_client, source_type
 

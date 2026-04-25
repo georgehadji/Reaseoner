@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, memo } from 'react';
+import { useState, memo } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown, Bot, Timer, Cpu, Boxes } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { TEXT_SIZES } from '@/lib/config';
+import { TEXT_SIZES, TIMING } from '@/lib/config';
 
 interface SubagentInfo {
   name: string;
@@ -35,8 +35,6 @@ function formatModelLabel(model: string) {
   return model.split('/').pop() || model;
 }
 
-import { TIMING } from '@/lib/config';
-
 function formatDurationMs(ms: number) {
   if (ms < TIMING.durationFormatMsThreshold) return `${ms.toFixed(0)}ms`;
   return `${(ms / 1000).toFixed(1)}s`;
@@ -57,12 +55,8 @@ export const PhaseCard = memo(function PhaseCard({
   compact = false,
   status = 'idle',
 }: PhaseCardProps) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    if (forceOpen === null) return;
-    setOpen(forceOpen);
-  }, [forceOpen]);
+  const [userOpen, setUserOpen] = useState(defaultOpen);
+  const open = forceOpen !== null ? forceOpen : userOpen;
 
   const subagentTooltip = subagents
     ? subagents
@@ -82,7 +76,7 @@ export const PhaseCard = memo(function PhaseCard({
     >
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setUserOpen((v) => !v)}
         className={cn(
           'flex w-full items-center justify-between text-left hover:bg-[var(--surface-2)]',
           compact && !open ? 'px-3 py-2' : 'px-4 py-3'

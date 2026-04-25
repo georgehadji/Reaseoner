@@ -491,9 +491,16 @@ class ARAPipeline(
         # For very short prompts, allow up to 100 chars so concise inputs can still be expanded.
         if len(enhanced) > max(100, len(original) * 1.5):
             return False
+            
+        # Language translation guard — reject if the LLM helpfully translated the prompt
+        # (e.g., from Greek to English), losing the user's implicit language preference.
+        from reasoner.phases._shared import detect_language
+        if detect_language(original) != detect_language(enhanced):
+            return False
+            
         # Fusion guard — reject if original text is concatenated without whitespace separator
         # (indicates the LLM glued extra text directly onto the original)
-        stripped = original.rstrip(";!?.")
+        stripped = original.rstrip(";!?.\n ")
         if stripped in enhanced and not enhanced.endswith(stripped + " "):
             tail = enhanced[len(stripped):]
             if tail and not tail[0].isspace():

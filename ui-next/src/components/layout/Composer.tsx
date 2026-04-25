@@ -49,12 +49,14 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
 
   const [estimate, setEstimate] = useState<{ tokens: number; cost: string; duration: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const estimateReqIdRef = useRef(0);
 
   const fetchEstimate = useCallback(async (text: string, preset: string) => {
     if (!text.trim() || text.trim().length < 3) {
       setEstimate(null);
       return;
     }
+    const reqId = ++estimateReqIdRef.current;
     try {
       const { fetchWithCsrf } = await import('@/lib/security-client');
       const resp = await fetchWithCsrf(API.ESTIMATE, {
@@ -64,13 +66,16 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       });
       if (!resp.ok) return;
       const data = await resp.json();
+      if (reqId !== estimateReqIdRef.current) return; // stale response
       setEstimate({
         tokens: (data.estimated_tokens_input || 0) + (data.estimated_tokens_output || 0),
         cost: data.estimated_cost_usd?.toFixed(3) || '0.000',
         duration: data.estimated_duration_seconds || 0,
       });
     } catch {
-      setEstimate(null);
+      if (reqId === estimateReqIdRef.current) {
+        setEstimate(null);
+      }
     }
   }, []);
 
@@ -177,29 +182,39 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
     }
   }
 
-  /** Attachment chip renderer */
-  function AttachmentChip({ att }: { att: (typeof attachments)[0] }) {
-    const isImage = att.type.startsWith('image/');
-    return (
-      <div className="group inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]">
-        {isImage && att.previewUrl ? (
-          <img src={att.previewUrl} alt={att.name} className="h-5 w-5 rounded object-cover" />
-        ) : (
-          <FileText className="h-4 w-4 shrink-0" />
-        )}
-        <span className="max-w-[120px] truncate">{att.name}</span>
-        <span className="text-[10px] text-[var(--text-subtle)]">{formatFileSize(att.size)}</span>
-        <button
-          type="button"
-          onClick={() => removeAttachment(att.id)}
-          className="ml-1 rounded-full p-0.5 text-[var(--text-subtle)] transition-colors hover:bg-red-500/10 hover:text-red-500"
-          aria-label={`Remove ${att.name}`}
-        >
-          <X className="h-3 w-3" />
-        </button>
-      </div>
-    );
-  }
+interface AttachmentChipProps {
+  att: {
+    id: string;
+    type: string;
+    previewUrl?: string;
+    name: string;
+    size: number;
+  };
+  onRemove: (id: string) => void;
+}
+
+function AttachmentChip({ att, onRemove }: AttachmentChipProps) {
+  const isImage = att.type.startsWith('image/');
+  return (
+    <div className="group inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]">
+      {isImage && att.previewUrl ? (
+        <img src={att.previewUrl} alt={att.name} className="h-5 w-5 rounded object-cover" />
+      ) : (
+        <FileText className="h-4 w-4 shrink-0" />
+      )}
+      <span className="max-w-[120px] truncate">{att.name}</span>
+      <span className="text-[10px] text-[var(--text-subtle)]">{formatFileSize(att.size)}</span>
+      <button
+        type="button"
+        onClick={() => onRemove(att.id)}
+        className="ml-1 rounded-full p-0.5 text-[var(--text-subtle)] transition-colors hover:bg-red-500/10 hover:text-red-500"
+        aria-label={`Remove ${att.name}`}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
 
   /** Plus button to open file picker */
   function AttachButton() {
@@ -226,10 +241,12 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   /** Tier toggle button — shared between centered and non-centered layouts */
   function TierToggle() {
     const isPremium = tier === 'premium';
+    const costNum = estimate ? parseFloat(estimate.cost) : NaN;
+    const costDisplay = Number.isFinite(costNum) ? costNum.toFixed(3) : '0.000';
     const tooltipText = estimate
       ? isPremium
-        ? `Premium: ~$${estimate.cost} · Budget would be ~$${(parseFloat(estimate.cost) * 0.15).toFixed(3)}`
-        : `Budget: ~$${estimate.cost} · Premium would be ~$${(parseFloat(estimate.cost) * 6.5).toFixed(3)}`
+        ? `Premium: ~$${costDisplay} · Budget would be ~$${(costNum * 0.15).toFixed(3)}`
+        : `Budget: ~$${costDisplay} · Premium would be ~$${(costNum * 6.5).toFixed(3)}`
       : isPremium
         ? 'Premium mode active — click to switch to Budget'
         : 'Budget mode active — click to switch to Premium';
@@ -315,7 +332,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
             {attachments.length > 0 && (
               <div className="mb-2 flex flex-wrap gap-2 px-1">
                 {attachments.map((att) => (
-                  <AttachmentChip key={att.id} att={att} />
+                  <AttachmentChip key={att.id} att={att} onRemove={removeAttachment} />
                 ))}
               </div>
             )}
@@ -413,7 +430,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           {attachments.length > 0 && (
             <div className="mb-2 flex flex-wrap gap-2 px-1">
               {attachments.map((att) => (
-                <AttachmentChip key={att.id} att={att} />
+                <AttachmentChip key={att.id} att={att} onRemove={removeAttachment} />
               ))}
             </div>
           )}

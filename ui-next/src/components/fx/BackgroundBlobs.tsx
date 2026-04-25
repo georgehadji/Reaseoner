@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useSyncExternalStore } from 'react';
 import { cn } from '@/lib/utils';
 
 interface BackgroundBlobsProps {
@@ -9,22 +9,39 @@ interface BackgroundBlobsProps {
 
 // ── Blob animation keyframes are in globals.css ──
 
+function subscribePrefersReducedMotion(callback: () => void) {
+  const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+  mq.addEventListener('change', callback);
+  return () => mq.removeEventListener('change', callback);
+}
+
+function getPrefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+function getPrefersReducedMotionServer() {
+  return false;
+}
+
 function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
-    setReduced(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
-  }, []);
-  return reduced;
+  return useSyncExternalStore(
+    subscribePrefersReducedMotion,
+    getPrefersReducedMotion,
+    getPrefersReducedMotionServer
+  );
+}
+
+function useMounted() {
+  return useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false
+  );
 }
 
 export function BackgroundBlobs({ running = false }: BackgroundBlobsProps) {
   const reduced = usePrefersReducedMotion();
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useMounted();
 
   if (!mounted) return null;
 

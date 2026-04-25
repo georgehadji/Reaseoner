@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { CSRF_HEADER } from './security-constants';
 import { RunRequest } from './types';
+import { REASONER_API_BASE } from './server-config';
 
 // Turbopack cache-bust hash — changing this forces a recompile of routes that import it.
 export const SECURITY_SERVER_HASH = 'v1-8001';
@@ -72,8 +73,6 @@ export async function requireCsrfToken(req: NextRequest): Promise<void> {
 export async function generateSignedCsrfToken(): Promise<string> {
   return signCsrfToken(generateCsrfToken());
 }
-
-import { REASONER_API_BASE } from './server-config';
 
 export function getApiBaseUrl(): string {
   if (process.env.API_BASE_URL) return process.env.API_BASE_URL;

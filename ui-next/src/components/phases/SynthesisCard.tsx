@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks, ExternalLink } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
-import { TEXT_SIZES } from '@/lib/config';
+import { TEXT_SIZES, TIMING } from '@/lib/config';
 
 interface SubagentInfo {
   name: string;
@@ -41,8 +41,6 @@ interface SynthesisCardProps {
 function formatModelLabel(model: string) {
   return model.split('/').pop() || model;
 }
-
-import { TIMING } from '@/lib/config';
 
 function formatDurationMs(ms: number) {
   if (ms < TIMING.durationFormatMsThreshold) return `${ms.toFixed(0)}ms`;

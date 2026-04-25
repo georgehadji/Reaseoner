@@ -38,7 +38,6 @@ export interface ChatFeedMessage {
   activeAgents?: { name: string; task: string }[];
   streamingContent?: string;
   phaseModels?: string[];
-  imageData?: string; // base64 data URL for generated images
   images?: { data: string; model?: string }[]; // multiple generated images
   widgets?: { widget_type: string; name: string; result: Record<string, unknown>; citations?: string[] }[];
   loadingKind?: 'image-generation';
@@ -432,16 +431,6 @@ function ChatFeedComponent({
                   agents={msg.activeAgents}
                   models={msg.phaseModels}
                 />
-              )}
-              {msg.imageData && (
-                <div className="mb-4 w-full max-w-3xl">
-                  <img
-                    src={msg.imageData}
-                    alt="Generated image"
-                    className="max-h-[600px] rounded-xl border border-[var(--border)] object-contain shadow-[var(--shadow)]"
-                    loading="lazy"
-                  />
-                </div>
               )}
               {msg.images && msg.images.length > 0 && (
                 <div className="mb-4 grid w-full max-w-4xl gap-4 sm:grid-cols-2">

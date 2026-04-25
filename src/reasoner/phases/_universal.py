@@ -94,7 +94,7 @@ CIRCUIT BREAKER:
 - Flag uncertainty honestly rather than hallucinating certainty."""
 
 def synthesis_prompt(state: PipelineState) -> str:
-    final_context = state.to_context_dict()
+    final_context = state.to_context_dict(phase="synthesis")
     # Preserve full candidate content when context window allows (qwen3.6-plus: 1M).
     # Fallback models will truncate server-side if prompt exceeds their context.
     if 'candidates' in final_context:

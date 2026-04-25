@@ -156,6 +156,16 @@ export const METHOD_PHASES: Record<string, MethodPhase[]> = {
     { id: 5, name: 'Reflect', short: 'Reflect' },
     { id: 6, name: 'Synthesis', short: 'Synthesize' },
   ],
+  writing: [
+    { id: 0, name: 'Classification', short: 'Classify' },
+    { id: 1, name: 'Decomposition', short: 'Decompose' },
+    { id: 1.5, name: 'Deep Read', short: 'Read' },
+    { id: 2, name: 'Outline', short: 'Outline' },
+    { id: 3, name: 'Draft', short: 'Draft' },
+    { id: 4, name: 'Fact-Check', short: 'Fact-Check' },
+    { id: 5, name: 'Revise', short: 'Revise' },
+    { id: 6, name: 'Final Article', short: 'Final' },
+  ],
 };
 
 /** Example prompts shown in the centered empty-state composer. */

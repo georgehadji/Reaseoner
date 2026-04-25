@@ -38,7 +38,7 @@ def _ser_0(state: PipelineState) -> dict:
 
 def _ser_1(state: PipelineState) -> dict:
     dec = _get_v(state, 'decomposition')
-    if not dec: return {}
+    if dec is None: return {}
 
     # Handle both object and dict formats
     sub_problems = _get_v(dec, 'sub_problems', [])

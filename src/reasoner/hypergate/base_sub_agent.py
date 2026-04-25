@@ -41,7 +41,7 @@ class BaseSubAgent(ABC):
 
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls)
-        instance._cache: dict[str, SubAgentOutput] = {}
+        instance._cache = {}  # type: ignore
         return instance
 
     # ── Abstract interface ────────────────────────────────────────────

@@ -43,7 +43,7 @@ class PhaseSubAgent(ABC):
 
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls)
-        instance._cache: dict[str, PhaseSubAgentOutput] = {}
+        instance._cache = {}  # type: ignore
         return instance
 
     # ── Abstract interface ────────────────────────────────────────────

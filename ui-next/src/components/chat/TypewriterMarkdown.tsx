@@ -26,17 +26,21 @@ export const TypewriterMarkdown = memo(function TypewriterMarkdown({ text, words
 
   useEffect(() => {
     if (!text) {
-      setDisplayedText('');
-      completedRef.current = false;
-      return;
+      const raf = requestAnimationFrame(() => {
+        setDisplayedText('');
+        completedRef.current = false;
+      });
+      return () => cancelAnimationFrame(raf);
     }
 
     // If already completed (in this instance or globally), show full text immediately
     if (completedRef.current || (animationKey && isAnimationComplete(animationKey))) {
-      setDisplayedText(text);
-      completedRef.current = true;
-      if (animationKey) markAnimationComplete(animationKey);
-      return;
+      const raf = requestAnimationFrame(() => {
+        setDisplayedText(text);
+        completedRef.current = true;
+        if (animationKey) markAnimationComplete(animationKey);
+      });
+      return () => cancelAnimationFrame(raf);
     }
 
     // Split by whitespace but keep delimiters as separate tokens.

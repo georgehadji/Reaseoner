@@ -7,6 +7,7 @@ import {
   readJsonBody,
   validateCalculateRequest,
   rateLimit,
+  requireCsrfToken,
   ValidationError,
 } from '@/lib/security-server';
 import { API } from '@/lib/config';
@@ -21,6 +22,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    await requireCsrfToken(req);
     const apiBase = validateUpstreamUrl(getApiBaseUrl());
     const body = await readJsonBody(req);
     const payload = validateCalculateRequest(body);

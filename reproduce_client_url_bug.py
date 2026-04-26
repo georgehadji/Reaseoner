@@ -1,26 +1,27 @@
+"""Reproduce script: Discovery client singleton URL bug — now fixed."""
+from __future__ import annotations
 
 import asyncio
+import sys
 
-class DiscoveryClient:
-    def __init__(self, base_url: str):
-        self.base_url = base_url
+sys.path.insert(0, "src")
 
-_default_client = None
+from reasoner.core.search import get_discovery_client, reset_discovery_client
 
-async def get_discovery_client(base_url: str | None = None):
-    global _default_client
-    if _default_client is None:
-        _default_client = DiscoveryClient(base_url=base_url or "http://default")
-    return _default_client
 
-async def test_client():
-    c1 = await get_discovery_client("http://A")
+async def test_client() -> None:
+    reset_discovery_client()
+    c1, _ = await get_discovery_client("http://A")
     print(f"Client 1 URL: {c1.base_url}")
-    
-    c2 = await get_discovery_client("http://B")
+
+    c2, _ = await get_discovery_client("http://B")
     print(f"Client 2 URL: {c2.base_url}")
-    
-    print(f"{'FAIL' if c2.base_url == 'http://A' else 'PASS'}")
+
+    status = "PASS" if c2.base_url == "http://B" else "FAIL"
+    print(status)
+    return status == "PASS"
+
 
 if __name__ == "__main__":
-    asyncio.run(test_client())
+    ok = asyncio.run(test_client())
+    sys.exit(0 if ok else 1)

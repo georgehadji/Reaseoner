@@ -1,25 +1,34 @@
+"""Reproduce script: URL normalization trailing-slash bug — now fixed."""
+from __future__ import annotations
 
-def _normalize_url(url: str) -> str:
-    if not url:
-        return ""
-    # Current implementation
-    u = url.lower().split("://")[-1].split("#")[0].rstrip("/")
-    if u.startswith("www."):
-        u = u[4:]
-    return u
+import sys
 
-def test_norm():
+sys.path.insert(0, "src")
+
+from reasoner.core.search import _normalize_url
+
+
+def test_norm() -> bool:
     test_cases = [
-        ("https://example.com/path/", "https://example.com/path"), # Should be equal
-        ("https://example.com/path/?a=1", "https://example.com/path?a=1"), # Should be equal
+        ("https://example.com/path/", "https://example.com/path"),
+        ("https://example.com/path/?a=1", "https://example.com/path?a=1"),
     ]
-    
+
+    all_pass = True
     for u1, u2 in test_cases:
         n1 = _normalize_url(u1)
         n2 = _normalize_url(u2)
+        equal = n1 == n2
+        status = "PASS" if equal else "FAIL"
+        if not equal:
+            all_pass = False
         print(f"URL 1: {u1} -> {n1}")
         print(f"URL 2: {u2} -> {n2}")
-        print(f"Equal: {n1 == n2} | {'PASS' if n1 == n2 else 'FAIL'}")
+        print(f"Equal: {equal} | {status}")
+
+    return all_pass
+
 
 if __name__ == "__main__":
-    test_norm()
+    ok = test_norm()
+    sys.exit(0 if ok else 1)

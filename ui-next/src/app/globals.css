@@ -43,8 +43,7 @@
 }
 
 html, body {
-  height: 100%;
-  overflow: hidden;
+  /* Removed fixed height and overflow to allow native scrolling */
 }
 
 body {

@@ -2,7 +2,18 @@
 
 All notable changes to the Reasoner (ARA Pipeline) project.
 
-## [Unreleased] — Phase 5 (Scale Prep & Polish)
+## [Unreleased] — Phase 6 (E2E Tests & Benchmarks)
+
+### Added
+- E2E pipeline tests: radiology, legal, aerospace verticals with mocked LLM/NLI.
+- Global invariant tests: LLM call counter, taint propagation, zero magic numbers.
+- Benchmark suite: latency overhead, diversity ratio, calibration Pearson correlation.
+- Reproduce scripts fixed to use real codebase and pass (client URL, search yield, HyperGate regex, URL norm).
+- Documentation: `docs/VS.md` (architecture & integration points), `docs/ENVIRONMENT.md` (env var reference).
+
+---
+
+## Phase 5 (Scale Prep & Polish)
 
 ### Added
 - IndexedDB cursor-based pagination (`loadConversationsPage`) with 50-item pages to prevent UI freeze on large conversation histories.

@@ -1,35 +1,45 @@
+"""Reproduce script: image generation smoke test — skips without valid API key."""
+from __future__ import annotations
+
 import asyncio
 import os
-import logging
 import sys
-from dotenv import load_dotenv
 
-# Add src to path
-sys.path.append(os.path.join(os.getcwd(), "src"))
+sys.path.insert(0, "src")
 
-from reasoner.infrastructure.llm.image_generation import generate_images
 
-logging.basicConfig(level=logging.INFO)
-
-async def main():
-    load_dotenv()
+def main() -> int:
     api_key = os.environ.get("OPENROUTER_API_KEY")
     if not api_key:
-        print("Error: OPENROUTER_API_KEY not found in .env")
-        return
+        print("SKIP: OPENROUTER_API_KEY not configured")
+        return 0
 
-    prompt = "A futuristic city with flying cars and neon lights"
-    print(f"Generating images for: {prompt}")
-    
-    result = await generate_images(prompt, preset="budget", enhance=False)
-    
-    if result["success"]:
-        print("Success!")
-        for img in result["images"]:
-            print(f"Model used: {img['model_used']}")
-            print(f"Image data prefix: {img['image_data'][:50]}...")
-    else:
-        print(f"Failed: {result['error']}")
+    async def _test() -> int:
+        try:
+            from reasoner.infrastructure.llm.image_generation import generate_images
+            result = await generate_images(
+                "A futuristic city with flying cars and neon lights",
+                preset="budget",
+                enhance=False,
+            )
+            if result.get("success"):
+                print("PASS: image generation returned success")
+                return 0
+            err = result.get("error", "unknown error")
+            if "401" in str(err) or "User not found" in str(err):
+                print(f"SKIP: invalid API key ({err})")
+                return 0
+            print(f"FAIL: {err}")
+            return 1
+        except Exception as exc:
+            if "401" in str(exc) or "User not found" in str(exc):
+                print(f"SKIP: invalid API key ({exc})")
+                return 0
+            print(f"FAIL: {exc}")
+            return 1
+
+    return asyncio.run(_test())
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(main())

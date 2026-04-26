@@ -8,7 +8,7 @@ export function useServerStatus() {
 
   useEffect(() => {
     let mounted = true;
-    let interval: NodeJS.Timeout;
+    let interval: NodeJS.Timeout | undefined;
 
     async function check() {
       const controller = new AbortController();
@@ -24,26 +24,33 @@ export function useServerStatus() {
     }
 
     function start() {
+      // Guard against duplicate intervals if visibility toggles rapidly
+      if (interval) {
+        clearInterval(interval);
+      }
       check();
       interval = setInterval(check, TIMING.serverStatusCheckIntervalMs);
     }
 
     function stop() {
       clearInterval(interval);
+      interval = undefined;
     }
 
     start();
-    document.addEventListener('visibilitychange', () => {
+    const onVisibility = () => {
       if (document.hidden) {
         stop();
       } else {
         start();
       }
-    });
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
       mounted = false;
       stop();
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }, []);
 

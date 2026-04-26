@@ -214,6 +214,12 @@ class TokenAwareCache:
                 ttl_seconds=ttl_seconds or self.ttl_seconds,
             )
             
+            # Subtract old entry's token count on overwrite to prevent counter leak
+            if key in self._entries:
+                old_entry = self._entries[key]
+                self._current_tokens -= old_entry.tokens_used
+                self._stats.total_size_bytes -= len(old_entry.response.encode())
+            
             self._entries[key] = entry
             self._current_tokens += tokens_used
             self._stats.total_size_bytes += len(response.encode())

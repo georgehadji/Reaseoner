@@ -26,7 +26,9 @@ export function useQuota() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    refresh().catch(() => {
+      // Silently ignore quota fetch errors on mount to avoid unhandled rejection
+    });
   }, [refresh]);
 
   return { quota, loading, refresh };

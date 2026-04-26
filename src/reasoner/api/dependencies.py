@@ -24,8 +24,6 @@ from reasoner.application.ports.auth_port import AuthPort
 from reasoner.application.services.auth_service import AuthService
 from reasoner.application.services.quota_service import QuotaService, TIER_LIMITS
 from reasoner.infrastructure.auth import get_auth_adapter
-from reasoner.infrastructure.persistence.quota_repo_postgres import PostgresQuotaRepository
-from reasoner.infrastructure.persistence.cached_quota_repo import CachedQuotaRepository
 from reasoner.auth import AuthenticationError as LegacyAuthError
 from reasoner.core.settings import settings
 from reasoner.rate_limiter import RateLimitConfig, get_rate_limiter
@@ -256,6 +254,10 @@ def _get_quota_service() -> QuotaService:
     """
     global _quota_service
     if _quota_service is None:
+        # Deferred imports: asyncpg (via PostgresQuotaRepository) hangs on
+        # import at startup due to platform.uname() DNS resolution in compat.py.
+        from reasoner.infrastructure.persistence.quota_repo_postgres import PostgresQuotaRepository
+        from reasoner.infrastructure.persistence.cached_quota_repo import CachedQuotaRepository
         dsn = settings.DATABASE_URL.replace("+asyncpg", "")
         pg_repo = PostgresQuotaRepository(dsn, pool_size=int(os.environ.get("DB_POOL_SIZE", "10")))
         cached_repo = CachedQuotaRepository(pg_repo)

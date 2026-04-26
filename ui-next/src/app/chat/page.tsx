@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useReducer, useMemo } from 'react';
+import { useState, useRef, useCallback, useReducer, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
 
@@ -230,6 +230,16 @@ export default function ChatPage() {
   const phaseStartTimesRef = useRef<Record<number, number>>({});
   const chunkBufferRef = useRef('');
   const chunkFlushRafRef = useRef<number | null>(null);
+
+  // Cleanup RAF timer on unmount to prevent dispatching to a dismounted reducer
+  useEffect(() => {
+    return () => {
+      if (chunkFlushRafRef.current !== null) {
+        cancelAnimationFrame(chunkFlushRafRef.current);
+        chunkFlushRafRef.current = null;
+      }
+    };
+  }, []);
 
   const isContinuation = (text: string) => CONTINUATION_RE.test(text);
 
@@ -466,7 +476,7 @@ export default function ChatPage() {
     const lastAssistantMsg = findLastAssistant(messages);
     const isFollowup = !!lastAssistantMsg && messages.length > 0 && isContinuation(problem);
 
-    const phases: RenderedPhase[] = [];
+    let phases: RenderedPhase[] = [];
     let finalErrors: string[] = [];
     let finalTokens = { input: 0, output: 0, total: 0 };
     // Track the method discovered from the 'start' event within this run
@@ -543,7 +553,7 @@ export default function ChatPage() {
               name: displayName,
               data: phaseData,
             };
-            phases.push(renderedPhase);
+            phases = [...phases, renderedPhase];
             const serverDuration = typeof (phaseData as Record<string, unknown>).duration === 'number'
               ? (phaseData as Record<string, unknown>).duration as number
               : undefined;
@@ -824,7 +834,7 @@ export default function ChatPage() {
     };
     dispatchMessages({ type: 'ADD_MESSAGES', payload: [assistantMsg] });
 
-    const resumePhases: RenderedPhase[] = [];
+    let resumePhases: RenderedPhase[] = [];
     let resumeErrors: string[] = [];
 
     const onResumeEvent = (ev: PhaseEvent) => {
@@ -843,7 +853,7 @@ export default function ChatPage() {
               name: ev.name || '',
               data: ev.data ?? {},
             };
-            resumePhases.push(renderedPhase);
+            resumePhases = [...resumePhases, renderedPhase];
             setCompletedPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
             setCurrentPhase(undefined);
             dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: { content: buildMarkdownFromPhases(resumePhases), phases: [...resumePhases], currentPhaseName: undefined } } });

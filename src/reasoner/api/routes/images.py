@@ -83,6 +83,8 @@ async def generate_image_endpoint(
             "enhanced_prompt": result.get("enhanced_prompt"),
             "rewritten_prompt": result.get("rewritten_prompt"),
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Image generation endpoint error: %s", exc)
         return {

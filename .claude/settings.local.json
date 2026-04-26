@@ -136,7 +136,14 @@
       "Bash(git checkout *)",
       "Bash(gh pr create --repo georgehadji/Reaseoner --base main --head fix/autonomous-bug-fixes-session --title 'fix: autonomous bug-fix session — 12 patches \\(security, concurrency, silent failures, UI\\)' --body ' *)",
       "Bash(bash /tmp/check_files.sh)",
-      "Bash(bash /tmp/check_track1.sh)"
+      "Bash(bash /tmp/check_track1.sh)",
+      "Bash(pip show *)",
+      "Bash(C:\\\\Users\\\\tesse\\\\AppData\\\\Local\\\\Programs\\\\Python\\\\Python312\\\\python.exe -m pip show asyncpg)",
+      "PowerShell(python -m pip show asyncpg 2>&1)",
+      "Bash(pip uninstall *)",
+      "Bash(taskkill /PID 32940 /F)",
+      "Bash(awk '{print $5}')",
+      "Bash(xargs -I{} taskkill /PID {} /F)"
     ]
   },
   "enableAllProjectMcpServers": true,

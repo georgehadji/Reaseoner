@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 let withBundleAnalyzer = (config: NextConfig) => config;
 try {
@@ -51,6 +52,9 @@ function buildCsp(): string {
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  turbopack: {
+    root: path.resolve(__dirname),
+  },
   async headers() {
     return [
       {

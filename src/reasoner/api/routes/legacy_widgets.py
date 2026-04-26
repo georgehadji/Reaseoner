@@ -60,6 +60,8 @@ async def calculate(
         return result
     except asyncio.TimeoutError:
         return {"error": "Calculation timed out", "valid": False}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error("Calculation error: %s", e)
         return {"error": "Internal server error", "valid": False}

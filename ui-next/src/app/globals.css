@@ -2,166 +2,271 @@
 
 @layer base {
   :root {
-    /* HashiCorp Brand Colors */
-    --mds-color-hcp-brand: #000000;
-    --mds-color-dark-charcoal: #15181e;
-    --mds-color-near-black: #0d0e12;
-    --mds-color-light-gray: #f1f2f3;
-    --mds-color-mid-gray: #d5d7db;
-    --mds-color-cool-gray: #b2b6bd;
-    --mds-color-dark-gray: #656a76;
-    --mds-color-charcoal: #3b3d45;
-    --mds-color-near-white: #efeff1;
+    /* === ARA Design System — Dark (Default) === */
 
-    /* Product Brand Colors */
-    --mds-color-terraform-button-background: #7b42bc;
-    --mds-color-vault-button-background: #ffcf25;
-    --mds-color-waypoint-button-background-focus: #14c6cb;
-    --mds-color-waypoint-button-background-hover: #12b6bb;
-    --mds-color-vagrant-brand: #1868f2;
-    --mds-color-palette-purple-300: #911ced;
-    --mds-color-foreground-action-visited: #a737ff;
+    /* Background layers */
+    --bg:          #07070F;
+    --surface:     #0E0E1C;
+    --surface-2:   #141428;
+    --surface-3:   #1C1C38;
+    --surface-hover: #181830;
 
-    /* Semantic Colors */
-    --mds-color-action-blue: #1060ff;
-    --mds-color-link-blue: #2264d6;
-    --mds-color-bright-blue: #2b89ff;
-    --mds-color-palette-amber-200: #bb5a00;
-    --mds-color-palette-amber-100: #fbeabf;
-    --mds-color-vault-radar-gradient-faint-stop: #fff9cf;
-    --mds-color-unified-core-orange-6: #a9722e;
-    --mds-color-unified-core-red-7: #731e25;
-    --mds-color-unified-core-blue-7: #101a59;
+    /* Text hierarchy */
+    --text:         #EEEEFF;
+    --text-2:       #8888BB;
+    --text-muted:   #52527A;
+    --text-subtle:  #35355A;
+    --text-small:   #52527A;
 
-    /* Shadows and Focus */
-    --mds-shadow-micro: rgba(97, 104, 117, 0.05) 0px 1px 1px, rgba(97, 104, 117, 0.05) 0px 2px 2px;
-    --mds-color-focus-action-external: #2b89ff; /* Example focus color, adjust as needed */
+    /* Borders */
+    --border:        rgba(100, 100, 200, 0.10);
+    --border-strong: rgba(130, 130, 230, 0.22);
 
-    /* Default (Dark Mode) */
-    --bg: var(--mds-color-dark-charcoal);
-    --text: var(--mds-color-near-white);
-    --text-2: var(--mds-color-mid-gray);
-    --text-muted: var(--mds-color-dark-gray);
-    --text-subtle: var(--mds-color-dark-gray);
-    --text-small: var(--mds-color-dark-gray);
+    /* Primary accent — Violet */
+    --accent:      #7C3AED;
+    --accent-hover: #8B5CF6;
+    --accent-text: #FFFFFF;
+    --accent-dim:  rgba(124, 58, 237, 0.14);
+    --accent-glow: 0 0 40px rgba(124, 58, 237, 0.35);
 
-    --surface: var(--mds-color-dark-charcoal);
-    --surface-2: var(--mds-color-near-black);
-    --surface-3: #475569;
-    --surface-hover: var(--mds-color-dark-charcoal);
+    /* Secondary accent — Cyan (live / streaming) */
+    --accent-2:     #22D3EE;
+    --accent-2-dim: rgba(34, 211, 238, 0.12);
 
-    --border: rgba(var(--mds-color-cool-gray), 0.4);
-    --border-strong: var(--mds-color-cool-gray);
+    /* Shadows */
+    --shadow:    0 2px 8px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(100, 100, 200, 0.08);
 
-    --accent: var(--mds-color-action-blue);
-    --accent-hover: var(--mds-color-bright-blue);
-    --accent-text: var(--mds-color-hcp-brand);
+    /* Error */
+    --red:        #FC8181;
+    --red-bg:     rgba(239, 68, 68, 0.10);
+    --red-border: rgba(239, 68, 68, 0.25);
 
-    --shadow: var(--mds-shadow-micro);
-    --shadow-lg: var(--mds-shadow-micro);
+    /* Radius */
+    --radius: 0.75rem;
 
-    --red: var(--mds-color-unified-core-red-7);
-    --red-bg: #450a0a;
-    --red-border: #7f1d1d;
-
-    --radius: 0.5rem;
-
-    /* Blob / decorative colors - keep if still relevant, update to HashiCorp palette if possible */
-    --blob-1: var(--mds-color-vagrant-brand);
-    --blob-2: var(--mds-color-palette-purple-300);
-    --blob-3: #ec4899;
-    --blob-accent: var(--mds-color-vault-button-background); /* Placeholder, assuming yellow accent */
-
-    /* Legacy aliases used in body base styles - to be removed or mapped */
+    /* Legacy aliases */
     --background: var(--bg);
-    --foreground: var(--text);
+    --foreground:  var(--text);
   }
 
   .light {
-    --bg: #ffffff;
-    --text: var(--mds-color-hcp-brand);
-    --text-2: var(--mds-color-charcoal);
-    --text-muted: var(--mds-color-dark-gray);
-    --text-subtle: var(--mds-color-dark-gray);
-    --text-small: var(--mds-color-dark-gray);
+    --bg:          #F6F6FC;
+    --surface:     #FFFFFF;
+    --surface-2:   #F0F0F8;
+    --surface-3:   #E5E5F0;
+    --surface-hover: #EBEBF6;
 
-    --surface: #ffffff;
-    --surface-2: var(--mds-color-light-gray);
-    --surface-3: var(--mds-color-mid-gray);
-    --surface-hover: var(--mds-color-light-gray);
+    --text:        #0A0A18;
+    --text-2:      #3C3C60;
+    --text-muted:  #6B6B90;
+    --text-subtle: #9090B0;
+    --text-small:  #6B6B90;
 
-    --border: var(--mds-color-mid-gray);
-    --border-strong: var(--mds-color-cool-gray);
+    --border:        rgba(0, 0, 30, 0.09);
+    --border-strong: rgba(0, 0, 30, 0.18);
 
-    --accent: var(--mds-color-link-blue);
-    --accent-hover: var(--mds-color-bright-blue);
-    --accent-text: #ffffff;
+    --accent:       #6D28D9;
+    --accent-hover: #7C3AED;
+    --accent-text:  #FFFFFF;
+    --accent-dim:   rgba(109, 40, 217, 0.08);
+    --accent-glow:  0 0 24px rgba(109, 40, 217, 0.22);
 
-    --shadow: var(--mds-shadow-micro);
-    --shadow-lg: var(--mds-shadow-micro);
+    --accent-2:     #0891B2;
+    --accent-2-dim: rgba(8, 145, 178, 0.08);
 
-    --red: var(--mds-color-unified-core-red-7);
-    --red-bg: #fef2f2;
-    --red-border: #fecaca;
+    --shadow:    0 2px 8px rgba(0, 0, 0, 0.10);
+    --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.14);
+
+    --red:        #DC2626;
+    --red-bg:     rgba(239, 68, 68, 0.07);
+    --red-border: rgba(239, 68, 68, 0.20);
 
     --background: var(--bg);
-    --foreground: var(--text);
+    --foreground:  var(--text);
   }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
 
   body {
     background-color: var(--bg);
     color: var(--text);
     min-height: 100vh;
-    /* Font family will be set by Tailwind utility classes using font-hashicorpSans or font-systemUi */
+    font-family: var(--font-inter), -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* ============================================
-   Custom animations for Landing Page
-   ============================================ */
+/* ============================================================
+   Custom animations
+   ============================================================ */
+
 @keyframes gradient-text {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .animate-gradient-text {
-  animation: gradient-text 8s linear infinite;
+  animation: gradient-text 6s ease infinite;
+  background-size: 300% 300%;
 }
 
 @keyframes pulse-slow {
-  0%, 100% {
-    opacity: 0.2;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.4;
-    transform: scale(1.05);
-  }
+  0%, 100% { opacity: 0.25; transform: scale(1); }
+  50%       { opacity: 0.45; transform: scale(1.08); }
 }
 
 .animate-pulse-slow {
   animation: pulse-slow 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* ============================================
-   Accessibility utilities
-   ============================================ */
+@keyframes pulse-slow-2 {
+  0%, 100% { opacity: 0.18; transform: scale(1.05); }
+  50%       { opacity: 0.35; transform: scale(0.95); }
+}
+
+.animate-pulse-slow-2 {
+  animation: pulse-slow-2 14s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes ticker {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.animate-ticker {
+  animation: ticker 40s linear infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s ease forwards;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(124, 58, 237, 0.3); }
+  50%       { box-shadow: 0 0 40px rgba(124, 58, 237, 0.6); }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 3s ease infinite;
+}
+
+/* ============================================================
+   Glass utility
+   ============================================================ */
+
 @layer utilities {
+  .glass {
+    background: rgba(14, 14, 28, 0.6);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+    border: 1px solid rgba(100, 100, 200, 0.12);
+  }
+
+  .light .glass {
+    background: rgba(255, 255, 255, 0.75);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid rgba(0, 0, 30, 0.10);
+  }
+
+  .glass-card {
+    background: rgba(14, 14, 28, 0.5);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(100, 100, 200, 0.10);
+  }
+
+  .light .glass-card {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 30, 0.09);
+  }
+
+  /* Dot-grid background pattern */
+  .dot-grid {
+    background-image: radial-gradient(rgba(120, 100, 220, 0.18) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .light .dot-grid {
+    background-image: radial-gradient(rgba(80, 60, 180, 0.10) 1px, transparent 1px);
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, #A78BFA 0%, #818CF8 40%, #22D3EE 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .gradient-text-warm {
+    background: linear-gradient(135deg, #C084FC 0%, #A78BFA 50%, #818CF8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Accent button glow */
+  .btn-glow:hover {
+    box-shadow: var(--accent-glow);
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(100, 100, 180, 0.2) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(100, 100, 180, 0.25);
+    border-radius: 4px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(124, 58, 237, 0.4);
+  }
+
+  /* Accessibility */
   .skip-link {
-    @apply absolute -left-[9999px] top-auto h-1 w-1 overflow-hidden;
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    height: 1px;
+    width: 1px;
+    overflow: hidden;
     z-index: -999;
   }
+
   .skip-link:focus {
-    @apply left-0 top-0 h-auto w-auto p-4 rounded-md;
-    background-color: var(--mds-color-vault-button-background); /* Using Vault Yellow */
-    color: var(--mds-color-hcp-brand); /* Using Black */
-    z-index: 50;
+    position: fixed;
+    left: 1rem;
+    top: 1rem;
+    height: auto;
+    width: auto;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
+    background: var(--accent);
+    color: white;
+    font-weight: 600;
+    z-index: 9999;
   }
 }

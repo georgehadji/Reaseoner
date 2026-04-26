@@ -40,6 +40,8 @@ async def get_event_stats(user: User = Depends(get_current_user)):
         event_store, _ = get_architecture_components()
         stats = await event_store.get_stats()
         return stats
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Event stats error: {e}")
         return {"error": "Internal server error"}
@@ -70,6 +72,8 @@ async def list_pipelines(
                 if _get_pipeline_owner(p.get("aggregate_id", p.get("id", ""))) in (None, user_id_str)
             ]
         return {"pipelines": pipelines, "total": len(pipelines)}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"List pipelines error: {e}")
         return {"error": "Internal server error", "pipelines": []}
@@ -97,6 +101,8 @@ async def get_pipeline_status(
 
         result = await handler_registry.handle_query(query)
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Get pipeline error: {e}")
         return {"error": "Internal server error"}
@@ -126,6 +132,8 @@ async def resume_pipeline(
         return result
     except ValueError as e:
         return {"error": str(e), "can_resume": False}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Resume pipeline error: {e}")
         return {"error": "Internal server error", "can_resume": False}
@@ -165,6 +173,8 @@ async def resume_pipeline_stream(
         result = await handler_registry.handle_command(command)
     except ValueError as e:
         return {"error": str(e), "can_resume": False}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Resume stream error: {e}")
         return {"error": "Internal server error", "can_resume": False}
@@ -220,6 +230,8 @@ async def delete_pipeline(
         event_store, _ = get_architecture_components()
         await event_store.delete_aggregate(pipeline_id)
         return {"status": "deleted", "pipeline_id": pipeline_id}
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Delete pipeline error: {e}")
         return {"error": "Internal server error"}

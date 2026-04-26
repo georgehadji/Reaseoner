@@ -29,9 +29,9 @@ const MarkdownRendererComponent = ({ children }: { children: string }) => {
           h4({ children }) {
             return <Heading level={4}>{children}</Heading>;
           },
-          a({ href, children, ...rest }) {
+          a({ href, children, title }) {
             return (
-              <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>
+              <a href={href} target="_blank" rel="noopener noreferrer" title={title}>
                 {children}
               </a>
             );

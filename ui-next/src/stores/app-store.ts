@@ -172,6 +172,8 @@ export const useAppStore = create<AppState>()(
           sidebarCollapsed: typeof s.sidebarCollapsed === 'boolean' ? s.sidebarCollapsed : false,
           // Force image mode false on migration/load
           isImageMode: false,
+          // Preserve recent commands across migrations (was previously dropped)
+          recentCommands: Array.isArray(s.recentCommands) ? s.recentCommands : [],
         };
       },
       storage: createJSONStorage(() => localStorage),

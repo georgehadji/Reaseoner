@@ -1,54 +1,106 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { useRouter } from 'next/navigation';
-import { Brain, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { UserMenu } from './UserMenu';
+import { cn } from '@/lib/utils';
+
+function BrainIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9.5 2a2.5 2.5 0 1 1 5 0" />
+      <path d="M4 9.5a2.5 2.5 0 0 1 5-1m6 0a2.5 2.5 0 0 1 5 1" />
+      <path d="M2 14a2.5 2.5 0 0 0 5 0v-4.5M17 14a2.5 2.5 0 0 0 5 0v-4.5" />
+      <path d="M7 8v10a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V8" />
+      <path d="M12 2v20" />
+    </svg>
+  );
+}
 
 export function SiteHeader() {
   const user = useAppStore((s) => s.user);
   const router = useRouter();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 16);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   return (
-    <header className="flex h-16 shrink-0 items-center justify-between px-6 lg:px-12 border-b border-[var(--border)] bg-[var(--bg)]">
-      <Link href="/" className="flex items-center gap-2 font-bold text-xl hover:opacity-80 transition-opacity">
-        <Brain className="h-6 w-6 text-[var(--accent)]" />
-        <span>Reasoner</span>
-      </Link>
-      <nav className="hidden md:flex gap-6 text-sm font-medium text-[var(--text-muted)]">
-        <Link href="/about" className="hover:text-[var(--text)] transition-colors">About</Link>
-        <Link href="/pricing" className="hover:text-[var(--text)] transition-colors">Pricing</Link>
-        <Link href="/faq" className="hover:text-[var(--text)] transition-colors">FAQ</Link>
-        <Link href="/help" className="hover:text-[var(--text)] transition-colors">Docs</Link>
-      </nav>
-      <div className="flex items-center gap-3">
-        {user ? (
-          <>
-            <button
-              onClick={() => router.push('/chat')}
-              className="hidden sm:flex rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-90 items-center gap-2"
+    <header
+      className={cn(
+        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+        scrolled
+          ? 'glass shadow-[var(--shadow-lg)]'
+          : 'bg-transparent'
+      )}
+    >
+      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
+        {/* Logo */}
+        <Link
+          href="/"
+          className="group flex items-center gap-2.5 font-semibold text-[var(--text)] transition-opacity hover:opacity-80"
+        >
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-white shadow-[var(--accent-glow)]">
+            <BrainIcon className="h-4.5 w-4.5" />
+          </div>
+          <span className="text-[15px] tracking-tight">Reasoner</span>
+        </Link>
+
+        {/* Nav */}
+        <nav className="hidden items-center gap-1 md:flex">
+          {[
+            { label: 'About', href: '/about' },
+            { label: 'Pricing', href: '/pricing' },
+            { label: 'FAQ', href: '/faq' },
+            { label: 'Docs', href: '/help' },
+          ].map(({ label, href }) => (
+            <Link
+              key={href}
+              href={href}
+              className="rounded-lg px-3.5 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
             >
-              Go to App <ArrowRight className="h-4 w-4" />
-            </button>
-            <UserMenu />
-          </>
-        ) : (
-          <>
-            <button
-              onClick={() => router.push('/login')}
-              className="text-sm font-medium hover:text-[var(--text)] transition-colors"
-            >
-              Sign In
-            </button>
-            <button
-              onClick={() => router.push('/chat')}
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-90"
-            >
-              Get Started
-            </button>
-          </>
-        )}
+              {label}
+            </Link>
+          ))}
+        </nav>
+
+        {/* Actions */}
+        <div className="flex items-center gap-2">
+          {user ? (
+            <>
+              <button
+                onClick={() => router.push('/chat')}
+                className="hidden items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent-glow)] sm:flex"
+              >
+                Open App
+                <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 8h10M9 4l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <UserMenu />
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => router.push('/login')}
+                className="rounded-lg px-3.5 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:text-[var(--text)]"
+              >
+                Sign in
+              </button>
+              <button
+                onClick={() => router.push('/chat')}
+                className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent-glow)] btn-glow"
+              >
+                Get started
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </header>
   );

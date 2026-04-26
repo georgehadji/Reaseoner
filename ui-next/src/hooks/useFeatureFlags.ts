@@ -39,7 +39,7 @@ function loadFlags(): Record<string, boolean> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
-      _cachedFlags = DEFAULT_FEATURES;
+      _cachedFlags = { ...DEFAULT_FEATURES };
       return _cachedFlags;
     }
     const parsed = JSON.parse(raw) as Record<string, boolean>;
@@ -57,9 +57,8 @@ export function isEnabled(name: string): boolean {
 
 export function setEnabled(name: string, value: boolean): void {
   if (typeof window === 'undefined') return;
-  const flags = loadFlags();
-  flags[name] = value;
-  _cachedFlags = { ...flags };
+  const flags = { ...loadFlags(), [name]: value };
+  _cachedFlags = flags;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(flags));
 }
 

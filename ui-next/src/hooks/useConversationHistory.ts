@@ -19,12 +19,17 @@ export function useConversationHistory() {
   const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
+    let mounted = true;
     loadConversationsPage()
       .then((firstPage) => {
+        if (!mounted) return;
         setPage(firstPage);
         setHistory(firstPage.items);
       })
-      .catch(console.error);
+      .catch((err) => {
+        if (mounted) console.error(err);
+      });
+    return () => { mounted = false; };
   }, [setHistory]);
 
   const loadMore = useCallback(async () => {

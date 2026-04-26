@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Brain, Search, BookOpen, Loader2, Zap, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { neuroRecall, neuroLearn, neuroSessions } from '@/lib/api-client';
@@ -28,6 +28,12 @@ interface NeuroPanelProps {
 }
 
 export function NeuroPanel({ conversationId, lastUserPrompt, lastAssistantResponse }: NeuroPanelProps) {
+  const isMounted = useRef(true);
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
+
   const [activeTab, setActiveTab] = useState<'search' | 'recent'>('search');
 
   // ── Search state ──
@@ -88,6 +94,7 @@ export function NeuroPanel({ conversationId, lastUserPrompt, lastAssistantRespon
     setError(null);
     try {
       const data = await neuroSessions(conversationId || undefined, 10, offset);
+      if (!isMounted.current) return;
       const entries = data.entries || [];
       if (offset === 0) {
         setRecentEntries(entries);
@@ -97,9 +104,10 @@ export function NeuroPanel({ conversationId, lastUserPrompt, lastAssistantRespon
       setHasMore(entries.length === 10);
       setRecentOffset(offset + entries.length);
     } catch (err) {
+      if (!isMounted.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load recent memory');
     } finally {
-      setRecentLoading(false);
+      if (isMounted.current) setRecentLoading(false);
     }
   }, [conversationId]);
 

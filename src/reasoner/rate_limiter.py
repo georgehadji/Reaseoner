@@ -20,6 +20,13 @@ from typing import Dict, Optional
 import asyncio
 
 
+try:
+    from reasoner.api.metrics import REASONER_RATE_LIMIT_REJECTED
+    _METRICS_AVAILABLE = True
+except Exception:
+    _METRICS_AVAILABLE = False
+
+
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration."""
@@ -53,12 +60,6 @@ class RateLimiter:
     from reasoner.core.constants import MAX_RATE_LIMIT_BUCKETS
     _MAX_BUCKETS: int = MAX_RATE_LIMIT_BUCKETS
 
-try:
-    from reasoner.api.metrics import REASONER_RATE_LIMIT_REJECTED
-    _METRICS_AVAILABLE = True
-except Exception:
-    _METRICS_AVAILABLE = False
-    
     def __init__(self, config: Optional[RateLimitConfig] = None):
         self.config = config or RateLimitConfig()
         self._buckets: Dict[str, ClientBucket] = defaultdict(ClientBucket)

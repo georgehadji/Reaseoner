@@ -43,9 +43,9 @@ export function SiteHeader() {
         {/* Logo */}
         <Link
           href="/"
-          className="group flex items-center gap-2.5 font-semibold text-[var(--text)] transition-opacity hover:opacity-80"
+          className="group flex items-center gap-2.5 font-semibold text-[var(--text)] transition-all duration-200 hover:opacity-90"
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-white shadow-[var(--accent-glow)]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent)] text-[var(--accent-text)] shadow-[var(--accent-glow)] transition-transform duration-200 group-hover:scale-110">
             <BrainIcon className="h-4.5 w-4.5" />
           </div>
           <span className="text-[15px] tracking-tight">Reasoner</span>
@@ -62,7 +62,7 @@ export function SiteHeader() {
             <Link
               key={href}
               href={href}
-              className="rounded-lg px-3.5 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+              className="underline-slide rounded-lg px-3.5 py-1.5 text-sm font-medium text-[var(--text-muted)] transition-all duration-200 hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
             >
               {label}
             </Link>
@@ -75,7 +75,7 @@ export function SiteHeader() {
             <>
               <button
                 onClick={() => router.push('/chat')}
-                className="hidden items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent-glow)] sm:flex"
+                className="hidden items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-text)] transition-all btn-lift btn-glow hover:bg-[var(--accent-hover)] sm:flex"
               >
                 Open App
                 <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2">
@@ -94,7 +94,7 @@ export function SiteHeader() {
               </button>
               <button
                 onClick={() => router.push('/chat')}
-                className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent-glow)] btn-glow"
+                className="flex items-center gap-2 rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-[var(--accent-text)] transition-all btn-lift btn-glow hover:bg-[var(--accent-hover)]"
               >
                 Get started
               </button>

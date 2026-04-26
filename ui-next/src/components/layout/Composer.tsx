@@ -220,7 +220,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           className={cn(
             'flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
             isPremium
-              ? 'border-violet-500/40 bg-violet-500/10 text-violet-300'
+              ? 'border-teal-500/40 bg-teal-500/10 text-teal-300'
               : isLocked
                 ? 'cursor-not-allowed border-[var(--border)] text-[var(--text-subtle)] opacity-50'
                 : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]',
@@ -368,7 +368,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       <div className="mx-auto max-w-3xl">
         {isFollowup && (
           <div className="mb-2 flex items-center gap-2 px-1">
-            <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2.5 py-0.5 text-xs font-medium text-violet-300">
+            <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-xs font-medium text-teal-300">
               Follow-up
             </span>
             <span className="text-xs text-[var(--text-subtle)]">Continuing conversation</span>

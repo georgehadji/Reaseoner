@@ -72,6 +72,17 @@ async def run_with_context(
         # Create state with the external context
         state = PipelineState(problem=req.problem, preset_name=req.preset)
 
+        # Validate URLs inside context items before injection
+        from reasoner.security.url_validator import is_safe_url
+        for item in req.context:
+            for key, value in item.items():
+                if isinstance(value, str) and value.startswith(("http://", "https://")):
+                    if not is_safe_url(value):
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"Unsafe URL in context: {value}",
+                        )
+
         # Inject external context directly into the state
         # This bypasses the normal search/vetting phases
         state.web_discovery_results = req.context
@@ -101,7 +112,5 @@ async def run_with_context(
             return {"success": False, "error": "Failed to generate solution"}
 
     except Exception as exc:
-        import traceback
-
-        logger.error(f"Context analysis failed: {exc}\n{traceback.format_exc()}")
+        logger.error("Context analysis failed: %s", exc, exc_info=False)
         return {"success": False, "error": "Internal server error"}

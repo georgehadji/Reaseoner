@@ -13,8 +13,11 @@ from __future__ import annotations
 import json
 import asyncio
 import logging
+from collections import deque
 from typing import Any, Set, Dict
 from dataclasses import dataclass, asdict
+
+from reasoner.utils.json_safe import safe_json_loads, JSONDepthExceededError
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -56,7 +59,7 @@ class WebSocketManager:
     - Heartbeat/ping-pong
     """
     
-    def __init__(self):
+    def __init__(self, max_connections: int = 1000, max_replay_events: int = 100):
         # Active connections: {connection_id: websocket}
         self.active_connections: Dict[str, WebSocket] = {}
         
@@ -66,11 +69,20 @@ class WebSocketManager:
         # Connection metadata: {connection_id: metadata}
         self.connection_metadata: Dict[str, dict[str, Any]] = {}
         
+        # Replay buffer: {pipeline_id: deque[WebSocketMessage]}
+        self._replay_buffers: Dict[str, deque[WebSocketMessage]] = {}
+        
         # Background task for heartbeats
         self._heartbeat_task: asyncio.Task | None = None
         
         # Concurrency guard for all mutable state
         self._lock: asyncio.Lock = asyncio.Lock()
+        
+        # Connection cap to prevent FD exhaustion
+        self._max_connections: int = max_connections
+        
+        # Max events to retain per pipeline for replay
+        self._max_replay_events: int = max_replay_events
     
     async def connect(
         self,
@@ -79,13 +91,16 @@ class WebSocketManager:
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """Accept and register new WebSocket connection."""
-        await websocket.accept()
-        
         async with self._lock:
+            if len(self.active_connections) >= self._max_connections:
+                await websocket.close(code=1008, reason="Connection limit reached")
+                return
             self.active_connections[connection_id] = websocket
             self.connection_metadata[connection_id] = metadata or {}
             if _METRICS_AVAILABLE:
                 REASONER_WEBSOCKET_CONNECTIONS.set(len(self.active_connections))
+        
+        await websocket.accept()
 
         logger.info(f"WebSocket connected: {connection_id}")
         
@@ -114,6 +129,10 @@ class WebSocketManager:
                 for pipeline_id in list(self.subscriptions.keys()):
                     if connection_id in self.subscriptions[pipeline_id]:
                         self.subscriptions[pipeline_id].discard(connection_id)
+                        # Clean up empty subscriptions and their replay buffers
+                        if not self.subscriptions[pipeline_id]:
+                            del self.subscriptions[pipeline_id]
+                            self._replay_buffers.pop(pipeline_id, None)
                 
                 if connection_id in self.connection_metadata:
                     del self.connection_metadata[connection_id]
@@ -132,12 +151,25 @@ class WebSocketManager:
             logger.warning(f"No event loop available to disconnect {connection_id}")
     
     async def subscribe(self, connection_id: str, pipeline_id: str) -> None:
-        """Subscribe connection to pipeline updates."""
+        """Subscribe connection to pipeline updates.
+        
+        Replays buffered events for this pipeline so late-joining clients
+        don't miss progress that happened before they connected.
+        """
         async with self._lock:
             if pipeline_id not in self.subscriptions:
                 self.subscriptions[pipeline_id] = set()
-            
             self.subscriptions[pipeline_id].add(connection_id)
+            
+            # Replay buffered events (copy outside lock)
+            buffer = list(self._replay_buffers.get(pipeline_id, []))
+        
+        for msg in buffer:
+            try:
+                await self.send_to_connection(connection_id, msg)
+            except Exception as e:
+                logger.warning(f"Replay send failed to {connection_id}: {e}")
+                break
         
         logger.info(f"Connection {connection_id} subscribed to pipeline {pipeline_id}")
     
@@ -154,6 +186,11 @@ class WebSocketManager:
     ) -> None:
         """Broadcast message to all subscribers of a pipeline."""
         async with self._lock:
+            # Buffer event for late-joining subscribers
+            if pipeline_id not in self._replay_buffers:
+                self._replay_buffers[pipeline_id] = deque(maxlen=self._max_replay_events)
+            self._replay_buffers[pipeline_id].append(message)
+            
             if pipeline_id not in self.subscriptions:
                 return
             connection_ids = list(self.subscriptions[pipeline_id])
@@ -316,40 +353,92 @@ async def websocket_endpoint(
 ):
     """
     WebSocket endpoint for real-time updates.
-    
+
     Usage:
-        ws://<host>:<port>/ws
-        ws://<host>:<port>/ws?pipeline_id=xxx
+        ws://<host>:<port>/ws?token=xxx
+        ws://<host>:<port>/ws?pipeline_id=xxx&token=xxx
+
+    Authentication:
+        Requires a valid API key/JWT either in the `token` query parameter
+        or in the `Authorization` header.
     """
+    # Authenticate BEFORE accepting the connection
+    token = websocket.query_params.get("token") or ""
+    if not token:
+        auth_header = websocket.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:]
+
+    user_id: str | None = None
+    if token:
+        # Try JWT auth first, then legacy API key
+        try:
+            from reasoner.application.ports.auth_port import AuthPort
+            from reasoner.application.services.auth_service import AuthService
+            from reasoner.infrastructure.auth import get_auth_adapter
+            adapter: AuthPort = get_auth_adapter()
+            service = AuthService(adapter)
+            user = await service.authenticate(token)
+            if user:
+                user_id = str(user.id)
+        except Exception:
+            # Fallback to legacy API key auth
+            try:
+                from reasoner.auth import get_auth_manager
+                auth_mgr = get_auth_manager()
+                api_key = await auth_mgr.authenticate(token)
+                if api_key:
+                    user_id = getattr(api_key, "key_hash", None)
+            except Exception:
+                pass
+
+    if not user_id:
+        await websocket.close(code=1008, reason="Authentication required")
+        return
+
     manager = get_websocket_manager()
-    
+
     # Generate connection ID
     import uuid
     connection_id = str(uuid.uuid4())
-    
+
     # Get metadata from query params
     metadata = {
         'pipeline_id': pipeline_id,
         'user_agent': websocket.headers.get('user-agent', ''),
+        'user_id': user_id,
     }
-    
+
     await manager.connect(websocket, connection_id, metadata)
-    
+
     # Subscribe to pipeline if provided
     if pipeline_id:
+        # Ownership check
+        from reasoner.api.history import _get_pipeline_owner
+        owner = _get_pipeline_owner(pipeline_id)
+        if owner is not None and owner != user_id:
+            await manager.send_to_connection(
+                connection_id,
+                WebSocketMessage(
+                    type='error',
+                    data={'error': 'Not authorized to access this pipeline'},
+                ),
+            )
+            manager.disconnect(connection_id)
+            return
         await manager.subscribe(connection_id, pipeline_id)
-    
+
     try:
         while True:
             # Receive messages from client
             data = await websocket.receive_text()
             
             try:
-                message = json.loads(data)
+                message = safe_json_loads(data, max_depth=50)
                 await handle_websocket_message(
                     manager, connection_id, message
                 )
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, JSONDepthExceededError):
                 await manager.send_to_connection(
                     connection_id,
                     WebSocketMessage(

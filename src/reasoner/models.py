@@ -433,6 +433,16 @@ class PipelineState:
     def agent_model(self, value: str | None) -> None:
         self.conversation_state.agent_model = value
 
+    _MAX_PENDING_EVENTS: int = 1000
+
+    def append_pending_event(self, event: dict[str, Any]) -> None:
+        """Append event with bounded backpressure."""
+        if len(self.pending_events) >= self._MAX_PENDING_EVENTS:
+            # Drop oldest 10% to make room
+            drop_count = self._MAX_PENDING_EVENTS // 10
+            self.pending_events = self.pending_events[drop_count:]
+        self.pending_events.append(event)
+
     def add_error(self, message: str) -> None:
         """Atomic append to error list."""
         if message and message not in self.errors:
@@ -755,7 +765,10 @@ class PipelineState:
             except ValueError:
                 data['task_type'] = None
         if data.get('started_at'):
-            data['started_at'] = datetime.fromisoformat(data['started_at'])
+            dt = datetime.fromisoformat(data['started_at'])
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            data['started_at'] = dt
         
         # Reconstruct decomposition.
         # The LLM returns extra keys (causal_chain, critical_sources, …) that are

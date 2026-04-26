@@ -520,7 +520,7 @@ def _extract_search_keywords(text: str, max_keywords: int = 8) -> str:
 
 async def _decompose_query(query: str, model_id: str | None = None) -> list[str]:
     """Use a lightweight LLM to break a query into 2-3 focused sub-queries."""
-    now = time.time()
+    now = time.monotonic()
     cached = _DECOMPOSITION_CACHE.get(query)
     if cached is not None:
         sub_queries, ts = cached

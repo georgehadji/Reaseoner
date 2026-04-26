@@ -38,6 +38,7 @@ class User:
     id: UUID
     email: str
     display_name: Optional[str] = None
+    scopes: set[str] = field(default_factory=set)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

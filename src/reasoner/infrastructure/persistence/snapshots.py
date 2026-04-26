@@ -66,7 +66,7 @@ class SnapshotStrategy:
         if self.time_interval_seconds > 0:
             import time
             last_time = self._last_snapshot_time.get(aggregate_id, 0)
-            if time.time() - last_time >= self.time_interval_seconds:
+            if time.monotonic() - last_time >= self.time_interval_seconds:
                 return True
         
         # Phase-based
@@ -91,7 +91,7 @@ class SnapshotStrategy:
         snapshot_data = {
             'state': self._serialize_state(aggregate.state_data),
             'version': aggregate.version,
-            'timestamp': time.time(),
+            'timestamp': time.monotonic(),
         }
         
         # Persist snapshot
@@ -104,7 +104,7 @@ class SnapshotStrategy:
         
         # Update tracking
         self._last_snapshot_version[aggregate_id] = aggregate.version
-        self._last_snapshot_time[aggregate_id] = time.time()
+        self._last_snapshot_time[aggregate_id] = time.monotonic()
         
         logger.debug(f"Snapshot created for {aggregate_id} at version {aggregate.version}")
     
@@ -207,9 +207,9 @@ class SnapshotManager:
         if snapshot_result:
             version, state = snapshot_result
             
-            # Load events since snapshot
+            # Load events since snapshot (exclude the version already in snapshot)
             events = await self.event_store.get_events(
-                aggregate_id, from_version=version
+                aggregate_id, from_version=version + 1
             )
             
             if not events:

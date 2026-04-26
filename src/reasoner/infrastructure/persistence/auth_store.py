@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -97,8 +97,8 @@ class AuthStore:
                     json.dumps(sorted(scopes)),
                     1 if is_active else 0,
                     rate_limit_tier,
-                    created_at.isoformat(),
-                    expires_at.isoformat() if expires_at else None,
+                    created_at.astimezone(timezone.utc).isoformat(),
+                    expires_at.astimezone(timezone.utc).isoformat() if expires_at else None,
                     created_by,
                     None,
                     0,
@@ -133,7 +133,7 @@ class AuthStore:
                     last_used_at = ?
                 WHERE key_hash = ?
                 """,
-                (datetime.now().isoformat(), key_hash),
+                (datetime.now(timezone.utc).isoformat(), key_hash),
             )
             await conn.commit()
         finally:

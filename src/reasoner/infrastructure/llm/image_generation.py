@@ -226,6 +226,11 @@ async def _download_image_url(url: str, *, allow_unhinted: bool = False) -> str 
     if not _looks_like_remote_image_url(url, allow_unhinted=allow_unhinted):
         return None
 
+    from reasoner.security.url_validator import is_safe_url
+    if not is_safe_url(url):
+        logger.warning("Blocked unsafe image URL: %s", url)
+        return None
+
     try:
         async with httpx.AsyncClient(timeout=IMAGE_GEN_REMOTE_TIMEOUT_SECONDS, follow_redirects=True) as client:
             response = await client.get(url)

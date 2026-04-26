@@ -13,6 +13,7 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from reasoner.models import CritiqueScore, PerspectiveType
+from reasoner.utils.json_safe import safe_json_loads, JSONDepthExceededError
 
 
 class ParseError(Exception):
@@ -83,14 +84,14 @@ def extract_json(text: str) -> dict[str, Any]:
         if match:
             extracted = match.group(1).strip()
             try:
-                return json.loads(extracted)
-            except json.JSONDecodeError:
+                return safe_json_loads(extracted, max_depth=100)
+            except (json.JSONDecodeError, JSONDepthExceededError):
                 pass  # Try next pattern
 
     # Try direct parse
     try:
-        return json.loads(text)
-    except json.JSONDecodeError:
+        return safe_json_loads(text, max_depth=100)
+    except (json.JSONDecodeError, JSONDepthExceededError):
         pass
 
     # Try to extract partial JSON with just core_analysis if full parse fails
@@ -134,12 +135,12 @@ def extract_json(text: str) -> dict[str, Any]:
                     if depth == 0:
                         candidate = text[start : i + 1]
                         try:
-                            return json.loads(candidate)
-                        except json.JSONDecodeError:
+                            return safe_json_loads(candidate, max_depth=100)
+                        except (json.JSONDecodeError, JSONDepthExceededError):
                             cleaned = re.sub(r",\s*([}\]])", r"\1", candidate)
                             try:
-                                return json.loads(cleaned)
-                            except json.JSONDecodeError:
+                                return safe_json_loads(cleaned, max_depth=100)
+                            except (json.JSONDecodeError, JSONDepthExceededError):
                                 break  # found boundary but still invalid; try repair
 
         # Last resort: truncated JSON repair — close any open brackets/strings
@@ -148,8 +149,8 @@ def extract_json(text: str) -> dict[str, Any]:
             repaired = _repair_truncated_json(candidate)
             if repaired:
                 try:
-                    return json.loads(repaired)
-                except json.JSONDecodeError:
+                    return safe_json_loads(repaired, max_depth=100)
+                except (json.JSONDecodeError, JSONDepthExceededError):
                     # Fallback: chop off everything after the last comma and try again
                     last_comma = candidate.rfind(",")
                     if last_comma == -1:

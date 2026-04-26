@@ -124,6 +124,14 @@ class FeedbackStore:
                 ON feedback_entries(timestamp);
             CREATE INDEX IF NOT EXISTS idx_feedback_conversation
                 ON feedback_entries(conversation_id);
+
+            -- Remove duplicates before creating unique index (migration)
+            DELETE FROM feedback_entries WHERE rowid NOT IN (
+                SELECT MIN(rowid) FROM feedback_entries GROUP BY conversation_id, message_id
+            );
+
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_feedback_unique
+                ON feedback_entries(conversation_id, message_id);
         """)
         conn.commit()
 

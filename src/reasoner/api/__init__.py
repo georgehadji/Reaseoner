@@ -26,6 +26,10 @@ import logging
 # Setup logger
 logger = logging.getLogger(__name__)
 
+# Wire safe-logging filter so ALL output is redacted
+from reasoner.logging_utils import SafeLoggingFilter
+logging.getLogger().addFilter(SafeLoggingFilter())
+
 # Initialize Sentry (Critical Enhancement 7.2)
 from reasoner.api.sentry import init_sentry
 init_sentry()
@@ -390,6 +394,15 @@ async def run_pipeline(
     Authenticated users get higher rate limits and priority processing.
     """
     _require_auth_if_legacy_disabled(user)
+    # Idempotency: reject duplicate client_run_id if already in-flight
+    if req.client_run_id:
+        from reasoner.infrastructure.redis.run_state import _run_state_manager
+        existing = await _run_state_manager.get_cancel_event(req.client_run_id)
+        if existing is not None:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Run {req.client_run_id} is already in progress",
+            )
     # TODO Phase 4: use actual user tier from subscription DB
     return StreamingResponse(
         _run_stream_with_metrics(req, user),
@@ -749,18 +762,26 @@ async def submit_feedback(
 
 @app.get("/api/admin/feedback-stats", dependencies=[Depends(check_rate_limit)])
 async def feedback_stats(
+    request: Request,
     days: int = Query(30, ge=1, le=365),
     admin_key: str | None = Header(default=None, alias="X-Admin-Key"),
+    user: User = Depends(get_current_user),
 ):
     """
     Admin-only endpoint returning aggregated feedback statistics.
-    Requires X-Admin-Key header matching ADMIN_API_KEY.
+    Requires BOTH a valid JWT with admin scope AND correct X-Admin-Key.
     Uses constant-time comparison to mitigate timing attacks.
     """
     if not settings.ADMIN_API_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
+        raise HTTPException(status_code=503, detail="Admin endpoint not configured")
+    # Require admin scope on the JWT
+    from reasoner.auth import Scope
+    user_scopes = getattr(user, "scopes", set())
+    if Scope.ADMIN.value not in user_scopes:
+        raise HTTPException(status_code=403, detail="Admin scope required")
     if not admin_key or not secrets.compare_digest(admin_key, settings.ADMIN_API_KEY):
         raise HTTPException(status_code=401, detail="Unauthorized")
+    logger.info("Admin feedback-stats accessed by user %s", user.id)
     stats = await _feedback_store.get_stats(days=days)
     return {
         "total_entries": stats.total_entries,

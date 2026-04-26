@@ -10,7 +10,7 @@ import secrets
 import hashlib
 from typing import Optional, Dict, Set, List
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 import asyncio
@@ -137,7 +137,7 @@ class AuthManager:
 
         expires_at = None
         if expires_in_days:
-            expires_at = datetime.now() + timedelta(days=expires_in_days)
+            expires_at = datetime.now(timezone.utc) + timedelta(days=expires_in_days)
 
         # Use provided scopes or default for role
         if scopes is None:
@@ -146,7 +146,7 @@ class AuthManager:
         api_key = APIKey(
             key_hash=key_hash,
             name=name,
-            created_at=datetime.now(),
+            created_at=datetime.now(timezone.utc),
             expires_at=expires_at,
             scopes={s.value if isinstance(s, Scope) else s for s in scopes},
             rate_limit_tier=rate_limit_tier,
@@ -193,7 +193,7 @@ class AuthManager:
         # Fast-path: check local cache
         cached = self._cache.get(key_hash)
         if cached and cached.is_active:
-            if cached.expires_at is None or datetime.now() <= cached.expires_at:
+            if cached.expires_at is None or datetime.now(timezone.utc) <= cached.expires_at:
                 cached.last_used_at = datetime.now()
                 cached.usage_count += 1
                 return cached
@@ -212,16 +212,17 @@ class AuthManager:
 
             # Check if key exists
             if not stored_key:
-                # Check admin keys (always in-memory, never persisted)
-                if key_hash in self._admin_keys:
-                    return APIKey(
-                        key_hash=key_hash,
-                        name="admin",
-                        created_at=datetime.now(),
-                        expires_at=None,
-                        scopes={s.value for s in DEFAULT_SCOPES["admin"]},
-                        rate_limit_tier="unlimited",
-                    )
+                # Check admin keys with constant-time comparison to mitigate timing attacks
+                for admin_hash in self._admin_keys:
+                    if secrets.compare_digest(key_hash, admin_hash):
+                        return APIKey(
+                            key_hash=key_hash,
+                            name="admin",
+                            created_at=datetime.now(timezone.utc),
+                            expires_at=None,
+                            scopes={s.value for s in DEFAULT_SCOPES["admin"]},
+                            rate_limit_tier="unlimited",
+                        )
                 raise AuthenticationError("Invalid API key")
 
             # Check if key is active
@@ -229,12 +230,12 @@ class AuthManager:
                 raise AuthenticationError("API key is deactivated")
 
             # Check expiration
-            if stored_key.expires_at and datetime.now() > stored_key.expires_at:
+            if stored_key.expires_at and datetime.now(timezone.utc) > stored_key.expires_at:
                 stored_key.is_active = False
                 raise AuthenticationError("API key has expired")
 
             # Update usage tracking
-            stored_key.last_used_at = datetime.now()
+            stored_key.last_used_at = datetime.now(timezone.utc)
             stored_key.usage_count += 1
 
             # Update persistent store and cache

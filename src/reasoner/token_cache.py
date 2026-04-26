@@ -83,11 +83,13 @@ class TokenAwareCache:
         ttl_seconds: int = 3600,  # 1 hour default TTL
         cache_dir: Optional[Path] = None,
         semantic_threshold: float = 0.85,  # 85% similarity for cache hit
+        max_entries: int = 1000,
     ):
         self.max_tokens = max_tokens
         self.ttl_seconds = ttl_seconds
         self.cache_dir = cache_dir
         self.semantic_threshold = semantic_threshold
+        self.max_entries = max_entries
         
         self._entries: Dict[str, CacheEntry] = {}
         self._current_tokens = 0
@@ -146,7 +148,7 @@ class TokenAwareCache:
                 entry = self._entries[key]
                 
                 # Check TTL
-                if time.time() - entry.created_at > entry.ttl_seconds:
+                if time.monotonic() - entry.created_at > entry.ttl_seconds:
                     await self._evict(key)
                     self._stats.misses += 1
                     return None
@@ -154,7 +156,7 @@ class TokenAwareCache:
                 # Exact prompt match
                 if entry.prompt_hash == prompt_hash:
                     entry.access_count += 1
-                    entry.last_accessed = time.time()
+                    entry.last_accessed = time.monotonic()
                     self._stats.hits += 1
                     self._stats.total_tokens_saved += entry.tokens_used
                     return entry.response
@@ -171,7 +173,7 @@ class TokenAwareCache:
                     # Future: compute cosine similarity of embeddings
                     if entry.prompt_hash == prompt_hash:
                         entry.access_count += 1
-                        entry.last_accessed = time.time()
+                        entry.last_accessed = time.monotonic()
                         self._stats.hits += 1
                         self._stats.total_tokens_saved += entry.tokens_used
                         return entry.response
@@ -195,7 +197,7 @@ class TokenAwareCache:
             key = self._compute_key(problem, phase, model_id, prompt)
             
             # Check if we need to evict
-            while self._current_tokens + tokens_used > self.max_tokens:
+            while self._current_tokens + tokens_used > self.max_tokens or len(self._entries) >= self.max_entries:
                 await self._evict_lru()
             
             # Create entry
@@ -207,8 +209,8 @@ class TokenAwareCache:
                 prompt_hash=self._compute_prompt_hash(prompt),
                 response=response,
                 tokens_used=tokens_used,
-                created_at=time.time(),
-                last_accessed=time.time(),
+                created_at=time.monotonic(),
+                last_accessed=time.monotonic(),
                 ttl_seconds=ttl_seconds or self.ttl_seconds,
             )
             
@@ -279,7 +281,7 @@ class TokenAwareCache:
                 entry = CacheEntry(**data)
 
                 # Skip expired entries
-                if time.time() - entry.created_at > entry.ttl_seconds:
+                if time.monotonic() - entry.created_at > entry.ttl_seconds:
                     f.unlink()
                     continue
 

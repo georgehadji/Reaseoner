@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from reasoner.api.auth_deps import check_rate_limit, require_csrf
 from reasoner.api.dependencies import get_current_user
 from reasoner.domain.saas import User
-from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file, save_uploaded_files
+from reasoner.uploader import delete_file, get_file_text, list_uploads, save_uploaded_file, save_uploaded_files, MAX_FILE_SIZE
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,10 +39,23 @@ async def upload_file(
         if not raw_files:
             return {"success": False, "error": "No file provided"}
 
-        # Normalize to list of (bytes, filename) tuples
+        # Normalize to list of (bytes, filename) tuples — stream read with size guard
         for item in raw_files:
             if hasattr(item, "read"):
-                content = await item.read()
+                chunks = []
+                total = 0
+                while True:
+                    chunk = await item.read(1024 * 1024)  # 1 MB chunks
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_FILE_SIZE:
+                        raise HTTPException(
+                            status_code=413,
+                            detail=f"File too large. Maximum size: {MAX_FILE_SIZE // (1024 * 1024)}MB",
+                        )
+                    chunks.append(chunk)
+                content = b"".join(chunks)
                 files.append((content, getattr(item, "filename", "unknown")))
 
         if len(files) == 1:

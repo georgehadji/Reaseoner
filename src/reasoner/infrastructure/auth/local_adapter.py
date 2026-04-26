@@ -47,6 +47,7 @@ class LocalAuthAdapter(AuthPort):
         email: str,
         display_name: str | None = None,
         expires_in_hours: int = 24,
+        scopes: list[str] | None = None,
     ) -> str:
         """Create a local JWT for testing."""
         now = datetime.now(timezone.utc)
@@ -54,6 +55,7 @@ class LocalAuthAdapter(AuthPort):
             "sub": user_id,
             "email": email,
             "name": display_name,
+            "scopes": scopes or [],
             "iat": now,
             "exp": now + timedelta(hours=expires_in_hours),
             "iss": "reasoner-local",
@@ -75,6 +77,7 @@ class LocalAuthAdapter(AuthPort):
                 id=UUID(payload["sub"]),
                 email=payload.get("email", ""),
                 display_name=payload.get("name"),
+                scopes=set(payload.get("scopes", [])),
             )
         except jwt.ExpiredSignatureError:
             raise AuthenticationError("Token has expired", status_code=401)

@@ -144,6 +144,25 @@ class StructuredLogEntry:
         return json.dumps(asdict(self), default=str)
 
 
+class SafeLoggingFilter(logging.Filter):
+    """Filter that redacts sensitive data from every log record.
+
+    Install on the root logger (or any logger) so that *all* output
+    — including exception messages from third-party libraries —
+    is sanitized before reaching handlers.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.msg, str):
+            record.msg = redact_sensitive(record.msg)
+        if record.args:
+            record.args = tuple(
+                redact_sensitive(arg) if isinstance(arg, str) else arg
+                for arg in record.args
+            )
+        return True
+
+
 def set_log_context(user_id: str | None = None, tier: str | None = None, preset: str | None = None) -> None:
     """Set request-scoped context for structured logging (Critical Enhancement 7.3)."""
     _log_context.set({"user_id": user_id, "tier": tier, "preset": preset})

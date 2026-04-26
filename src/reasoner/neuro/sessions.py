@@ -91,7 +91,7 @@ class SessionManager:
             return True
         if self._last_ingest_time == 0:
             return True
-        gap = time.time() - self._last_ingest_time
+        gap = time.monotonic() - self._last_ingest_time
         return gap > (self.config.max_session_gap_minutes * 60)
 
     def _start_session(self) -> str:
@@ -145,7 +145,7 @@ class SessionManager:
                 f.write(json.dumps(entry) + "\n")
                 f.flush()
 
-            self._last_ingest_time = time.time()
+            self._last_ingest_time = time.monotonic()
             self._entry_count += 1
 
             # Invalidate count cache for this file
@@ -190,7 +190,7 @@ class SessionManager:
             async with lock:
                 await asyncio.to_thread(self._write_entry, self._current_session_file, entry)
 
-            self._last_ingest_time = time.time()
+            self._last_ingest_time = time.monotonic()
             self._entry_count += 1
             self._counts_cache.pop(str(self._current_session_file), None)
 

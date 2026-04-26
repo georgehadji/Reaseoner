@@ -152,14 +152,26 @@ def require_tier(min_tier: SubscriptionTier):
         async def premium_route(user: User = Depends(require_tier(SubscriptionTier.PRO))):
             ...
     """
+    from fastapi import HTTPException
+
     async def checker(user: User = Depends(get_current_user)) -> User:
-        # TODO: In Phase 3, fetch subscription from DB and compare tiers.
-        # For Phase 2, all authenticated users pass (auth gate only).
-        # Placeholder logic:
         tier_order = {SubscriptionTier.FREE: 0, SubscriptionTier.PRO: 1, SubscriptionTier.ENTERPRISE: 2}
-        # user_tier = await get_user_subscription_tier(user.id)
-        # if tier_order[user_tier] < tier_order[min_tier]:
-        #     raise HTTPException(status_code=403, detail=f"Requires {min_tier.value} tier")
+        # Fetch actual tier from subscription DB if available
+        user_tier = SubscriptionTier.FREE
+        try:
+            from reasoner.infrastructure.persistence.subscription_repo import PostgresSubscriptionRepository
+            repo = PostgresSubscriptionRepository(settings.DATABASE_URL)
+            sub = await repo.get_subscription_by_user(str(user.id))
+            if sub and sub.status.value == "active":
+                user_tier = sub.tier
+        except Exception:
+            # Fallback to FREE if subscription DB is unavailable
+            pass
+        if tier_order.get(user_tier, 0) < tier_order.get(min_tier, 0):
+            raise HTTPException(
+                status_code=403,
+                detail=f"Tier upgrade required: {min_tier.value} or higher",
+            )
         return user
 
     return checker
@@ -177,13 +189,23 @@ async def check_rate_limit(
         # Authenticated user — use user_id as bucket key with tier multiplier
         # TODO Phase 3: fetch tier from subscription
         client_id = f"user:{user.id}"
-        allowed, info = await rate_limiter.is_allowed_for_user(client_id, tier="default")
+        try:
+            allowed, info = await rate_limiter.is_allowed_for_user(client_id, tier="default")
+        except Exception as exc:
+            logger.error("Rate limiter error: %s", exc)
+            allowed = True
+            info = {"limit_minute": 60, "remaining_minute": 60, "retry_after": None}
     else:
         # Anonymous — use IP + User-Agent hash
         ip = get_client_ip(request)
         user_agent = request.headers.get("User-Agent", "")
         client_id = f"{ip}:{hashlib.sha256(user_agent.encode()).hexdigest()[:8]}"
-        allowed, info = await rate_limiter.is_allowed(client_id)
+        try:
+            allowed, info = await rate_limiter.is_allowed(client_id)
+        except Exception as exc:
+            logger.error("Rate limiter error: %s", exc)
+            allowed = True
+            info = {"limit_minute": 60, "remaining_minute": 60, "retry_after": None}
 
     request.state.rate_limit_info = info
 

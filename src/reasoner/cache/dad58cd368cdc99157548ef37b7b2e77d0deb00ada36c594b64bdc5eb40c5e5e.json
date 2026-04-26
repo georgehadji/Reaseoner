@@ -1,1 +1,0 @@
-[{"type": "start"}, {"type": "phase_start", "phase": 0, "name": "Direct Response"}, {"type": "phase_error", "phase": 0, "error": "APIConnectionError: Connection error."}, {"type": "done", "errors": ["APIConnectionError: Connection error."], "total_tokens": {"input": 0, "output": 0, "total": 0}, "duration": 1.375}]

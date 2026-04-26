@@ -6,12 +6,31 @@ Handles file uploads and text extraction from PDF, TXT, DOCX files.
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import logging
 import os
 import re
 import uuid
 from pathlib import Path
 from typing import Any, Optional
+
+# Content-hash deduplication index: {sha256: file_id}
+_HASH_INDEX_PATH = Path(__file__).parent / ".upload_hash_index.json"
+
+def _load_hash_index() -> dict[str, str]:
+    if _HASH_INDEX_PATH.exists():
+        try:
+            return json.loads(_HASH_INDEX_PATH.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+def _save_hash_index(index: dict[str, str]) -> None:
+    try:
+        _HASH_INDEX_PATH.write_text(json.dumps(index), encoding="utf-8")
+    except OSError:
+        pass
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +53,8 @@ except ImportError:
 UPLOAD_DIR = Path(__file__).parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# Maximum file size (10MB)
-MAX_FILE_SIZE = 10 * 1024 * 1024
+# Maximum file size (50MB)
+MAX_FILE_SIZE = 50 * 1024 * 1024
 
 # Supported file extensions
 SUPPORTED_EXTENSIONS = {".txt", ".pdf", ".docx", ".md", ".png", ".jpg", ".jpeg", ".webp"}
@@ -248,6 +267,32 @@ async def save_uploaded_file(
             "error": f"File too large. Maximum size: {MAX_FILE_SIZE // (1024*1024)}MB",
         }
 
+    # Content-hash deduplication
+    content_hash = hashlib.sha256(content).hexdigest()
+    hash_index = _load_hash_index()
+    existing_id = hash_index.get(content_hash)
+    if existing_id:
+        existing_path = UPLOAD_DIR / f"{existing_id}.meta.json"
+        if existing_path.exists():
+            logger.info("Deduplicating upload: hash %s matches existing file %s", content_hash[:16], existing_id)
+            try:
+                meta = json.loads(existing_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                meta = {}
+            # Re-extract text for the new upload context (OCR settings may differ)
+            text_content = await extract_text(content, filename, force_ocr=force_ocr)
+            return {
+                "success": True,
+                "file_id": existing_id,
+                "filename": filename,
+                "size": len(content),
+                "mime_type": meta.get("mime_type", "application/octet-stream"),
+                "text": text_content,
+                "path": str(UPLOAD_DIR / f"{existing_id}{_get_file_extension(filename)}"),
+                "user_id": user_id,
+                "deduplicated": True,
+            }
+
     # Extract extension here so it's available for MIME validation below
     ext = _get_file_extension(filename)
 
@@ -336,11 +381,14 @@ async def save_uploaded_file(
 
         # Persist ownership metadata
         meta_path = UPLOAD_DIR / f"{file_id}.meta.json"
-        import json
         meta_path.write_text(
-            json.dumps({"user_id": user_id, "filename": filename, "created_at": str(uuid.uuid4())}),
+            json.dumps({"user_id": user_id, "filename": filename, "mime_type": mime_type, "created_at": str(uuid.uuid4())}),
             encoding="utf-8",
         )
+
+        # Update content-hash index
+        hash_index[content_hash] = file_id
+        _save_hash_index(hash_index)
 
         return {
             "success": True,

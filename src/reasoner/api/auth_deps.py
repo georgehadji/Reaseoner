@@ -48,7 +48,12 @@ async def check_rate_limit(
     Raises HTTPException if rate limit exceeded.
     """
     client_id = await get_client_id(request)
-    allowed, info = await rate_limiter.is_allowed(client_id)
+    try:
+        allowed, info = await rate_limiter.is_allowed(client_id)
+    except Exception as exc:
+        logger.error("Rate limiter error: %s", exc)
+        allowed = True
+        info = {"limit_minute": 60, "remaining_minute": 60, "retry_after": None}
 
     # Add rate limit headers to response
     request.state.rate_limit_info = info
@@ -90,10 +95,11 @@ async def require_auth(
         api_key = await auth_manager.authenticate(credentials.credentials)
         return api_key
     except AuthenticationError as e:
+        # Return generic error to prevent information leakage (timing attack defense)
         raise HTTPException(
-            status_code=e.status_code,
-            detail=e.message,
-            headers={"WWW-Authenticate": "Bearer"} if e.status_code == 401 else None,
+            status_code=401,
+            detail="Authentication failed",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
 

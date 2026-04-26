@@ -12,6 +12,8 @@ from typing import Any, Optional
 
 import httpx
 
+from reasoner.security.url_validator import is_safe_url
+
 logger = logging.getLogger(__name__)
 
 # Shared HTTP connection pool for all scrape operations.
@@ -160,6 +162,9 @@ async def scrape_url(url: str, max_length: int = 10000) -> dict[str, Any]:
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
         }
+
+        if not is_safe_url(url):
+            return {"url": url, "title": "", "content": "", "success": False, "error": "URL blocked for security"}
 
         response = await client.get(url, headers=headers)
         response.raise_for_status()

@@ -108,14 +108,14 @@ class CircuitBreaker:
     async def record_failure(self):
         async with self._lock:
             self.failure_count += 1
-            self.last_failure_time = time.time()
+            self.last_failure_time = time.monotonic()
             if self.failure_count >= self.threshold:
                 self.is_open = True
 
     def should_skip(self) -> bool:
         if not self.is_open:
             return False
-        elapsed = time.time() - self.last_failure_time
+        elapsed = time.monotonic() - self.last_failure_time
         if elapsed >= self.cooldown:
             self.is_open = False
             self.failure_count = 0
@@ -126,7 +126,7 @@ class CircuitBreaker:
     def retry_in(self) -> float:
         if not self.is_open:
             return 0.0
-        elapsed = time.time() - self.last_failure_time
+        elapsed = time.monotonic() - self.last_failure_time
         return max(0.0, self.cooldown - elapsed)
 
 

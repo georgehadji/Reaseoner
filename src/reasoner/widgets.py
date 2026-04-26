@@ -72,7 +72,7 @@ def _safe_eval_expr(node: ast.AST, depth: int = 0) -> Any:
     Recursively evaluate AST node with safety checks.
     Raises SafeExpressionError for unsafe operations.
     """
-    if depth > 100:
+    if depth > 20:
         raise SafeExpressionError("Expression too deeply nested")
     if isinstance(node, ast.Constant):  # Python 3.8+
         if isinstance(node.value, bool):

@@ -24,6 +24,7 @@ from reasoner.neuro.sessions import SessionManager, SessionConfig
 from reasoner.neuro.compression import smart_compress
 from reasoner.core.rerank import rerank_memory_chunks
 from reasoner.core.settings import settings
+from reasoner.utils.json_safe import safe_json_loads, JSONDepthExceededError
 
 log = logging.getLogger("neuro.api")
 
@@ -281,7 +282,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
 
         try:
             raw = await reasoner.generate(user_prompt, system=system_prompt)
-            result = json.loads(raw.strip().strip("`").replace("json", "", 1).strip())
+            result = safe_json_loads(raw.strip().strip("`").replace("json", "", 1).strip(), max_depth=50)
             return AuditResponse(
                 verdict=result.get("verdict", "PASS"),
                 confidence=result.get("confidence", 0.5),

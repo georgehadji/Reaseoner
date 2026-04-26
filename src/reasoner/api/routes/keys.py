@@ -6,9 +6,12 @@ import asyncio
 import logging
 import os
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from reasoner.api.auth_deps import check_rate_limit, optional_auth, require_auth, require_csrf
+from reasoner.api.dependencies import get_current_user
+from reasoner.domain.saas import User
+from reasoner.auth import Scope
 from reasoner.core.constants import TIMEOUTS, VALIDATION_TEST_MAX_TOKENS
 from reasoner.llm import _REGISTRY, build_provider
 
@@ -18,6 +21,7 @@ router = APIRouter()
 
 @router.get("/api/keys/status")
 async def get_api_keys_status(
+    user: User = Depends(get_current_user),
     authenticated=Depends(optional_auth),
 ):
     """
@@ -47,16 +51,11 @@ async def get_api_keys_status(
     total_providers = len(env_status)
     configured = sum(1 for s in env_status.values() if s["is_set"])
 
-    # SECURITY: Do not expose provider names, env vars, or model lists.
-    # If unauthenticated, return a zeroed summary to prevent reconnaissance.
-    if authenticated is None:
-        return {
-            "summary": {
-                "total_providers": 0,
-                "configured": 0,
-                "missing": 0,
-            },
-        }
+    # SECURITY: Admin-only endpoint to prevent reconnaissance.
+    user_scopes = getattr(user, "scopes", set())
+    if Scope.ADMIN.value not in user_scopes:
+        raise HTTPException(status_code=403, detail="Admin scope required")
+
     return {
         "summary": {
             "total_providers": total_providers,

@@ -51,25 +51,44 @@ async def handle_stripe_webhook(request: Request) -> dict:
     event_type = event.get("type", "unknown")
     logger.info("Stripe webhook received: %s (id=%s)", event_type, event_id)
 
-    # Deduplication: skip if we've already processed this event (Critical Enhancement 4.9)
+    # Two-phase deduplication (Critical Enhancement 4.9 + Audit Fix B.4)
     redis = get_redis()
-    dedup_key = f"stripe_webhook:{event_id}"
+    completed_key = f"stripe_webhook:{event_id}:completed"
+    processing_key = f"stripe_webhook:{event_id}:processing"
     try:
-        already_processed = await redis.get(dedup_key)
-        if already_processed:
-            logger.info("Stripe webhook deduplicated: %s", event_id)
+        if await redis.get(completed_key):
+            logger.info("Stripe webhook deduplicated (already completed): %s", event_id)
             return {"status": "ok"}
-        await redis.setex(dedup_key, WEBHOOK_DEDUP_TTL_SECONDS, "1")
+        # If another worker is processing, let Stripe retry (it will hit completed on success)
+        if await redis.get(processing_key):
+            logger.info("Stripe webhook already in progress: %s", event_id)
+            return {"status": "ok"}
+        await redis.setex(processing_key, 300, "1")  # 5-min processing window
     except Exception as exc:
         logger.warning("Redis dedup check failed (proceeding anyway): %s", exc)
 
     # Process the event
+    success = False
     try:
         adapter = StripeBillingAdapter()
         service = BillingService(adapter)
         await service.handle_webhook(event)
+        success = True
     except Exception as exc:
         logger.exception("Stripe webhook processing failed for event %s: %s", event_id, exc)
         # Still return 200 to prevent Stripe retries (Critical Enhancement 4.3)
+
+    # Mark completed ONLY after successful DB commit
+    if success:
+        try:
+            await redis.setex(completed_key, WEBHOOK_DEDUP_TTL_SECONDS, "1")
+            await redis.delete(processing_key)
+        except Exception as exc:
+            logger.warning("Redis completed-key set failed: %s", exc)
+    else:
+        try:
+            await redis.delete(processing_key)
+        except Exception as exc:
+            logger.warning("Redis processing-key delete failed: %s", exc)
 
     return {"status": "ok"}

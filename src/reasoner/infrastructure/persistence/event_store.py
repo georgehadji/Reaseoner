@@ -161,10 +161,11 @@ class EventStore:
 
                     # Insert event
                     conn.execute("""
-                        INSERT OR REPLACE INTO events
+                        INSERT INTO events
                         (event_id, event_type, aggregate_id, aggregate_type,
                          version, timestamp, payload, created_at)
                         VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                        ON CONFLICT(event_id) DO NOTHING
                     """, (
                         event.event_id,
                         event.event_type.value,

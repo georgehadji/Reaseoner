@@ -12,9 +12,23 @@ from reasoner.api.dependencies import get_current_user
 from reasoner.domain.saas import User
 
 from reasoner.application.queries import GetPipelineStatusQuery
+from reasoner.api.history import _get_pipeline_owner
+from reasoner.auth import Scope
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _check_pipeline_ownership(pipeline_id: str, user: User) -> bool:
+    """Return True if *user* is allowed to access *pipeline_id*."""
+    # Admins can access any pipeline
+    if hasattr(user, "scopes") and Scope.ADMIN.value in user.scopes:
+        return True
+    # Legacy pipelines without an owner are world-accessible (for backward compat)
+    owner = _get_pipeline_owner(pipeline_id)
+    if owner is None:
+        return True
+    return str(user.id) == owner
 
 
 @router.get("/api/events/stats")
@@ -48,6 +62,13 @@ async def list_pipelines(
             offset=offset,
             status=status,
         )
+        # Filter to only pipelines owned by the requesting user (unless admin)
+        if not (hasattr(user, "scopes") and Scope.ADMIN.value in user.scopes):
+            user_id_str = str(user.id)
+            pipelines = [
+                p for p in pipelines
+                if _get_pipeline_owner(p.get("aggregate_id", p.get("id", ""))) in (None, user_id_str)
+            ]
         return {"pipelines": pipelines, "total": len(pipelines)}
     except Exception as e:
         logger.error(f"List pipelines error: {e}")
@@ -60,6 +81,9 @@ async def get_pipeline_status(
     user: User = Depends(get_current_user),
 ):
     """Get pipeline status from event store."""
+    if not _check_pipeline_ownership(pipeline_id, user):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     try:
         from reasoner.api import get_architecture_components
 
@@ -85,6 +109,9 @@ async def resume_pipeline(
     csrf_checked=Depends(require_csrf),
 ):
     """Resume a paused/failed pipeline from event history."""
+    if not _check_pipeline_ownership(pipeline_id, user):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     try:
         from reasoner.api import get_architecture_components
         from reasoner.application.commands import ResumePipelineCommand
@@ -110,6 +137,9 @@ async def resume_pipeline_stream(
     user: User = Depends(get_current_user),
     csrf_checked=Depends(require_csrf),
 ):
+    if not _check_pipeline_ownership(pipeline_id, user):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     """Resume a pipeline by reconstructing its context and starting a fresh stream.
 
     This is a "resume-as-restart" approach: the pipeline's problem, preset, and
@@ -181,6 +211,9 @@ async def delete_pipeline(
     csrf_checked=Depends(require_csrf),
 ):
     """Delete pipeline and all events (GDPR compliance)."""
+    if not _check_pipeline_ownership(pipeline_id, user):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     try:
         from reasoner.api import get_architecture_components
 

@@ -11,13 +11,19 @@ This enables:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from pathlib import Path
 from typing import Any, Callable, Awaitable
 from collections import defaultdict
 
 from reasoner.core.events.domain_events import DomainEvent, EventType
 
 logger = logging.getLogger(__name__)
+
+# Dead-letter log for events that exhaust all retries
+_DEAD_LETTER_PATH = Path(__file__).parent.parent.parent / "logs" / "dead_letter_events.jsonl"
+_DEAD_LETTER_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 
 # Type alias for event handlers
@@ -41,6 +47,7 @@ class EventBus:
         self._error_handlers: list[Callable[[DomainEvent, Exception], Awaitable[None]]] = []
         self._running = False
         self._task_queue: asyncio.Queue[tuple[DomainEvent, EventHandler]] | None = None
+        self._semaphore = asyncio.Semaphore(100)  # Max 100 concurrent handler executions
     
     def subscribe(
         self,
@@ -85,26 +92,26 @@ class EventBus:
     async def publish(self, event: DomainEvent) -> None:
         """
         Publish an event to all subscribers.
-        
-        Handlers are called concurrently. Errors in one handler
-        don't affect others.
-        
+
+        Handlers are called concurrently with bounded concurrency.
+        Errors in one handler don't affect others.
+
         Args:
             event: Domain event to publish
         """
         # Snapshot handler lists to avoid racing with concurrent subscribe() calls
         handlers = list(self._handlers.get(event.event_type, [])) + list(self._global_handlers)
-        
+
         if not handlers:
-            logger.debug(f"No handlers for {event.event_type.value}")
+            logger.debug("No handlers for %s", event.event_type.value)
             return
-        
-        # Execute all handlers concurrently
-        tasks = [
-            self._safe_execute(handler, event)
-            for handler in handlers
-        ]
-        
+
+        # Execute all handlers concurrently with bounded concurrency
+        async def _bounded(handler: EventHandler) -> None:
+            async with self._semaphore:
+                await self._safe_execute(handler, event)
+
+        tasks = [asyncio.create_task(_bounded(h)) for h in handlers]
         await asyncio.gather(*tasks, return_exceptions=True)
     
     async def _safe_execute(
@@ -112,21 +119,49 @@ class EventBus:
         handler: EventHandler,
         event: DomainEvent,
     ) -> None:
-        """Execute handler with error isolation."""
+        """Execute handler with error isolation and retry."""
+        max_retries = 3
+        last_exc: Exception | None = None
+        for attempt in range(max_retries + 1):
+            try:
+                await handler(event)
+                return
+            except Exception as exc:
+                last_exc = exc
+                if attempt < max_retries:
+                    wait = min(2 ** attempt, 8)  # cap at 8s
+                    logger.warning(
+                        "Handler error for %s (attempt %d/%d), retrying in %.1fs: %s",
+                        event.event_type.value, attempt + 1, max_retries + 1, wait, exc,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    logger.error(
+                        "Handler error for %s exhausted all retries: %s",
+                        event.event_type.value, exc,
+                        exc_info=True,
+                    )
+
+        # Notify error handlers
+        for error_handler in self._error_handlers:
+            try:
+                await error_handler(event, last_exc)
+            except Exception as inner_exc:
+                logger.error("Error handler failed: %s", inner_exc)
+
+        # Dead-letter log
         try:
-            await handler(event)
-        except Exception as exc:
-            logger.error(
-                f"Handler error for {event.event_type.value}: {exc}",
-                exc_info=True,
-            )
-            
-            # Notify error handlers
-            for error_handler in self._error_handlers:
-                try:
-                    await error_handler(event, exc)
-                except Exception as inner_exc:
-                    logger.error(f"Error handler failed: {inner_exc}")
+            entry = {
+                "event_type": event.event_type.value,
+                "aggregate_id": event.aggregate_id,
+                "event_id": event.event_id,
+                "error": str(last_exc),
+                "handler": getattr(handler, "__name__", repr(handler)),
+            }
+            with open(_DEAD_LETTER_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, default=str) + "\n")
+        except Exception as dl_exc:
+            logger.error("Failed to write dead-letter entry: %s", dl_exc)
     
     def clear(self) -> None:
         """Clear all subscriptions."""

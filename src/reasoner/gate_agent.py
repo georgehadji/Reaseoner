@@ -34,6 +34,7 @@ from reasoner.core.constants import (
     GATE_TIMEOUT_SECONDS,
 )
 from reasoner.llm import ProviderRouter
+from reasoner.utils.json_safe import safe_json_loads, JSONDepthExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -98,11 +99,17 @@ def _extract_json(text: str) -> dict:
     # Try to find JSON inside a code fence first
     fence_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fence_match:
-        return json.loads(fence_match.group(1))
+        try:
+            return safe_json_loads(fence_match.group(1), max_depth=50)
+        except (json.JSONDecodeError, JSONDepthExceededError):
+            pass
     # Otherwise look for the first bare JSON object
     bare_match = re.search(r"(\{.*?\})", text, re.DOTALL)
     if bare_match:
-        return json.loads(bare_match.group(1))
+        try:
+            return safe_json_loads(bare_match.group(1), max_depth=50)
+        except (json.JSONDecodeError, JSONDepthExceededError):
+            pass
     raise ValueError("No JSON object found in response")
 
 

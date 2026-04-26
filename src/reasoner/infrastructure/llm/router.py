@@ -18,6 +18,30 @@ from reasoner.infrastructure.llm.registry import build_provider
 logger = logging.getLogger(__name__)
 
 
+async def _call_with_circuit(
+    provider: BaseLLMProvider,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    temperature: float,
+    effective_timeout: float,
+) -> str:
+    """Call a provider with circuit-breaker protection."""
+    from reasoner.circuit_breaker import get_circuit_breaker
+
+    circuit = get_circuit_breaker(f"llm:{provider.model}")
+    if not await circuit.can_execute():
+        raise LLMError(f"Circuit open for {provider.model}")
+    try:
+        coro = provider.complete_with_retry(system_prompt, user_prompt, max_tokens, temperature)
+        result = await asyncio.wait_for(coro, timeout=effective_timeout)
+        await circuit.record_success()
+        return result
+    except Exception:
+        await circuit.record_failure()
+        raise
+
+
 class ProviderRouter:
     """
     Routes pipeline phases to appropriate providers.
@@ -77,10 +101,6 @@ class ProviderRouter:
         assigned = self.get(role)
         effective_timeout = self._timeout_for_role(role, timeout_seconds)
 
-        async def _call(provider: BaseLLMProvider) -> str:
-            coro = provider.complete_with_retry(system_prompt, user_prompt, max_tokens, temperature)
-            return await asyncio.wait_for(coro, timeout=effective_timeout)
-
         # Resolve fallback: explicit > primary > none.
         # Skip any fallback that resolves to the same model as the failing provider —
         # retrying an identical endpoint after a timeout is guaranteed to waste time.
@@ -97,33 +117,54 @@ class ProviderRouter:
 
         actual_provider = assigned
         try:
-            response = await _call(assigned)
+            response = await _call_with_circuit(
+                assigned, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
+            )
             if not response or not response.strip():
                 raise LLMError(f"Empty response from {assigned.model} for role={role}")
         except asyncio.TimeoutError:
             if fallback is None:
-                raise TimeoutError(
-                    f"'{assigned.model}' (role={role}) timed out after {effective_timeout:.0f}s — no fallback available"
+                logger.error(
+                    "Role '%s' provider '%s' timed out after %.0fs — no fallback available; returning degraded response",
+                    role, assigned.model, effective_timeout,
                 )
+                return "", {"degraded": True, "error": f"{assigned.model} timed out — no fallback", "model": assigned.model}
             logger.warning(
                 "Role '%s' provider '%s' timed out after %.0fs — retrying with fallback '%s'",
                 role, assigned.model, effective_timeout, fallback.model,
             )
             try:
-                response = await _call(fallback)
-            except asyncio.TimeoutError:
-                raise TimeoutError(
-                    f"'{assigned.model}' and fallback '{fallback.model}' (role={role}) both timed out after {effective_timeout:.0f}s"
+                response = await _call_with_circuit(
+                    fallback, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
                 )
+            except Exception:
+                logger.error(
+                    "Role '%s' fallback '%s' also failed; returning degraded response",
+                    role, fallback.model,
+                )
+                return "", {"degraded": True, "error": f"{assigned.model} and {fallback.model} both failed", "model": fallback.model}
             actual_provider = fallback
         except LLMError as exc:
             if fallback is None:
-                raise
+                logger.error(
+                    "Role '%s' provider '%s' failed (%s) — no fallback available; returning degraded response",
+                    role, assigned.model, exc,
+                )
+                return "", {"degraded": True, "error": str(exc), "model": assigned.model}
             logger.warning(
                 "Role '%s' provider '%s' failed (%s) — retrying with fallback '%s'",
                 role, assigned.model, exc, fallback.model,
             )
-            response = await _call(fallback)
+            try:
+                response = await _call_with_circuit(
+                    fallback, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
+                )
+            except Exception as fallback_exc:
+                logger.error(
+                    "Role '%s' fallback '%s' also failed (%s); returning degraded response",
+                    role, fallback.model, fallback_exc,
+                )
+                return "", {"degraded": True, "error": str(fallback_exc), "model": fallback.model}
             actual_provider = fallback
 
         # Build metadata with cost tracking

@@ -50,12 +50,18 @@ async def calculate(
 ):
     """Evaluate a mathematical expression (legacy endpoint)."""
     try:
+        import asyncio
         from reasoner.widgets import calculate_expression
 
-        result = calculate_expression(req.expression)
+        result = await asyncio.wait_for(
+            asyncio.to_thread(calculate_expression, req.expression),
+            timeout=1.0,
+        )
         return result
+    except asyncio.TimeoutError:
+        return {"error": "Calculation timed out", "valid": False}
     except Exception as e:
-        logger.error(f"Calculation error: {e}")
+        logger.error("Calculation error: %s", e)
         return {"error": "Internal server error", "valid": False}
 
 

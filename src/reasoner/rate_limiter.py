@@ -39,11 +39,11 @@ class RateLimitConfig:
 class ClientBucket:
     """Token bucket for a client."""
     tokens: float = field(default=0.0)
-    last_update: float = field(default_factory=time.time)
+    last_update: float = field(default_factory=time.monotonic)
     requests_minute: int = 0
     requests_hour: int = 0
-    minute_window_start: float = field(default_factory=time.time)
-    hour_window_start: float = field(default_factory=time.time)
+    minute_window_start: float = field(default_factory=time.monotonic)
+    hour_window_start: float = field(default_factory=time.monotonic)
 
 
 class RateLimiter:
@@ -78,7 +78,7 @@ class RateLimiter:
     
     def _refill_tokens(self, bucket: ClientBucket, multiplier: float = 1.0) -> None:
         """Refill tokens based on elapsed time."""
-        now = time.time()
+        now = time.monotonic()
         elapsed = now - bucket.last_update
         
         # Refill rate: 1 token per (60 / requests_per_minute) seconds, scaled by tier
@@ -92,7 +92,7 @@ class RateLimiter:
     
     def _reset_windows_if_needed(self, bucket: ClientBucket) -> None:
         """Reset sliding windows if expired."""
-        now = time.time()
+        now = time.monotonic()
         
         # Reset minute window (snap to exact boundary, O(1))
         elapsed_minutes = int((now - bucket.minute_window_start) // 60)
@@ -128,13 +128,13 @@ class RateLimiter:
             
             # Check per-minute limit
             if bucket.requests_minute >= self.config.requests_per_minute:
-                info["retry_after"] = 60 - (time.time() - bucket.minute_window_start)
+                info["retry_after"] = 60 - (time.monotonic() - bucket.minute_window_start)
                 info["reason"] = "per_minute_limit"
                 return False, info
             
             # Check per-hour limit
             if bucket.requests_hour >= self.config.requests_per_hour:
-                info["retry_after"] = 3600 - (time.time() - bucket.hour_window_start)
+                info["retry_after"] = 3600 - (time.monotonic() - bucket.hour_window_start)
                 info["reason"] = "per_hour_limit"
                 return False, info
             
@@ -217,14 +217,14 @@ class RateLimiter:
             }
 
             if bucket.requests_minute >= rpm:
-                info["retry_after"] = 60 - (time.time() - bucket.minute_window_start)
+                info["retry_after"] = 60 - (time.monotonic() - bucket.minute_window_start)
                 info["reason"] = "per_minute_limit"
                 if _METRICS_AVAILABLE:
                     REASONER_RATE_LIMIT_REJECTED.labels(tier=tier).inc()
                 return False, info
 
             if bucket.requests_hour >= rph:
-                info["retry_after"] = 3600 - (time.time() - bucket.hour_window_start)
+                info["retry_after"] = 3600 - (time.monotonic() - bucket.hour_window_start)
                 info["reason"] = "per_hour_limit"
                 if _METRICS_AVAILABLE:
                     REASONER_RATE_LIMIT_REJECTED.labels(tier=tier).inc()

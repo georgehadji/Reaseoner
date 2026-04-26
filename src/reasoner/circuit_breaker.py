@@ -277,6 +277,23 @@ class CircuitBreaker:
             extra={"circuit": self.name, "state": "closed"},
         )
 
+    async def can_execute(self) -> bool:
+        """Return True if the circuit allows a call right now.
+
+        For use by callers that manage their own execution lifecycle
+        (e.g., ProviderRouter) and only need a gate check.
+        """
+        async with self._lock:
+            return await self._try_acquire_call()
+
+    async def record_success(self) -> None:
+        """Record a successful call (for manual use outside ``call()``)."""
+        await self._on_success()
+
+    async def record_failure(self) -> None:
+        """Record a failed call (for manual use outside ``call()``)."""
+        await self._on_failure()
+
 
 class CircuitOpenError(Exception):
     """Raised when circuit breaker is open."""

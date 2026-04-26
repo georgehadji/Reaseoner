@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import time
+import math
 import click
 import httpx
 from pathlib import Path
@@ -24,6 +25,12 @@ def main():
     """Neuro Memory Engine CLI."""
     pass
 
+def _safe_num(value):
+    """Return value if numeric and not NaN, else '?'."""
+    if isinstance(value, (int, float)) and not math.isnan(value):
+        return value
+    return "?"
+
 @main.command()
 def status():
     """Check health and statistics."""
@@ -36,12 +43,14 @@ def status():
         
         table = Table(title="Neuro Layer Status", show_header=False)
         table.add_row("Status", f"[green]{data['status']}[/green]" if data['status'] == "ok" else "[red]Down[/red]")
-        table.add_row("Version", data['version'])
-        table.add_row("Reasoning", f"{data['reasoning']['active']} (Healthy: {data['reasoning']['healthy']})")
-        table.add_row("Embedding", f"{data['embedding']['active']} (Healthy: {data['embedding']['healthy']})")
+        table.add_row("Version", data.get('version', '?'))
+        reasoning = data.get('reasoning', {})
+        embedding = data.get('embedding', {})
+        table.add_row("Reasoning", f"{_safe_num(reasoning.get('active'))} (Healthy: {_safe_num(reasoning.get('healthy'))})")
+        table.add_row("Embedding", f"{_safe_num(embedding.get('active'))} (Healthy: {_safe_num(embedding.get('healthy'))})")
         
-        sess = data['sessions']
-        table.add_row("Sessions", f"Hot: {sess['hot_sessions']}, Warm: {sess['warm_sessions']}, Cold: {sess['cold_sessions']}")
+        sess = data.get('sessions', {})
+        table.add_row("Sessions", f"Hot: {_safe_num(sess.get('hot_sessions'))}, Warm: {_safe_num(sess.get('warm_sessions'))}, Cold: {_safe_num(sess.get('cold_sessions'))}")
         
         console.print(Panel(table, title="Neuro Engine", border_style="cyan"))
     except Exception as e:

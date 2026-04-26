@@ -33,8 +33,10 @@ from reasoner.presets import (
 from reasoner.phases._shared import build_followup_context, _wrap_user_input
 
 from .cache import CACHE_DIR, _cache_key, _load_cache, _save_cache
-from .history import HISTORY_DIR, HistoryEntry, _save_history_entry
+from .history import HISTORY_DIR, HistoryEntry, _save_history_entry, _save_pipeline_owner
 from reasoner.infrastructure.redis.run_state import _run_state_manager as _run_store
+from reasoner.core.events.domain_events import make_event, EventType
+from reasoner.infrastructure.persistence.event_store import get_event_store
 from .schemas import FollowupRequest, RunRequest
 from .serializers import (
     _event,
@@ -92,6 +94,18 @@ async def _broadcast_ws(run_id: str, payload: dict[str, Any]) -> None:
 
         manager = get_websocket_manager()
         await manager.broadcast_event(payload, run_id)
+    except Exception:
+        pass
+
+
+async def _persist_event(event) -> None:
+    """Persist a domain event to the event store.
+
+    Fire-and-forget: event-store failure must never break the stream.
+    """
+    try:
+        store = get_event_store()
+        await store.save_events([event])
     except Exception:
         pass
 
@@ -321,7 +335,10 @@ async def run_stream(
     user_id: str | None = None,
 ) -> AsyncGenerator[str, None]:
     run_id = req.client_run_id or str(uuid.uuid4())
+    event_version = 1
+    state: PipelineState | None = None
     cancel_event = await _run_store.add(run_id, user_id=user_id)
+    _save_pipeline_owner(run_id, user_id)
     try:
         # ── Neuro Recall ──
         recalled_chunks: list[dict[str, Any]] = []
@@ -397,6 +414,19 @@ async def run_stream(
             start_payload["auto_selected_method"] = auto_selected_method
         await _broadcast_ws(run_id, start_payload)
         yield _event(start_payload)
+
+        # Persist pipeline start event
+        start_evt = make_event(
+            EventType.PIPELINE_STARTED,
+            aggregate_id=run_id,
+            version=event_version,
+            problem=req.problem,
+            preset=effective_preset_name,
+            method=get_method_from_preset(effective_preset_name) or "multi-perspective",
+            options={"top_k": req.top_k, "source_type": req.source_type, "user_id": user_id},
+        )
+        await _persist_event(start_evt)
+        event_version += 1
 
         if req.enhance_prompt and not state.enhanced_problem:
             try:
@@ -554,6 +584,15 @@ async def run_stream(
                 yield _event(err_payload)
                 await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
                 yield _event({"type": "phase_error", "phase": num, "error": err_msg})
+                fail_evt = make_event(
+                    EventType.PHASE_FAILED,
+                    aggregate_id=run_id,
+                    version=event_version,
+                    phase_name=name,
+                    error=err_msg,
+                )
+                await _persist_event(fail_evt)
+                event_version += 1
                 if name in CRITICAL_PHASES:
                     break
                 continue
@@ -576,6 +615,15 @@ async def run_stream(
                 # Keep emitting legacy phase_error for backwards compatibility
                 await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
                 yield _event({"type": "phase_error", "phase": num, "error": err_msg})
+                fail_evt = make_event(
+                    EventType.PHASE_FAILED,
+                    aggregate_id=run_id,
+                    version=event_version,
+                    phase_name=name,
+                    error=err_msg,
+                )
+                await _persist_event(fail_evt)
+                event_version += 1
                 if name in CRITICAL_PHASES:
                     break
                 continue
@@ -626,21 +674,35 @@ async def run_stream(
             await _broadcast_ws(run_id, phase_complete_payload)
             yield _event(phase_complete_payload)
 
+            complete_evt = make_event(
+                EventType.PHASE_COMPLETED,
+                aggregate_id=run_id,
+                version=event_version,
+                phase_name=name,
+                result={"data": data},
+                tokens=state.phase_tokens.get(phase_key, {"input": 0, "output": 0}),
+                model_used=",".join([m.get("model", "unknown") for m in state.cost_state._phase_models_by_key.get(phase_key, [])]) or "unknown",
+                duration_seconds=duration,
+            )
+            await _persist_event(complete_evt)
+            event_version += 1
+
         token_source = state.detailed_token_usage if state.detailed_token_usage else state.phase_tokens
         total_input = sum(t.get("input", 0) for t in token_source.values())
         total_output = sum(t.get("output", 0) for t in token_source.values())
         total_tokens = total_input + total_output
 
         try:
-            from datetime import datetime
+            from datetime import datetime, timezone
 
+            ts = datetime.now(timezone.utc).isoformat()
             entry = HistoryEntry(
-                id=hashlib.sha256(f"{req.problem}{datetime.now().isoformat()}".encode()).hexdigest()[:16],
+                id=hashlib.sha256(f"{req.problem}{ts}".encode()).hexdigest()[:16],
                 user_id=user_id,
                 problem=req.problem[:TRUNCATION.API_STORAGE],
                 preset=req.preset,
                 method=get_method_from_preset(req.preset),
-                timestamp=datetime.now().isoformat(),
+                timestamp=ts,
                 tokens={"input": total_input, "output": total_output, "total": total_tokens},
                 status="completed" if not state.errors else "error",
             )
@@ -669,6 +731,18 @@ async def run_stream(
         }
         await _broadcast_ws(run_id, done_payload)
         yield _event(done_payload)
+
+        # Persist pipeline completion
+        done_evt = make_event(
+            EventType.PIPELINE_COMPLETED,
+            aggregate_id=run_id,
+            version=event_version,
+            solution={"core_solution": getattr(state.final_solution, 'core_solution', '') if state.final_solution else ''},
+            total_tokens={"input": total_input, "output": total_output},
+            total_duration_seconds=time.monotonic() - run_start,
+            phases_completed=len(state.phase_durations),
+        )
+        await _persist_event(done_evt)
 
         # ── Neuro Persist (main pipeline) ──
         try:
@@ -703,6 +777,16 @@ async def run_stream(
         err_msg = f"Pipeline processing error: {type(exc).__name__}: {str(exc)[:120]}"
         await _broadcast_ws(run_id, {"type": "done", "errors": [err_msg]})
         yield _event({"type": "done", "errors": [err_msg]})
+        # Persist pipeline failure
+        fail_evt = make_event(
+            EventType.PIPELINE_FAILED,
+            aggregate_id=run_id,
+            version=event_version,
+            error=err_msg,
+            phase_at_failure=getattr(state, '_current_phase_key', 'unknown') if state else 'unknown',
+            phases_completed=len(state.phase_durations) if state else 0,
+        )
+        await _persist_event(fail_evt)
     finally:
         await _run_store.remove(run_id)
 

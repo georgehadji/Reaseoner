@@ -62,6 +62,9 @@ class PostgresSubscriptionRepository:
 
         Critical Enhancement 4.2: used_queries is NOT reset on every webhook.
         It is only reset when the tier changes (upgrade/downgrade).
+
+        Uses explicit transaction + row-level lock to prevent race conditions
+        when multiple Stripe webhooks arrive concurrently.
         """
         pool = await self._get_pool()
         tier_limits = {
@@ -71,53 +74,55 @@ class PostgresSubscriptionRepository:
         }
         new_max = tier_limits[sub.tier]
 
-        # Check current tier to decide whether to reset used_queries
-        row = await pool.fetchrow(
-            "SELECT tier, used_queries FROM usage_quotas WHERE user_id = $1",
-            str(sub.user_id),
-        )
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                # Lock the row (or nonexistent row) to serialize concurrent updates
+                row = await conn.fetchrow(
+                    "SELECT tier, used_queries FROM usage_quotas WHERE user_id = $1 FOR UPDATE",
+                    str(sub.user_id),
+                )
 
-        if row is None:
-            # New user — create quota row
-            await pool.execute(
-                """
-                INSERT INTO usage_quotas (user_id, tier, max_queries, used_queries)
-                VALUES ($1, $2, $3, 0)
-                """,
-                str(sub.user_id),
-                sub.tier.value,
-                new_max,
-            )
-        else:
-            old_tier = row["tier"]
-            if old_tier != sub.tier.value:
-                # Tier changed (upgrade/downgrade) — reset usage
-                await pool.execute(
-                    """
-                    UPDATE usage_quotas
-                    SET tier = $2, max_queries = $3, used_queries = 0, updated_at = NOW()
-                    WHERE user_id = $1
-                    """,
-                    str(sub.user_id),
-                    sub.tier.value,
-                    new_max,
-                )
-                logger.info(
-                    "Quota reset for user %s due to tier change: %s -> %s",
-                    sub.user_id, old_tier, sub.tier.value
-                )
-            else:
-                # Same tier — only update max_queries (e.g. plan metadata change)
-                await pool.execute(
-                    """
-                    UPDATE usage_quotas
-                    SET tier = $2, max_queries = $3, updated_at = NOW()
-                    WHERE user_id = $1
-                    """,
-                    str(sub.user_id),
-                    sub.tier.value,
-                    new_max,
-                )
+                if row is None:
+                    # New user — create quota row
+                    await conn.execute(
+                        """
+                        INSERT INTO usage_quotas (user_id, tier, max_queries, used_queries)
+                        VALUES ($1, $2, $3, 0)
+                        """,
+                        str(sub.user_id),
+                        sub.tier.value,
+                        new_max,
+                    )
+                else:
+                    old_tier = row["tier"]
+                    if old_tier != sub.tier.value:
+                        # Tier changed (upgrade/downgrade) — reset usage
+                        await conn.execute(
+                            """
+                            UPDATE usage_quotas
+                            SET tier = $2, max_queries = $3, used_queries = 0, updated_at = NOW()
+                            WHERE user_id = $1
+                            """,
+                            str(sub.user_id),
+                            sub.tier.value,
+                            new_max,
+                        )
+                        logger.info(
+                            "Quota reset for user %s due to tier change: %s -> %s",
+                            sub.user_id, old_tier, sub.tier.value
+                        )
+                    else:
+                        # Same tier — only update max_queries (e.g. plan metadata change)
+                        await conn.execute(
+                            """
+                            UPDATE usage_quotas
+                            SET tier = $2, max_queries = $3, updated_at = NOW()
+                            WHERE user_id = $1
+                            """,
+                            str(sub.user_id),
+                            sub.tier.value,
+                            new_max,
+                        )
 
     async def set_subscription_status(self, stripe_sub_id: str, status: str) -> None:
         """Update subscription status (e.g. past_due, cancelled)."""

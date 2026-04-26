@@ -25,6 +25,7 @@ from reasoner.core.constants import (
 )
 from reasoner.hypergate.models import SubAgentInput, SubAgentOutput
 from reasoner.llm import ProviderRouter
+from reasoner.utils.json_safe import safe_json_loads, JSONDepthExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +153,10 @@ class BaseSubAgent(ABC):
         # Strip fenced code blocks first, then fall through to raw scan.
         fence = re.search(r"```(?:json)?\s*(\{[\s\S]*\})\s*```", text)
         if fence:
-            return json.loads(fence.group(1))
+            try:
+                return safe_json_loads(fence.group(1), max_depth=50)
+            except (json.JSONDecodeError, JSONDepthExceededError):
+                pass
         # Use raw_decode to find the first syntactically complete JSON object,
         # correctly handling nested braces that non-greedy regex would truncate.
         decoder = json.JSONDecoder()
@@ -160,7 +164,9 @@ class BaseSubAgent(ABC):
             if ch == "{":
                 try:
                     obj, _ = decoder.raw_decode(text, i)
+                    # Validate depth before returning
+                    safe_json_loads(json.dumps(obj), max_depth=50)
                     return obj  # type: ignore[return-value]
-                except json.JSONDecodeError:
+                except (json.JSONDecodeError, JSONDepthExceededError):
                     continue
         raise ValueError(f"No JSON found in: {text[:200]!r}")

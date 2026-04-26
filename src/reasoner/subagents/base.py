@@ -78,7 +78,7 @@ class PhaseSubAgent(ABC):
             return cached
 
         # Emit agent_start event for real-time UI tracking
-        state.pending_events.append({
+        state.append_pending_event({
             "type": "agent_start",
             "agent": self.AGENT_NAME,
             "role": self.ROLE,
@@ -134,7 +134,7 @@ class PhaseSubAgent(ABC):
         )
 
         # Emit agent_complete event
-        state.pending_events.append({
+        state.append_pending_event({
             "type": "agent_complete",
             "agent": self.AGENT_NAME,
             "duration_ms": out.duration_ms,

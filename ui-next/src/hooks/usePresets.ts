@@ -14,6 +14,7 @@ export function usePresets() {
   const { data, error, isLoading } = useSWR<PresetsResponse>(API.PRESETS, fetcher, {
     refreshInterval: TIMING.presetsRefreshIntervalMs,
     revalidateOnFocus: false,
+    dedupingInterval: 2000,
   });
 
   return {

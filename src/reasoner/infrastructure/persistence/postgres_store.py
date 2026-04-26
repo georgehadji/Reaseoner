@@ -208,52 +208,51 @@ class PostgreSQLEventStore:
         import logging
         logger = logging.getLogger(__name__)
         
-        async with self._lock:
-            try:
-                async with self._pool.acquire() as conn:
-                    async with conn.transaction():
-                        for event in events:
-                            # Serialize payload
-                            payload = {
-                                k: v for k, v in asdict(event).items()
-                                if k not in ('event_id', 'event_type', 'aggregate_id',
-                                             'version', 'timestamp')
-                            }
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    for event in events:
+                        # Serialize payload
+                        payload = {
+                            k: v for k, v in asdict(event).items()
+                            if k not in ('event_id', 'event_type', 'aggregate_id',
+                                         'version', 'timestamp')
+                        }
 
-                            # Determine aggregate type
-                            aggregate_type = self._get_aggregate_type(event.event_type)
+                        # Determine aggregate type
+                        aggregate_type = self._get_aggregate_type(event.event_type)
 
-                            # Insert event
-                            await conn.execute("""
-                                INSERT INTO events
-                                (event_id, event_type, aggregate_id, aggregate_type,
-                                 version, timestamp, payload, created_at)
-                                VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-                                ON CONFLICT (event_id) DO NOTHING
-                            """,
-                                event.event_id,
-                                event.event_type.value,
-                                event.aggregate_id,
-                                aggregate_type,
-                                event.version,
-                                event.timestamp,
-                                json.dumps(payload),
-                            )
+                        # Insert event
+                        await conn.execute("""
+                            INSERT INTO events
+                            (event_id, event_type, aggregate_id, aggregate_type,
+                             version, timestamp, payload, created_at)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+                            ON CONFLICT (event_id) DO NOTHING
+                        """,
+                            event.event_id,
+                            event.event_type.value,
+                            event.aggregate_id,
+                            aggregate_type,
+                            event.version,
+                            event.timestamp,
+                            json.dumps(payload),
+                        )
 
-                            # Update aggregate
-                            await self._update_aggregate(conn, event, aggregate_type)
-            except _AsyncpgError as e:
-                logger.error(f"PostgreSQL error saving events: {e}")
-                raise
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to serialize event payload: {e}")
-                raise
-            except ConnectionError as e:
-                logger.error(f"Database connection error: {e}")
-                raise
-            except Exception as e:
-                logger.error(f"Unexpected error saving events: {e}")
-                raise
+                        # Update aggregate
+                        await self._update_aggregate(conn, event, aggregate_type)
+        except _AsyncpgError as e:
+            logger.error(f"PostgreSQL error saving events: {e}")
+            raise
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to serialize event payload: {e}")
+            raise
+        except ConnectionError as e:
+            logger.error(f"Database connection error: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error saving events: {e}")
+            raise
     
     def _get_aggregate_type(self, event_type: EventType) -> str:
         """Determine aggregate type from event."""
@@ -461,26 +460,25 @@ class PostgreSQLEventStore:
         import logging
         logger = logging.getLogger(__name__)
         
-        async with self._lock:
-            try:
-                async with self._pool.acquire() as conn:
-                    await conn.execute("""
-                        INSERT INTO snapshots
-                        (aggregate_id, version, state, snapshot_type, created_at)
-                        VALUES ($1, $2, $3, $4, NOW())
-                        ON CONFLICT (aggregate_id) DO UPDATE SET
-                            version = EXCLUDED.version,
-                            state = EXCLUDED.state
-                    """, aggregate_id, version, json.dumps(state), snapshot_type)
-            except _AsyncpgError as e:
-                logger.error(f"PostgreSQL error saving snapshot for {aggregate_id}: {e}")
-                raise
-            except (TypeError, ValueError) as e:
-                logger.error(f"Failed to serialize state for {aggregate_id}: {e}")
-                raise
-            except Exception as e:
-                logger.error(f"Unexpected error saving snapshot for {aggregate_id}: {e}")
-                raise
+        try:
+            async with self._pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO snapshots
+                    (aggregate_id, version, state, snapshot_type, created_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (aggregate_id) DO UPDATE SET
+                        version = EXCLUDED.version,
+                        state = EXCLUDED.state
+                """, aggregate_id, version, json.dumps(state), snapshot_type)
+        except _AsyncpgError as e:
+            logger.error(f"PostgreSQL error saving snapshot for {aggregate_id}: {e}")
+            raise
+        except (TypeError, ValueError) as e:
+            logger.error(f"Failed to serialize state for {aggregate_id}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error saving snapshot for {aggregate_id}: {e}")
+            raise
     
     async def get_snapshot(
         self,
@@ -618,29 +616,28 @@ class PostgreSQLEventStore:
         import logging
         logger = logging.getLogger(__name__)
         
-        async with self._lock:
-            try:
-                async with self._pool.acquire() as conn:
-                    async with conn.transaction():
-                        await conn.execute("""
-                            DELETE FROM events WHERE aggregate_id = $1
-                        """, aggregate_id)
-                        await conn.execute("""
-                            DELETE FROM aggregates WHERE aggregate_id = $1
-                        """, aggregate_id)
-                        await conn.execute("""
-                            DELETE FROM snapshots WHERE aggregate_id = $1
-                        """, aggregate_id)
-                        await conn.execute("""
-                            DELETE FROM read_models WHERE model_key = $1
-                        """, aggregate_id)
-                logger.info(f"Aggregate {aggregate_id} and all related data deleted")
-            except _AsyncpgError as e:
-                logger.error(f"PostgreSQL error deleting aggregate {aggregate_id}: {e}")
-                raise
-            except Exception as e:
-                logger.error(f"Unexpected error deleting aggregate {aggregate_id}: {e}")
-                raise
+        try:
+            async with self._pool.acquire() as conn:
+                async with conn.transaction():
+                    await conn.execute("""
+                        DELETE FROM events WHERE aggregate_id = $1
+                    """, aggregate_id)
+                    await conn.execute("""
+                        DELETE FROM aggregates WHERE aggregate_id = $1
+                    """, aggregate_id)
+                    await conn.execute("""
+                        DELETE FROM snapshots WHERE aggregate_id = $1
+                    """, aggregate_id)
+                    await conn.execute("""
+                        DELETE FROM read_models WHERE model_key = $1
+                    """, aggregate_id)
+            logger.info(f"Aggregate {aggregate_id} and all related data deleted")
+        except _AsyncpgError as e:
+            logger.error(f"PostgreSQL error deleting aggregate {aggregate_id}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error deleting aggregate {aggregate_id}: {e}")
+            raise
     
     async def close(self) -> None:
         """Close connection pools."""

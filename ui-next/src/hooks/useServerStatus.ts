@@ -8,6 +8,7 @@ export function useServerStatus() {
 
   useEffect(() => {
     let mounted = true;
+    let interval: NodeJS.Timeout;
 
     async function check() {
       const controller = new AbortController();
@@ -22,11 +23,27 @@ export function useServerStatus() {
       }
     }
 
-    check();
-    const id = setInterval(check, TIMING.serverStatusCheckIntervalMs);
+    function start() {
+      check();
+      interval = setInterval(check, TIMING.serverStatusCheckIntervalMs);
+    }
+
+    function stop() {
+      clearInterval(interval);
+    }
+
+    start();
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        start();
+      }
+    });
+
     return () => {
       mounted = false;
-      clearInterval(id);
+      stop();
     };
   }, []);
 

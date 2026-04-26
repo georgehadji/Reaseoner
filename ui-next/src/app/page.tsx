@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback, useReducer } from 'react';
+import { useState, useRef, useCallback, useReducer, useMemo } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { usePipelineStream } from '@/hooks/usePipelineStream';
 import { useWebSocketPipeline } from '@/hooks/useWebSocketPipeline';
@@ -20,6 +20,7 @@ import { UpgradeModal } from '@/components/layout/UpgradeModal';
 import { PipelineError } from '@/hooks/usePipelineStream';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
+import { ChatErrorBoundary } from '@/components/chat/ChatErrorBoundary';
 import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '@/lib/types';
 import { METHOD_PHASES, LIMITS, PIPELINE_DEFAULTS } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
@@ -227,6 +228,13 @@ export default function Home() {
 
   const isContinuation = (text: string) => CONTINUATION_RE.test(text);
 
+  const findLastAssistant = (msgs: ChatFeedMessage[]) => {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'assistant' && !msgs[i].isStreaming) return msgs[i];
+    }
+    return undefined;
+  };
+
   const {
     scrollToBottom,
     showNewContentIndicator,
@@ -255,7 +263,7 @@ export default function Home() {
     onCommandPalette: () => setCommandPaletteOpen((v) => !v),
   });
 
-  async function handleSubmit(providedText?: string) {
+  const handleSubmit = useCallback(async (providedText?: string) => {
     const problem = (providedText ?? composerText).trim();
     if (!problem || running) return;
 
@@ -450,7 +458,7 @@ export default function Home() {
     }
 
     // ── Detect follow-up mode ──
-    const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
+    const lastAssistantMsg = findLastAssistant(messages);
     const isFollowup = !!lastAssistantMsg && messages.length > 0 && isContinuation(problem);
 
     const phases: RenderedPhase[] = [];
@@ -770,14 +778,14 @@ export default function Home() {
       setRunning(false);
       clearAttachments();
     }
-  }
+  }, [composerText, running, attachments, isImageMode, tier, messages, startRun, startFollowup, wsConnect, wsDisconnect, dispatchMessages, setRunning, setComposerText, clearAttachments, refreshHistory, setCompletedPhases, setErrorPhases, setCurrentPhase, setPhaseDurations, setAutoSelectedMethod, setPhaseOpenMode, isContinuation]);
 
-  function handleStop() {
+  const handleStop = useCallback(() => {
     stopRun();
     wsSendStop(clientRunIdRef.current || '');
     setRunning(false);
     setCurrentPhase(undefined);
-  }
+  }, [stopRun, wsSendStop, setRunning, setCurrentPhase]);
 
   function handleNew() {
     // Dispatch action to clear messages and reset other states managed by parent
@@ -896,7 +904,7 @@ export default function Home() {
 
   const hasMessages = messages.length > 0;
   const activeAssistantMsg = messages.find((m) => m.role === 'assistant' && m.isStreaming);
-  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === 'assistant' && !m.isStreaming);
+  const lastAssistantMsg = useMemo(() => findLastAssistant(messages), [messages]);
   const followupAgentBadge = lastAssistantMsg ? 'Follow-up mode active' : null;
 
   async function handleFeedback(messageId: string, rating: 'up' | 'down') {
@@ -988,15 +996,17 @@ export default function Home() {
         <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto">
           {hasMessages ? (
             <>
-              <ChatFeed
-                messages={messages}
-                onScrollToBottom={dismissIndicator}
-                showNewContentIndicator={showNewContentIndicator}
-                phaseOpenMode={phaseOpenMode}
-                errorPhases={errorPhases}
-                onFeedback={handleFeedback}
-                onContinueGenerating={handleContinueGenerating}
-              />
+              <ChatErrorBoundary fallback={<div className="p-4 text-red-500">Display error. Please refresh.</div>}>
+                <ChatFeed
+                  messages={messages}
+                  onScrollToBottom={dismissIndicator}
+                  showNewContentIndicator={showNewContentIndicator}
+                  phaseOpenMode={phaseOpenMode}
+                  errorPhases={errorPhases}
+                  onFeedback={handleFeedback}
+                  onContinueGenerating={handleContinueGenerating}
+                />
+              </ChatErrorBoundary>
             </>
           ) : (
             <Composer running={running} onSubmit={() => handleSubmit()} onStop={handleStop} centered />

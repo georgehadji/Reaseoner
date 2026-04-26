@@ -140,12 +140,16 @@ class BaseSubAgent(ABC):
         if not is_openai:
             kwargs["temperature"] = self.TEMPERATURE
 
-        return await router.call(
+        result = await router.call(
             role="primary",
             system_prompt=self._system_prompt(),
             user_prompt=user_prompt,
             **kwargs,
         )
+        from reasoner.infrastructure.llm.ports import DegradedLLMResponse
+        if isinstance(result, DegradedLLMResponse):
+            raise RuntimeError(result.error)
+        return result
 
     @staticmethod
     def _extract_json(text: str) -> dict[str, Any]:

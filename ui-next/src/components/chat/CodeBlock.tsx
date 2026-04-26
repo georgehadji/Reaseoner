@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useTheme } from 'next-themes';
@@ -23,6 +23,8 @@ export function CodeBlock({
   const [copied, setCopied] = useState(false);
   const { theme } = useTheme();
   const isDark = theme === 'dark';
+  const codeStyle = useMemo(() => (isDark ? vscDarkPlus : vs), [isDark]);
+  const customStyle = useMemo(() => ({ margin: 0, padding: '1em', background: 'transparent', fontSize: '0.85em' }), []);
 
   async function handleCopy() {
     const ok = await copyToClipboard(code);
@@ -54,13 +56,8 @@ export function CodeBlock({
       </div>
       <SyntaxHighlighter
         language={language}
-        style={isDark ? vscDarkPlus : vs}
-        customStyle={{
-          margin: 0,
-          padding: '1em',
-          background: 'transparent',
-          fontSize: '0.85em',
-        }}
+        style={codeStyle}
+        customStyle={customStyle}
       >
         {code}
       </SyntaxHighlighter>

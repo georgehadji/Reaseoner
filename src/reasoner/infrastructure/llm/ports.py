@@ -67,6 +67,19 @@ class LLMResponse:
     tokens_completion: int = 0
     finish_reason: str = "stop"
     metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class DegradedLLMResponse:
+    """
+    Placeholder response when all LLM providers fail.
+    
+    Carries enough metadata for downstream telemetry and UI warnings.
+    """
+    text: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+    degraded: bool = True
+    error: str = ""
     
     @property
     def tokens_total(self) -> int:
@@ -286,14 +299,14 @@ class BaseLLMProvider(ABC):
         last_error: Exception | None = None
         
         for attempt in range(self.max_retries + 1):
-            start_time = time.time()
+            start_time = time.perf_counter()
             
             try:
                 response = await self._complete_impl(messages, config)
                 
                 # Update health on success
                 self._health = ProviderHealth.HEALTHY
-                self._latency_ms = (time.time() - start_time) * 1000
+                self._latency_ms = (time.perf_counter() - start_time) * 1000
                 self._request_count += 1
                 
                 return response

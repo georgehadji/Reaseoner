@@ -19,6 +19,9 @@ from typing import Optional
 # Token validity window in seconds (24 hours)
 _CSRF_TOKEN_MAX_AGE = 86400
 
+# Per-process CSRF signing secret (rotates on restart — acceptable for stateless tokens)
+_CSRF_SECRET = secrets.token_hex(32)
+
 
 def _get_csrf_secret() -> bytes:
     """Get the CSRF signing secret. CSRF_SECRET must be set independently of ADMIN_API_KEY."""
@@ -32,10 +35,12 @@ def _get_csrf_secret() -> bytes:
 
 
 def generate_csrf_token() -> str:
-    """Generate a token that embeds the current timestamp for expiry validation."""
-    ts = int(time.time())
-    rand = secrets.token_hex(24)
-    return f"{ts}:{rand}"
+    """Generate a token that embeds a signed expiry timestamp."""
+    expiry = int(time.time()) + _CSRF_TOKEN_MAX_AGE
+    nonce = secrets.token_urlsafe(16)
+    payload = f"{expiry}:{nonce}"
+    sig = hmac.new(_CSRF_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    return f"{payload}:{sig}"
 
 
 def sign_csrf_token(token: str) -> str:
@@ -61,15 +66,18 @@ def verify_csrf_token(signed: str) -> bool:
     if not hmac.compare_digest(provided_sig, expected_sig):
         return False
 
-    # Validate embedded timestamp to enforce token max-age
+    # Validate embedded signed expiry to enforce token max-age
     try:
-        ts_str, _ = token.split(":", 1)
-        if time.time() - int(ts_str) > _CSRF_TOKEN_MAX_AGE:
+        expiry, nonce, sig = token.rsplit(":", 2)
+        payload = f"{expiry}:{nonce}"
+        expected_payload_sig = hmac.new(
+            _CSRF_SECRET.encode(), payload.encode(), hashlib.sha256
+        ).hexdigest()[:16]
+        if not secrets.compare_digest(sig, expected_payload_sig):
             return False
+        return int(time.time()) < int(expiry)
     except (ValueError, IndexError):
         return False
-
-    return True
 
 
 def generate_signed_csrf_token() -> str:

@@ -4,6 +4,7 @@ import { useRef, useCallback, useEffect, useState } from 'react';
 import { PhaseEvent } from '@/lib/types';
 import { WS } from '@/lib/config';
 import { REASONER_WS_URL } from '@/lib/server-config';
+import { getAuthToken } from '@/lib/auth';
 
 export type ConnectionStatus = 'idle' | 'connecting' | 'connected' | 'disconnected' | 'reconnecting';
 
@@ -24,7 +25,7 @@ export function useWebSocketPipeline() {
     }
   }, []);
 
-  const doConnect = useCallback((pipelineId: string, onEvent: (ev: PhaseEvent) => void) => {
+  const doConnect = useCallback(async (pipelineId: string, onEvent: (ev: PhaseEvent) => void) => {
     clearReconnect();
     pipelineIdRef.current = pipelineId;
     onEventRef.current = onEvent;
@@ -35,7 +36,12 @@ export function useWebSocketPipeline() {
     }
 
     setStatus('connecting');
-    const ws = new WebSocket(`${REASONER_WS_URL}?pipeline_id=${encodeURIComponent(pipelineId)}`);
+    const token = await getAuthToken();
+    let url = `${REASONER_WS_URL}?pipeline_id=${encodeURIComponent(pipelineId)}`;
+    if (token) {
+      url += `&token=${encodeURIComponent(token)}`;
+    }
+    const ws = new WebSocket(url);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -85,9 +91,9 @@ export function useWebSocketPipeline() {
     doConnectRef.current = doConnect;
   }, [doConnect]);
 
-  const connect = useCallback((pipelineId: string, onEvent: (ev: PhaseEvent) => void) => {
+  const connect = useCallback(async (pipelineId: string, onEvent: (ev: PhaseEvent) => void) => {
     reconnectCountRef.current = 0;
-    doConnect(pipelineId, onEvent);
+    await doConnect(pipelineId, onEvent);
   }, [doConnect]);
 
   const disconnect = useCallback(() => {

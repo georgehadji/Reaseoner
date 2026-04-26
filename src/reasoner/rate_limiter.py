@@ -13,6 +13,7 @@ ARCHITECTURAL NOTE:
 
 from __future__ import annotations
 
+import os
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -63,7 +64,17 @@ class RateLimiter:
     def __init__(self, config: Optional[RateLimitConfig] = None):
         self.config = config or RateLimitConfig()
         self._buckets: Dict[str, ClientBucket] = defaultdict(ClientBucket)
-        self._lock = asyncio.Lock()
+        self._sharded = os.environ.get("ENABLE_SHARDED_LOCKS", "false").lower() == "true"
+        if self._sharded:
+            self._shard_count = 64
+            self._locks = [asyncio.Lock() for _ in range(self._shard_count)]
+        else:
+            self._lock = asyncio.Lock()
+
+    def _lock_for(self, key: str) -> asyncio.Lock:
+        if self._sharded:
+            return self._locks[hash(key) % self._shard_count]
+        return self._lock
     
     def _get_bucket(self, client_id: str) -> ClientBucket:
         """Get or create bucket for client."""
@@ -113,7 +124,7 @@ class RateLimiter:
         Returns:
             (allowed: bool, info: dict with retry-after and limits)
         """
-        async with self._lock:
+        async with self._lock_for(client_id):
             bucket = self._get_bucket(client_id)
             self._refill_tokens(bucket, 1.0)
             self._reset_windows_if_needed(bucket)
@@ -160,14 +171,14 @@ class RateLimiter:
     
     async def record_request(self, client_id: str) -> None:
         """Record a successful request (alternative to is_allowed)."""
-        async with self._lock:
+        async with self._lock_for(client_id):
             bucket = self._get_bucket(client_id)
             bucket.requests_minute += 1
             bucket.requests_hour += 1
     
     async def get_client_stats(self, client_id: str) -> dict:
         """Get rate limit stats for client."""
-        async with self._lock:
+        async with self._lock_for(client_id):
             bucket = self._get_bucket(client_id)
             return {
                 "tokens": bucket.tokens,
@@ -200,7 +211,7 @@ class RateLimiter:
         }
         multiplier = tier_multipliers.get(tier, 1.0)
 
-        async with self._lock:
+        async with self._lock_for(client_id):
             bucket = self._get_bucket(client_id)
             self._refill_tokens(bucket, multiplier)
             self._reset_windows_if_needed(bucket)

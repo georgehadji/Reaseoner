@@ -949,3 +949,59 @@ src/reasoner/infrastructure/
 - Unsafe/off-topic sources are rejected before claim extraction.
 - The article pipeline either produces a research-backed article with traceable sources or fails explicitly with an evidence-insufficient response.
 - Regression coverage exists for routing, context isolation, retrieval, and source safety.
+
+
+---
+
+# Implementation Plan — Remaining Tasks (Post-Audit)
+
+> **Created:** 2026-04-26  
+> **Source:** TODO_1.md audit results  
+> **Total remaining:** ~150 atomic tasks across 6 phases  
+> **Estimated duration:** 6–7 weeks (single developer, sequential phases)
+
+## Guiding Principles
+1. **Security before speed.** Phase 1 closes all critical gaps before any performance work.
+2. **Backend before frontend.** API contracts must stabilize before UI polish.
+3. **VS tracks are sequential.** Foundation (Phase 3) blocks all integration (Phase 4).
+4. **Test at every phase.** No phase merges without passing its own test suite.
+
+---
+
+## Phase Overview
+
+| Phase | Focus | Duration | Risk | Blocking |
+|-------|-------|----------|------|----------|
+| **1** | Critical Security & Stability | Week 1 | High | All production deployments |
+| **2** | Performance Quick Wins | Weeks 1–2 | Medium | User experience, throughput |
+| **3** | VS Foundation | Weeks 2–3 | Medium | All VS integration tracks |
+| **4** | VS Integration | Weeks 3–6 | High | Product roadmap |
+| **5** | Scale Prep & Polish | Week 6 | Low | Horizontal scaling readiness |
+| **6** | E2E Tests & Benchmarks | Week 7 | Low | Release confidence |
+
+**Hard dependencies:**
+- Phase 1 must finish before Phase 2 starts.
+- Phase 3 must finish before Phase 4 starts.
+- Phase 4 must finish before Phase 6 starts (E2E tests need VS stages).
+- Phase 5 can run parallel to Phase 4 after Week 4.
+
+**Detailed plans for each phase live in separate files:**
+- `tasks/phase-1-security.md`
+- `tasks/phase-2-performance.md`
+- `tasks/phase-3-vs-foundation.md`
+- `tasks/phase-4-vs-integration.md`
+- `tasks/phase-5-scale-prep.md`
+- `tasks/phase-6-e2e-benchmarks.md`
+
+---
+
+## Cross-Phase Rules
+
+- Every Python function gets type hints; `Any` requires a `# reason:` comment.
+- Every new module needs ≥ 85 % pytest coverage.
+- All inter-stage interfaces are `pydantic.BaseModel`.
+- `TaintRecord.vs_metadata` propagates to every pipeline output that touches VS.
+- Feature flags (`VSFeatureFlags.all_disabled()` regression test) guard every VS integration point.
+- Zero magic numbers — all constants live in `ara_vs_constants.py`.
+- `asyncio.gather` for independent operations.
+- Structured logging with named key constants.

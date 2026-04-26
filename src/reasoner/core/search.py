@@ -178,14 +178,17 @@ def _bm25_score(query: str, result: dict, k1: float = 1.5, b: float = 0.75) -> f
     _AVG_TITLE = 10
     _AVG_CONTENT = 80
 
+    from collections import Counter
+    title_counts = Counter(title_tokens)
+    content_counts = Counter(content_tokens)
     score = 0.0
     for term in query_tokens:
-        tf_t = title_tokens.count(term)
+        tf_t = title_counts.get(term, 0)
         if tf_t:
             denom = tf_t + k1 * (1.0 - b + b * max(len(title_tokens), 1) / _AVG_TITLE)
             score += 3.0 * tf_t * (k1 + 1) / denom
 
-        tf_c = content_tokens.count(term)
+        tf_c = content_counts.get(term, 0)
         if tf_c:
             denom = tf_c + k1 * (1.0 - b + b * max(len(content_tokens), 1) / _AVG_CONTENT)
             score += tf_c * (k1 + 1) / denom
@@ -330,6 +333,8 @@ class DiscoveryClient:
             else:
                 logger.debug("Filtered out search result: %s", result.get("url"))
 
+        if not refined and raw:
+            refined = raw[:num_results]
         return refined, len(raw)
 
     async def search(
@@ -549,7 +554,11 @@ async def _decompose_query(query: str, model_id: str | None = None) -> list[str]
         text = text.split("```", 2)[-1].strip()
         if text.lower().startswith("json"):
             text = text[4:].strip()
-    arr = json.loads(text)
+    try:
+        arr = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("Decomposition JSON parse failed for query: %s", query)
+        arr = []
     if not isinstance(arr, list):
         raise ValueError("LLM did not return a JSON array")
     result = [str(item).strip() for item in arr if str(item).strip()]

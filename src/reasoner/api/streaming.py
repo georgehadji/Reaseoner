@@ -93,9 +93,9 @@ async def _broadcast_ws(run_id: str, payload: dict[str, Any]) -> None:
         from reasoner.infrastructure.websocket import get_websocket_manager
 
         manager = get_websocket_manager()
-        await manager.broadcast_event(payload, run_id)
+        asyncio.create_task(manager.broadcast_event(payload, run_id))
     except Exception:
-        pass
+        logger.warning("WS broadcast failed for run %s", run_id, exc_info=True)
 
 
 async def _persist_event(event) -> None:
@@ -222,6 +222,19 @@ async def _stream_direct_answer(
                     max_tokens=max_tokens,
                     temperature=temperature,
                 )
+                from reasoner.infrastructure.llm.ports import DegradedLLMResponse
+                if isinstance(response, DegradedLLMResponse):
+                    logger.warning(
+                        "Direct answer degraded with %s (%s): %s",
+                        model_id, reason, response.error,
+                    )
+                    yield _event({
+                        "type": "phase_warning",
+                        "phase": 0,
+                        "warning": response.error,
+                    })
+                    last_error = RuntimeError(response.error)
+                    continue
             else:
                 # Build a temporary provider for the creative model
                 from reasoner.infrastructure.llm.registry import build_provider
@@ -304,21 +317,20 @@ async def _stream_web_search_results(
 async def _recall_neuro_context(problem: str, agent_id: str | None = None) -> list[dict[str, Any]]:
     """Fetch relevant past context from Neuro memory."""
     try:
-        import httpx
-
+        from reasoner.api.clients import get_neuro_client
         from reasoner.core.settings import settings
 
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            resp = await client.post(
-                f"{settings.internal_api_base_url}/neuro/recall",
-                json={
-                    "prompt": problem,
-                    "agent_id": agent_id,
-                    "max_results": 5,
-                    "compression": "none",
-                },
-            )
-            if resp.status_code == 200:
+        client = get_neuro_client()
+        resp = await client.post(
+            f"{settings.internal_api_base_url}/neuro/recall",
+            json={
+                "prompt": problem,
+                "agent_id": agent_id,
+                "max_results": 5,
+                "compression": "none",
+            },
+        )
+        if resp.status_code == 200:
                 data = resp.json()
                 return [
                     {"content": c["content"], "source": c["source"], "relevance": c["relevance"]}
@@ -637,14 +649,12 @@ async def run_stream(
                 if state.final_solution and hasattr(state.final_solution, "core_solution"):
                     core = state.final_solution.core_solution or ""
                 if core:
-                    words = core.split()
-                    chunk_size = 2
-                    for i in range(0, len(words), chunk_size):
-                        chunk = " ".join(words[i:i + chunk_size])
-                        if i + chunk_size < len(words):
-                            chunk += " "
-                        yield _event({"type": "text_chunk", "text": chunk})
-                        await asyncio.sleep(0.1)
+                    import re
+                    sentences = re.split(r'(?<=[.!?])\s+', core)
+                    for sentence in sentences:
+                        if cancel_event and cancel_event.is_set():
+                            break
+                        yield _event({"type": "text_chunk", "text": sentence})
             data = serializer(state)
             if isinstance(data, dict):
                 data["tokens"] = state.phase_tokens.get(phase_key, {"input": 0, "output": 0})
@@ -746,29 +756,28 @@ async def run_stream(
 
         # ── Neuro Persist (main pipeline) ──
         try:
-            import httpx
-
+            from reasoner.api.clients import get_neuro_client
             from reasoner.core.settings import settings
 
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                await client.post(
-                    f"{settings.internal_api_base_url}/neuro/learn",
-                    json={
-                        "prompt": req.problem,
-                        "response": (
-                            state.final_solution.core_solution
-                            if state.final_solution
-                            else getattr(state, 'previous_synthesis', '')
-                        ),
-                        "agent_id": getattr(state, 'conversation_id', None),
-                        "metadata": {
-                            "preset": effective_preset_name,
-                            "tokens": {"input": total_input, "output": total_output},
-                            "type": "pipeline",
-                        },
+            client = get_neuro_client()
+            await client.post(
+                f"{settings.internal_api_base_url}/neuro/learn",
+                json={
+                    "prompt": req.problem,
+                    "response": (
+                        state.final_solution.core_solution
+                        if state.final_solution
+                        else getattr(state, 'previous_synthesis', '')
+                    ),
+                    "agent_id": getattr(state, 'conversation_id', None),
+                    "metadata": {
+                        "preset": effective_preset_name,
+                        "tokens": {"input": total_input, "output": total_output},
+                        "type": "pipeline",
                     },
-                    timeout=5.0,
-                )
+                },
+                timeout=5.0,
+            )
         except Exception:
             pass
 
@@ -827,30 +836,29 @@ async def run_followup_stream(
         yield chunk
 
     try:
-        import httpx
-
+        from reasoner.api.clients import get_neuro_client
         from reasoner.core.settings import settings
 
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                f"{settings.internal_api_base_url}/neuro/learn",
-                json={
-                    "prompt": req.question,
-                    "response": (
-                        state.final_solution.core_solution
-                        if state.final_solution
-                        else state.previous_synthesis
-                    ),
-                    "agent_id": req.conversation_id,
-                    "metadata": {
-                        "turn_number": state.turn_number,
-                        "preset": req.preset,
-                        "agent_model": state.agent_model,
-                        "type": "followup",
-                    },
+        client = get_neuro_client()
+        await client.post(
+            f"{settings.internal_api_base_url}/neuro/learn",
+            json={
+                "prompt": req.question,
+                "response": (
+                    state.final_solution.core_solution
+                    if state.final_solution
+                    else state.previous_synthesis
+                ),
+                "agent_id": req.conversation_id,
+                "metadata": {
+                    "turn_number": state.turn_number,
+                    "preset": req.preset,
+                    "agent_model": state.agent_model,
+                    "type": "followup",
                 },
-                timeout=5.0,
-            )
+            },
+            timeout=5.0,
+        )
     except Exception:
         pass
 

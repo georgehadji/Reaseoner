@@ -10,6 +10,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -30,6 +31,9 @@ TARGET_KEYWORDS = [
 
 # Also kill frontend node processes that are inside our repo
 FRONTEND_DIR_NAME = "ui-next"
+
+# Known ports to force-free (handles Windows zombie sockets)
+TARGET_PORTS = [8003, 8002, 3000, 50001]
 
 
 def _stop_searxng() -> None:
@@ -142,6 +146,104 @@ def _kill_processes_fallback(force: bool = False) -> int:
     return killed
 
 
+def _kill_ports() -> int:
+    """Force-free known ports (handles Windows zombie sockets)."""
+    freed = 0
+    for port in TARGET_PORTS:
+        try:
+            import socket
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
+                if s.connect_ex(("127.0.0.1", port)) != 0:
+                    continue  # Port already free
+        except Exception:
+            continue
+
+        print(f"[PORT] Port {port} is occupied — attempting to free...")
+
+        # 1. Try npx kill-port first (handles zombie sockets on Windows)
+        npx_path = shutil.which("npx") or shutil.which("npx.cmd") or shutil.which("npx.ps1")
+        if npx_path:
+            cmd = [npx_path, "kill-port", str(port)]
+            if sys.platform == "win32" and npx_path.endswith(".ps1"):
+                cmd = ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", npx_path, "kill-port", str(port)]
+            try:
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    shell=sys.platform == "win32" and npx_path.endswith(".cmd"),
+                )
+                if result.returncode == 0:
+                    # Verify the port is actually free (zombie sockets may survive)
+                    time.sleep(0.3)
+                    try:
+                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                            s.settimeout(1)
+                            if s.connect_ex(("127.0.0.1", port)) != 0:
+                                print(f"[OK]   Freed port {port}")
+                                freed += 1
+                                continue
+                    except Exception:
+                        pass
+                    print(f"[WARN] kill-port reported success but port {port} is still occupied")
+            except FileNotFoundError:
+                pass
+
+        # 2. Fallback: use psutil to find processes by port and kill them
+        try:
+            import psutil
+            killed_any = False
+            for conn in psutil.net_connections(kind="inet"):
+                if conn.laddr.port == port and conn.pid:
+                    try:
+                        p = psutil.Process(conn.pid)
+                        p.terminate()
+                        p.wait(timeout=3)
+                        print(f"[OK]   Terminated PID {conn.pid} on port {port}")
+                        killed_any = True
+                    except psutil.NoSuchProcess:
+                        pass
+                    except psutil.TimeoutExpired:
+                        try:
+                            p.kill()
+                            print(f"[OK]   Killed PID {conn.pid} on port {port}")
+                            killed_any = True
+                        except Exception:
+                            pass
+            if killed_any:
+                freed += 1
+                continue
+        except ImportError:
+            pass
+
+        # 3. Last resort: Windows taskkill by PID from netstat
+        if sys.platform == "win32":
+            try:
+                output = subprocess.check_output(
+                    ["netstat", "-ano", "-p", "TCP"],
+                    text=True,
+                )
+                for line in output.splitlines():
+                    if f":{port}" in line and "LISTENING" in line:
+                        parts = line.strip().split()
+                        if parts:
+                            try:
+                                pid = int(parts[-1])
+                                subprocess.run(
+                                    ["taskkill", "/F", "/PID", str(pid)],
+                                    capture_output=True,
+                                )
+                                print(f"[OK]   Killed PID {pid} on port {port}")
+                                freed += 1
+                            except ValueError:
+                                pass
+                        break
+            except Exception:
+                pass
+    return freed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Kill all Reasoner servers")
     parser.add_argument("--force", action="store_true", help="Kill immediately without graceful termination")
@@ -160,6 +262,10 @@ def main() -> int:
         print(f"[OK]   Terminated {killed} process(es).")
     else:
         print("[INFO] No matching Reasoner processes found.")
+
+    freed = _kill_ports()
+    if freed:
+        print(f"[OK]   Freed {freed} port(s).")
 
     print()
     print("[DONE] All done.")

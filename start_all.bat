@@ -25,7 +25,7 @@ if errorlevel 1 (
 )
 
 :: ── Parse --main-port / --neuro-port / --frontend-port from %* ───────
-set MAIN_PORT=8001
+set MAIN_PORT=8003
 set NEURO_PORT=50001
 set FRONTEND_PORT=3000
 set _GRAB=

@@ -12,6 +12,44 @@ from reasoner.infrastructure.websocket import (
 router = APIRouter()
 
 
+def _extract_bearer_token(websocket: WebSocket) -> str | None:
+    """Extract bearer token from query params or Authorization header."""
+    token = websocket.query_params.get("token") or ""
+    if not token:
+        auth_header = websocket.headers.get("authorization", "")
+        if auth_header.lower().startswith("bearer "):
+            token = auth_header[7:]
+    return token or None
+
+
+async def _authenticate_ws_token(token: str) -> str | None:
+    """Authenticate a WebSocket token and return user_id if valid."""
+    # Try JWT auth first, then legacy API key
+    try:
+        from reasoner.application.ports.auth_port import AuthPort
+        from reasoner.application.services.auth_service import AuthService
+        from reasoner.infrastructure.auth import get_auth_adapter
+        adapter: AuthPort = get_auth_adapter()
+        service = AuthService(adapter)
+        user = await service.authenticate(token)
+        if user:
+            return str(user.id)
+    except Exception:
+        pass
+
+    # Fallback to legacy API key auth
+    try:
+        from reasoner.auth import get_auth_manager
+        auth_mgr = get_auth_manager()
+        api_key = await auth_mgr.authenticate(token)
+        if api_key:
+            return getattr(api_key, "key_hash", None)
+    except Exception:
+        pass
+
+    return None
+
+
 @router.websocket("/ws")
 async def websocket_connect(
     websocket: WebSocket,
@@ -19,22 +57,14 @@ async def websocket_connect(
 ):
     """
     WebSocket endpoint for real-time pipeline updates.
-
-    Usage:
-        ws://<host>:<port>/ws
-        ws://<host>:<port>/ws?pipeline_id=xxx
-
-    Messages:
-        - subscribe: {"type": "subscribe", "pipeline_id": "xxx"}
-        - unsubscribe: {"type": "unsubscribe", "pipeline_id": "xxx"}
-        - ping: {"type": "ping"}
-
-    Responses:
-        - event: Pipeline domain events
-        - progress: Phase progress updates
-        - complete: Pipeline completion
-        - error: Error notifications
     """
+    token = _extract_bearer_token(websocket)
+    user_id = None
+    if token:
+        user_id = await _authenticate_ws_token(token)
+        if not user_id:
+            await websocket.close(code=1008, reason="Invalid token")
+            return
     await websocket_endpoint(websocket, pipeline_id)
 
 
@@ -45,9 +75,14 @@ async def pipeline_websocket(
 ):
     """
     WebSocket endpoint for specific pipeline.
-
-    Automatically subscribes to pipeline updates.
     """
+    token = _extract_bearer_token(websocket)
+    user_id = None
+    if token:
+        user_id = await _authenticate_ws_token(token)
+        if not user_id:
+            await websocket.close(code=1008, reason="Invalid token")
+            return
     await websocket_endpoint(websocket, pipeline_id)
 
 

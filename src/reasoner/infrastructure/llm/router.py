@@ -14,6 +14,7 @@ from reasoner.core.constants import (
 )
 from reasoner.infrastructure.llm.base import BaseLLMProvider, LLMError
 from reasoner.infrastructure.llm.registry import build_provider
+from reasoner.infrastructure.llm.ports import DegradedLLMResponse
 
 logger = logging.getLogger(__name__)
 
@@ -87,7 +88,7 @@ class ProviderRouter:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = DEFAULT_TEMPERATURE,
         timeout_seconds: float | None = None,
-    ) -> tuple[str, dict[str, Any]]:
+    ) -> tuple[str | DegradedLLMResponse, dict[str, Any]]:
         """
         Call LLM for role. On LLMError or timeout, tries a fallback provider:
           1. Explicit fallback from fallback_table (if defined and different)
@@ -128,7 +129,11 @@ class ProviderRouter:
                     "Role '%s' provider '%s' timed out after %.0fs — no fallback available; returning degraded response",
                     role, assigned.model, effective_timeout,
                 )
-                return "", {"degraded": True, "error": f"{assigned.model} timed out — no fallback", "model": assigned.model}
+                return DegradedLLMResponse(
+                    text="",
+                    error=f"{assigned.model} timed out — no fallback",
+                    metadata={"model": assigned.model},
+                ), {}
             logger.warning(
                 "Role '%s' provider '%s' timed out after %.0fs — retrying with fallback '%s'",
                 role, assigned.model, effective_timeout, fallback.model,
@@ -142,7 +147,11 @@ class ProviderRouter:
                     "Role '%s' fallback '%s' also failed; returning degraded response",
                     role, fallback.model,
                 )
-                return "", {"degraded": True, "error": f"{assigned.model} and {fallback.model} both failed", "model": fallback.model}
+                return DegradedLLMResponse(
+                    text="",
+                    error=f"{assigned.model} and {fallback.model} both failed",
+                    metadata={"model": fallback.model},
+                ), {}
             actual_provider = fallback
         except LLMError as exc:
             if fallback is None:
@@ -150,7 +159,11 @@ class ProviderRouter:
                     "Role '%s' provider '%s' failed (%s) — no fallback available; returning degraded response",
                     role, assigned.model, exc,
                 )
-                return "", {"degraded": True, "error": str(exc), "model": assigned.model}
+                return DegradedLLMResponse(
+                    text="",
+                    error=str(exc),
+                    metadata={"model": assigned.model},
+                ), {}
             logger.warning(
                 "Role '%s' provider '%s' failed (%s) — retrying with fallback '%s'",
                 role, assigned.model, exc, fallback.model,
@@ -164,7 +177,11 @@ class ProviderRouter:
                     "Role '%s' fallback '%s' also failed (%s); returning degraded response",
                     role, fallback.model, fallback_exc,
                 )
-                return "", {"degraded": True, "error": str(fallback_exc), "model": fallback.model}
+                return DegradedLLMResponse(
+                    text="",
+                    error=str(fallback_exc),
+                    metadata={"model": fallback.model},
+                ), {}
             actual_provider = fallback
 
         # Build metadata with cost tracking

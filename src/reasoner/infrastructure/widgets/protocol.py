@@ -201,11 +201,11 @@ class BaseWidget(ABC):
         """Execute with error handling."""
         import time
         
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         try:
             data = await self._execute_impl(params)
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
             
             return WidgetResult.success_result(
                 widget_type=self.widget_type,
@@ -214,7 +214,7 @@ class BaseWidget(ABC):
             )
             
         except Exception as e:
-            duration = time.time() - start_time
+            duration = time.perf_counter() - start_time
             
             return WidgetResult.error_result(
                 widget_type=self.widget_type,

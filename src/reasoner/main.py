@@ -252,6 +252,10 @@ async def main(args: argparse.Namespace) -> None:
                     max_tokens=2048,
                     temperature=0.7,
                 )
+                from reasoner.infrastructure.llm.ports import DegradedLLMResponse
+                if isinstance(response, DegradedLLMResponse):
+                    print(f"[Error] {response.error}")
+                    return
                 print(response)
                 return
             if decision.action == "web_search":

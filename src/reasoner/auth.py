@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
 import asyncio
+from collections import OrderedDict
 
 from reasoner.core.settings import settings
 
@@ -85,8 +86,10 @@ class AuthManager:
     - Optional SQLite persistence for horizontal scaling
     """
 
+    _MAX_KEYS = 10_000
+
     def __init__(self):
-        self._keys: Dict[str, APIKey] = {}
+        self._keys: OrderedDict[str, APIKey] = OrderedDict()
         self._lock = asyncio.Lock()
         self._admin_keys: Set[str] = set()
 
@@ -108,6 +111,13 @@ class AuthManager:
     def _hash_key(self, key: str) -> str:
         """Hash API key using SHA-256."""
         return hashlib.sha256(key.encode()).hexdigest()
+
+    def _set_key(self, key_hash: str, value: APIKey) -> None:
+        """Set a key with LRU eviction."""
+        if key_hash not in self._keys and len(self._keys) >= self._MAX_KEYS:
+            self._keys.popitem(last=False)
+        self._keys[key_hash] = value
+        self._keys.move_to_end(key_hash)
 
     async def generate_key(
         self,
@@ -154,7 +164,7 @@ class AuthManager:
         )
 
         async with self._lock:
-            self._keys[key_hash] = api_key
+            self._set_key(key_hash, api_key)
             self._cache.pop(key_hash, None)  # Invalidate cache
 
         # Write-through to persistent store if enabled
@@ -194,7 +204,7 @@ class AuthManager:
         cached = self._cache.get(key_hash)
         if cached and cached.is_active:
             if cached.expires_at is None or datetime.now(timezone.utc) <= cached.expires_at:
-                cached.last_used_at = datetime.now()
+                cached.last_used_at = datetime.now(timezone.utc)
                 cached.usage_count += 1
                 return cached
             else:
@@ -208,7 +218,7 @@ class AuthManager:
                 db_row = await self._store.get_by_hash(key_hash)
                 if db_row:
                     stored_key = APIKey(**db_row)
-                    self._keys[key_hash] = stored_key
+                    self._set_key(key_hash, stored_key)
 
             # Check if key exists
             if not stored_key:

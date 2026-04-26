@@ -215,7 +215,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
 
     @router.post("/recall", response_model=RecallResponse)
     async def recall(req: RecallRequest):
-        start = time.time()
+        start = time.perf_counter()
         persona = get_persona(config, req.persona, req.agent_id)
         tenant = await tenants.get(req.agent_id)
         l1, l2 = tenant["l1"], tenant["l2"]
@@ -262,7 +262,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
                         ext = source_parts[-1].split(".")[-1]
                 chunk.content = _cached_compress(chunk.content, ext=ext, level=req.compression)
 
-        latency = (time.time() - start) * 1000
+        latency = (time.perf_counter() - start) * 1000
         return RecallResponse(
             chunks=[RecallChunkResponse(**c.to_dict()) for c in all_chunks],
             total_found=len(all_chunks),
@@ -273,7 +273,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
 
     @router.post("/audit", response_model=AuditResponse)
     async def audit(req: AuditRequest):
-        start = time.time()
+        start = time.perf_counter()
         persona = get_persona(config, req.persona, req.agent_id)
         tenant = await tenants.get(req.agent_id)
         
@@ -288,14 +288,14 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
                 confidence=result.get("confidence", 0.5),
                 reason=result.get("reason", ""),
                 enrichment=result.get("enrichment"),
-                latency_ms=round((time.time() - start) * 1000, 1),
+                latency_ms=round((time.perf_counter() - start) * 1000, 1),
                 persona=persona.name, provider_used=reasoner.active_label,
             )
         except Exception as e:
             log.warning("Audit failed (returning WARN): %s", e)
             return AuditResponse(
                 verdict="WARN", confidence=0.0, reason=f"Audit parse failed: {e}",
-                latency_ms=round((time.time() - start) * 1000, 1),
+                latency_ms=round((time.perf_counter() - start) * 1000, 1),
                 persona=persona.name, provider_used=reasoner.active_label,
             )
 

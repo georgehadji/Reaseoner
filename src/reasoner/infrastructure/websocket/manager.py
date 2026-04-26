@@ -75,8 +75,11 @@ class WebSocketManager:
         # Background task for heartbeats
         self._heartbeat_task: asyncio.Task | None = None
         
-        # Concurrency guard for all mutable state
+        # Global lock for state mutations
         self._lock: asyncio.Lock = asyncio.Lock()
+        
+        # Per-connection locks to reduce contention on broadcast/send
+        self._connection_locks: dict[str, asyncio.Lock] = {}
         
         # Connection cap to prevent FD exhaustion
         self._max_connections: int = max_connections
@@ -136,6 +139,9 @@ class WebSocketManager:
                 
                 if connection_id in self.connection_metadata:
                     del self.connection_metadata[connection_id]
+                
+                # Clean up per-connection lock
+                self._connection_locks.pop(connection_id, None)
 
             if _METRICS_AVAILABLE:
                 REASONER_WEBSOCKET_CONNECTIONS.set(len(self.active_connections))
@@ -214,21 +220,22 @@ class WebSocketManager:
             websocket = self.active_connections[connection_id]
             
             if websocket.client_state != WebSocketState.CONNECTED:
-                # Release lock before calling disconnect to avoid deadlock.
                 pass
             else:
-                # Release lock and send outside to avoid holding it during I/O.
                 pass
         
         if websocket.client_state != WebSocketState.CONNECTED:
             self.disconnect(connection_id)
             return
         
-        try:
-            await websocket.send_text(message.to_json())
-        except Exception as e:
-            logger.error(f"Send error to {connection_id}: {e}")
-            self.disconnect(connection_id)
+        # Use per-connection lock for the actual send
+        conn_lock = self._connection_locks.setdefault(connection_id, asyncio.Lock())
+        async with conn_lock:
+            try:
+                await websocket.send_text(message.to_json())
+            except Exception as e:
+                logger.error(f"Send error to {connection_id}: {e}")
+                self.disconnect(connection_id)
     
     async def broadcast_event(
         self,
@@ -312,7 +319,9 @@ class WebSocketManager:
                             if connection_id not in self.active_connections:
                                 continue
                             websocket = self.active_connections[connection_id]
-                        await websocket.send_json({'type': 'ping'})
+                        conn_lock = self._connection_locks.setdefault(connection_id, asyncio.Lock())
+                        async with conn_lock:
+                            await websocket.send_json({'type': 'ping'})
                     except Exception:
                         self.disconnect(connection_id)
         
@@ -391,10 +400,11 @@ async def websocket_endpoint(
                     user_id = getattr(api_key, "key_hash", None)
             except Exception:
                 pass
-
-    if not user_id:
-        await websocket.close(code=1008, reason="Authentication required")
-        return
+        
+        # If token was provided but is invalid, reject the connection
+        if not user_id:
+            await websocket.close(code=1008, reason="Invalid token")
+            return
 
     manager = get_websocket_manager()
 
@@ -465,6 +475,20 @@ async def handle_websocket_message(
     if msg_type == 'subscribe':
         pipeline_id = message.get('pipeline_id')
         if pipeline_id:
+            # Enforce pipeline ownership on dynamic subscribe
+            metadata = manager.connection_metadata.get(connection_id, {})
+            user_id = metadata.get('user_id')
+            from reasoner.api.history import _get_pipeline_owner
+            owner = _get_pipeline_owner(pipeline_id)
+            if owner is not None and owner != user_id:
+                await manager.send_to_connection(
+                    connection_id,
+                    WebSocketMessage(
+                        type='error',
+                        data={'error': 'Not authorized to access this pipeline'},
+                    ),
+                )
+                return
             await manager.subscribe(connection_id, pipeline_id)
             await manager.send_to_connection(
                 connection_id,

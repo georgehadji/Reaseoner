@@ -96,6 +96,9 @@ class PhaseSubAgent(ABC):
                 temperature=self.TEMPERATURE,
                 timeout_seconds=self.TIMEOUT_SECONDS,
             )
+            from reasoner.infrastructure.llm.ports import DegradedLLMResponse
+            if isinstance(raw, DegradedLLMResponse):
+                raise RuntimeError(raw.error)
             result = self._parse_result(raw)
             confidence = float(result.get("confidence", 0.0))
             reasoning = str(result.get("rationale", result.get("reasoning", "")))

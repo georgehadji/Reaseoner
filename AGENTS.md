@@ -64,7 +64,7 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 ```
 Reasoner/
 ├── main.py                 # CLI entry-point shim → reasoner.main
-├── asgi.py                 # ASGI entry point: uvicorn asgi:app --reload --port 8001
+├── asgi.py                 # ASGI entry point: uvicorn asgi:app --reload --port 8003
 ├── start_all.py            # Orchestrator shim (starts backend + frontend + SearXNG)
 ├── start_all.bat           # Windows batch equivalent of start_all.py
 ├── api.py                  # Backward-compat API shim
@@ -326,7 +326,7 @@ python main.py --problem "..." --preset <id> [--top-k N] [--sequential] [--sourc
 python main.py --resume state.json
 
 # Start API server
-uvicorn asgi:app --reload --port 8001
+uvicorn asgi:app --reload --port 8003
 
 # Run tests
 python -m pytest -v
@@ -358,7 +358,7 @@ npm run lint         # ESLint (flat config)
 python start_all.py
 
 # Or individually:
-uvicorn asgi:app --reload --port 8001
+uvicorn asgi:app --reload --port 8003
 docker compose -f docker-compose.searxng.yml up -d
 cd ui-next && npm run dev
 ```
@@ -445,7 +445,7 @@ Copy `.env.example` to `.env` and fill in:
 | `SERVER_HOST` / `SERVER_PORT` | FastAPI bind address (default 127.0.0.1:8000) |
 | `UVICORN_HOST` | Uvicorn bind host (default 0.0.0.0) |
 | `CORS_ORIGINS` | Comma-separated allowed frontend origins |
-| `REASONER_API_URL` | Frontend proxy target (default http://localhost:8001) |
+| `REASONER_API_URL` | Frontend proxy target (default http://localhost:8003) |
 | `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` / `RATE_LIMIT_BURST` | Rate limiter config |
 | `COHERE_RERANK_ENABLED` | Enable Cohere reranking via OpenRouter |
 | `DOCUMENT_SEMANTIC_RETRIEVAL_ENABLED` | Opt-in semantic retrieval for uploaded files |

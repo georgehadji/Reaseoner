@@ -85,12 +85,18 @@ export const TypewriterMarkdown = memo(function TypewriterMarkdown({ text, words
     };
   }, [text, wordsPerSecond, animationKey]);
 
+  const isComplete = displayedText.length >= text.length;
+  if (!isComplete) {
+    return (
+      <span className={`whitespace-pre-wrap ${className}`}>
+        {displayedText}
+        <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle ml-0.5" />
+      </span>
+    );
+  }
   return (
     <div className={`markdown-body ${className}`}>
-      <MarkdownRenderer>{displayedText}</MarkdownRenderer>
-      {displayedText.length < text.length && (
-        <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle ml-0.5" />
-      )}
+      <MarkdownRenderer>{text}</MarkdownRenderer>
     </div>
   );
 });

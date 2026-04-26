@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Sparkles,
   Trash2,
@@ -10,6 +11,8 @@ import {
   Copy,
   ArrowUpCircle,
   Command,
+  CreditCard,
+  Info,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
@@ -54,6 +57,7 @@ export function CommandPalette({
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const router = useRouter();
 
   const commands: CommandItem[] = useMemo(
     () => [
@@ -64,8 +68,11 @@ export function CommandPalette({
       { id: 'neuro', label: 'Open Neuro panel', icon: <Brain className="h-4 w-4" />, action: onToggleNeuro },
       { id: 'tier', label: tier === 'premium' ? 'Switch to Budget' : 'Switch to Premium', icon: <ArrowUpCircle className="h-4 w-4" />, action: onToggleTier },
       { id: 'copy', label: 'Copy last response', icon: <Copy className="h-4 w-4" />, shortcut: 'Ctrl+Shift+C', action: onCopyLastResponse },
+      { id: 'pricing', label: 'View Pricing', icon: <CreditCard className="h-4 w-4" />, action: () => { onClose(); router.push('/pricing'); } },
+      { id: 'about', label: 'About ARA', icon: <Info className="h-4 w-4" />, action: () => { onClose(); router.push('/about'); } },
+      { id: 'settings', label: 'Account Settings', icon: <Command className="h-4 w-4" />, action: () => { onClose(); router.push('/settings'); } },
     ],
-    [onNew, onClearComposer, onToggleTheme, onToggleSidebar, onToggleNeuro, onToggleTier, tier, onCopyLastResponse]
+    [onNew, onClearComposer, onToggleTheme, onToggleSidebar, onToggleNeuro, onToggleTier, tier, onCopyLastResponse, router, onClose]
   );
 
   const filtered = useMemo(() => {

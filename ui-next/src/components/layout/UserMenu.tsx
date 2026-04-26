@@ -5,7 +5,7 @@ import { useAppStore } from '@/stores/app-store';
 import { signOut } from '@/lib/auth';
 import { useRouter } from 'next/navigation';
 import { useSubscription } from '@/hooks/useSubscription';
-import { User, LayoutDashboard, CreditCard, LogOut, ChevronDown } from 'lucide-react';
+import { User, LayoutDashboard, CreditCard, LogOut, ChevronDown, Info } from 'lucide-react';
 
 export function UserMenu() {
   const user = useAppStore((s) => s.user);
@@ -79,6 +79,18 @@ export function UserMenu() {
             type="button"
             onClick={() => {
               setOpen(false);
+              router.push('/settings');
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+            role="menuitem"
+          >
+            <User className="h-4 w-4 text-[var(--text-muted)]" />
+            Settings
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
               router.push('/pricing');
             }}
             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
@@ -86,6 +98,18 @@ export function UserMenu() {
           >
             <CreditCard className="h-4 w-4 text-[var(--text-muted)]" />
             Pricing
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              router.push('/about');
+            }}
+            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+            role="menuitem"
+          >
+            <Info className="h-4 w-4 text-[var(--text-muted)]" />
+            About
           </button>
           <div className="my-1 h-px bg-[var(--border)]" />
           <button

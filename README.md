@@ -69,7 +69,7 @@ python start_all.py
 ```
 
 This starts:
--   🐍 **FastAPI Backend** on `http://localhost:8001` (configurable via `SERVER_PORT`)
+-   🐍 **FastAPI Backend** on `http://localhost:8003` (configurable via `SERVER_PORT`)
 -   ⚛️ **Next.js Frontend** on `http://localhost:3000`
 -   🔍 **SearXNG Search** on `http://localhost:8888`
 

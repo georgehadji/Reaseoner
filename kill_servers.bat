@@ -28,7 +28,7 @@ if errorlevel 1 (
 if not "%1"=="--quiet" (
     echo  Active Reasoner processes:
     powershell -NoProfile -Command ^
-        "foreach ($port in @(8001, 50001, 3000)) {" ^
+        "foreach ($port in @(8003, 50001, 3000)) {" ^
         "  try {" ^
         "    $c = Get-NetTCPConnection -LocalPort $port -EA Stop;" ^
         "    $p = Get-Process -Id $c[0].OwningProcess -EA SilentlyContinue;" ^

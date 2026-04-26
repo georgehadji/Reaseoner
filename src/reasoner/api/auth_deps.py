@@ -17,6 +17,7 @@ from reasoner.api.csrf import verify_csrf_token
 logger = logging.getLogger(__name__)
 from reasoner.core.settings import settings
 from reasoner.rate_limiter import RateLimitConfig, get_rate_limiter
+from reasoner.exceptions import RateLimitError
 
 security = HTTPBearer(auto_error=False)
 
@@ -50,10 +51,15 @@ async def check_rate_limit(
     client_id = await get_client_id(request)
     try:
         allowed, info = await rate_limiter.is_allowed(client_id)
+    except RateLimitError:
+        allowed = False
+        info = {"limit_minute": 60, "remaining_minute": 0, "retry_after": 60}
     except Exception as exc:
-        logger.error("Rate limiter error: %s", exc)
-        allowed = True
-        info = {"limit_minute": 60, "remaining_minute": 60, "retry_after": None}
+        logger.exception("Rate limiter infrastructure failure")
+        raise HTTPException(
+            status_code=503,
+            detail="Rate limiting unavailable",
+        ) from exc
 
     # Add rate limit headers to response
     request.state.rate_limit_info = info

@@ -41,11 +41,12 @@ class EventBus:
     - Error isolation (one handler failure doesn't affect others)
     """
     
-    def __init__(self):
+    def __init__(self, max_queue_size: int = 1000):
         self._handlers: dict[EventType, list[EventHandler]] = defaultdict(list)
         self._global_handlers: list[EventHandler] = []
         self._error_handlers: list[Callable[[DomainEvent, Exception], Awaitable[None]]] = []
         self._running = False
+        self._max_queue_size: int = max_queue_size
         self._task_queue: asyncio.Queue[tuple[DomainEvent, EventHandler]] | None = None
         self._semaphore = asyncio.Semaphore(100)  # Max 100 concurrent handler executions
     
@@ -89,6 +90,38 @@ class EventBus:
         """
         self._error_handlers.append(handler)
     
+    async def start(self) -> None:
+        """Start the background queue consumer."""
+        if self._running:
+            return
+        self._task_queue = asyncio.Queue(maxsize=self._max_queue_size)
+        self._running = True
+        self._worker_task = asyncio.create_task(self._queue_worker())
+
+    async def stop(self) -> None:
+        """Stop the background queue consumer."""
+        if not self._running:
+            return
+        self._running = False
+        if hasattr(self, "_worker_task"):
+            self._worker_task.cancel()
+            try:
+                await self._worker_task
+            except asyncio.CancelledError:
+                pass
+
+    async def _queue_worker(self) -> None:
+        """Background worker that consumes the event queue."""
+        while self._running:
+            try:
+                event, handler = await self._task_queue.get()
+                await self._safe_execute(handler, event)
+                self._task_queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                logger.error("Queue worker error: %s", exc)
+
     async def publish(self, event: DomainEvent) -> None:
         """
         Publish an event to all subscribers.
@@ -104,6 +137,15 @@ class EventBus:
 
         if not handlers:
             logger.debug("No handlers for %s", event.event_type.value)
+            return
+
+        # If queue mode is active, enqueue events with backpressure
+        if self._running and self._task_queue is not None:
+            for handler in handlers:
+                try:
+                    self._task_queue.put_nowait((event, handler))
+                except asyncio.QueueFull:
+                    logger.error("Event bus queue full; dropping event %s", event.event_id)
             return
 
         # Execute all handlers concurrently with bounded concurrency

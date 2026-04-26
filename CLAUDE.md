@@ -139,7 +139,7 @@ cd ui-next && npm install
 python start_all.py
 
 # Backend only
-uvicorn asgi:app --reload --host 0.0.0.0 --port 8001
+uvicorn asgi:app --reload --host 0.0.0.0 --port 8003
 
 # Frontend only
 cd ui-next && npm run dev

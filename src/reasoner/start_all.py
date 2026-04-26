@@ -3,7 +3,7 @@
 Start all Reasoner servers.
 
 By default starts:
-  - Main API server      : http://localhost:8001
+  - Main API server      : http://localhost:8003
   - Neuro memory server  : http://localhost:50001
 
 Usage:
@@ -32,7 +32,7 @@ from reasoner.core.constants import DEFAULT_SEARXNG_URL
 # ─────────────────────────────────────────────────────────────────────
 
 REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
-MAIN_SERVER_CMD = [sys.executable, "-m", "uvicorn", "asgi:app", "--host", settings.UVICORN_HOST, "--port", "8001"]
+MAIN_SERVER_CMD = [sys.executable, "-m", "uvicorn", "asgi:app", "--host", settings.UVICORN_HOST, "--port", "8003"]
 NEURO_SERVER_CMD = [sys.executable, "-m", "reasoner.neuro.cli", "start"]
 FRONTEND_DIR = REPO_ROOT / "ui-next"
 FRONTEND_CMD = ["npm", "run", "dev"]
@@ -125,17 +125,83 @@ def _port_in_use(port: int) -> tuple[bool, int | None]:
     return True, pid
 
 
+def _try_free_port(port: int, pid: int | None) -> bool:
+    """Attempt to free a port. Returns True if freed."""
+    # 1. Try npx kill-port first (handles Windows zombie sockets)
+    npx_path = shutil.which("npx") or shutil.which("npx.cmd") or shutil.which("npx.ps1")
+    if npx_path:
+        cmd = [npx_path, "kill-port", str(port)]
+        if sys.platform == "win32" and npx_path.endswith(".ps1"):
+            cmd = ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", npx_path, "kill-port", str(port)]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                shell=sys.platform == "win32" and npx_path.endswith(".cmd"),
+            )
+            if result.returncode == 0:
+                time.sleep(0.5)
+                in_use, _ = _port_in_use(port)
+                if not in_use:
+                    return True
+        except FileNotFoundError:
+            pass
+
+    # 2. Fallback: use psutil to find processes by port and kill them
+    try:
+        import psutil
+        killed_any = False
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.laddr.port == port and conn.pid:
+                try:
+                    p = psutil.Process(conn.pid)
+                    p.terminate()
+                    p.wait(timeout=3)
+                    killed_any = True
+                except psutil.NoSuchProcess:
+                    pass
+                except psutil.TimeoutExpired:
+                    try:
+                        p.kill()
+                        killed_any = True
+                    except Exception:
+                        pass
+        if killed_any:
+            time.sleep(0.5)
+            in_use, _ = _port_in_use(port)
+            if not in_use:
+                return True
+    except ImportError:
+        pass
+
+    # 3. Fallback: kill by PID if we have one
+    if pid is not None:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/F", "/PID", str(pid)], capture_output=True)
+        else:
+            subprocess.run(["kill", "-9", str(pid)], capture_output=True)
+        time.sleep(0.5)
+        in_use, _ = _port_in_use(port)
+        return not in_use
+
+    return False
+
+
 def _wait_for_health(port: int, timeout: float = 30.0) -> bool:
-    """Poll the backend health endpoint until it responds 200."""
+    """Poll the backend root endpoint until it responds (any 2xx–4xx means it's up)."""
     import urllib.request
     url = f"http://127.0.0.1:{port}/"
     deadline = time.time() + timeout
     while time.time() < deadline:
         try:
-            req = urllib.request.Request(url, method="HEAD")
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                if resp.status == 200:
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                if 200 <= resp.status < 500:
                     return True
+        except urllib.error.HTTPError as exc:
+            # 404, 405, etc. — server is alive, just no root handler
+            if 200 <= exc.code < 500:
+                return True
         except Exception:
             pass
         time.sleep(0.5)
@@ -244,9 +310,10 @@ def main() -> int:
     parser.add_argument("--no-frontend", action="store_true", help="Skip the Next.js frontend dev server")
     parser.add_argument("--no-searxng", action="store_true", help="Skip auto-starting SearXNG")
     parser.add_argument("--check", action="store_true", help="Run pre-flight checks before starting")
-    parser.add_argument("--main-port", type=int, default=8001, help="Port for the main API server")
+    parser.add_argument("--main-port", type=int, default=8003, help="Port for the main API server")
     parser.add_argument("--neuro-port", type=int, default=50001, help="Port for the standalone neuro server")
     parser.add_argument("--frontend-port", type=int, default=3000, help="Port for the Next.js frontend dev server")
+    parser.add_argument("--force", action="store_true", help="Auto-kill existing processes / free zombie sockets on conflicting ports")
     args = parser.parse_args()
 
     print_banner()
@@ -276,9 +343,19 @@ def main() -> int:
             if pid:
                 print(f" (PID {pid})")
             else:
-                print()
+                print(" (zombie socket)")
+            if args.force:
+                print(f"[INFO] Attempting to free port {port}...")
+                if _try_free_port(port, pid):
+                    print(f"[OK]   Port {port} freed.")
+                    continue
+                else:
+                    print(f"[WARN] Could not free port {port}.")
             print(f"        Stop the existing process or use a different port:")
             print(f"        python start_all.py --main-port {port + 1}")
+            if not args.force:
+                print(f"        Or force-free the port:")
+                print(f"        python start_all.py --force")
             return 1
 
     processes: list[tuple[str, subprocess.Popen]] = []

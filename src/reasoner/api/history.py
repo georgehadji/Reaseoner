@@ -22,6 +22,9 @@ def _get_pipeline_owner(pipeline_id: str) -> str | None:
         return None
 
 
+_MAX_PIPELINE_OWNERS = 50_000
+
+
 def _save_pipeline_owner(pipeline_id: str, user_id: str | None) -> None:
     """Persist ownership mapping for a pipeline run."""
     mapping: dict[str, str | None] = {}
@@ -31,6 +34,9 @@ def _save_pipeline_owner(pipeline_id: str, user_id: str | None) -> None:
         except Exception:
             mapping = {}
     mapping[pipeline_id] = user_id
+    if len(mapping) > _MAX_PIPELINE_OWNERS:
+        while len(mapping) > _MAX_PIPELINE_OWNERS:
+            mapping.pop(next(iter(mapping)))
     _PIPELINE_OWNERS_PATH.write_text(json.dumps(mapping, ensure_ascii=False), encoding="utf-8")
 
 

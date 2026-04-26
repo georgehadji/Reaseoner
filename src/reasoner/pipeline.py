@@ -417,6 +417,14 @@ class ARAPipeline(
                 if state.enhanced_problem:
                     state.enhanced_problem = f"{state.enhanced_problem}\n\n{attachment_context}"
         
+        # --- ARTICLE DETECTION: bypass generic classification for writing requests ---
+        from reasoner.application.mixins.article_pipeline import is_article_request
+        if is_article_request(state.problem):
+            state.task_type = TaskType.TECHNICAL
+            state.decomposition = ["article workflow"]
+            state.method = "writing"
+            self._log("ORCHESTRATOR", "Article request detected — bypassing generic classification", state)
+
         # --- UNIVERSAL START PHASES ---
         if self.enhance_prompt and not state.enhanced_problem:
             await self._phase_enhance_prompt(state)

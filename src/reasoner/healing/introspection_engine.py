@@ -30,7 +30,7 @@ from dataclasses import dataclass, field, asdict
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
-from datetime import datetime
+from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -606,7 +606,7 @@ class CodebaseIntrospector:
         }
         
         return IntrospectionReport(
-            timestamp=datetime.now().isoformat(),
+            timestamp=datetime.now(timezone.utc).isoformat(),
             project_root=str(self.project_root),
             total_modules=len(self.modules),
             total_functions=len(self.functions),

@@ -223,7 +223,7 @@ export const LIMITS = {
 };
 
 export const WS = {
-  defaultUrl: 'ws://localhost:8001/ws',
+  defaultUrl: 'ws://localhost:8003/ws',
   maxReconnectAttempts: 5,
   baseReconnectDelayMs: 1000,
 };

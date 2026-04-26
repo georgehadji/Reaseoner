@@ -11,7 +11,7 @@ export default function PrivacyPage() {
         <p className="mb-4">Last updated: {new Date().toLocaleDateString()}</p>
         
         <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">1. Information We Collect</h2>
-        <p className="mb-4">We collect information you provide directly to us, including your email address when you register, and the prompts and context you input into the ARA system.</p>
+        <p className="mb-4">We collect information you provide directly to us, including your email address when you register, and the prompts and context you input into the Reasoner system.</p>
         
         <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">2. How We Use Your Information</h2>
         <p className="mb-4">We use the information to provide, maintain, and improve our services, including our Neuro Memory feature which personalizes your AI experience based on past interactions.</p>

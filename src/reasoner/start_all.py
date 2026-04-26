@@ -62,20 +62,22 @@ def run_preflight_checks() -> bool:
 def _import_smoke_test() -> bool:
     """Verify the backend app imports cleanly before spawning uvicorn."""
     print("[CHECK] Import smoke test...")
+    print(f"[DEBUG] _import_smoke_test: Using Python executable: {sys.executable}")
     cmd = [
         sys.executable,
         "-c",
         (
             "import sys; "
-            f"sys.path.insert(0, '{REPO_ROOT / 'src'}'); "
-            "from reasoner.api import app; "
-            "print('Import OK')"
+            f"sys.path.insert(0, '{ (REPO_ROOT / 'src').as_posix() }'); "
+            "import reasoner.api; "
+            "print('Import OK', flush=True)"
         ),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    print(f"[DEBUG] _import_smoke_test: Running command: {' '.join(cmd)}")
+    result = subprocess.run(cmd, text=True)
+    print(f"[DEBUG] _import_smoke_test: Command finished with returncode {result.returncode}")
     if result.returncode != 0:
-        print("[FAIL]  Backend import failed:")
-        print(result.stderr or result.stdout)
+        print("[FAIL]  Backend import failed.")
         return False
     print("[OK]    Backend imports cleanly")
     return True

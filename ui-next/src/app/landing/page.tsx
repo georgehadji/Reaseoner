@@ -22,7 +22,7 @@ export default function LandingPage() {
             Reasoning <span className="text-[var(--accent)]">Evolved</span>.
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-[var(--text-muted)] sm:text-xl">
-            Advanced Reasoning Architecture (ARA) breaks down complex problems, searches the web, tests multiple perspectives, and synthesizes perfect answers.
+            Advanced Reasoning Architecture (Reasoner) breaks down complex problems, searches the web, tests multiple perspectives, and synthesizes perfect answers.
           </p>
           <div className="mt-10 flex justify-center gap-4">
             <button

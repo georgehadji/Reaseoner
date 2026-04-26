@@ -258,7 +258,13 @@ async def _stream_direct_answer(
     else:
         # All fallbacks exhausted
         logger.error("Direct answer failed after all fallbacks: %s", last_error)
-        err_msg = f"{type(last_error).__name__ if last_error else 'Unknown'}: {str(last_error)[:120] if last_error else 'All models failed'}"
+        if last_error and classify_error(last_error) == "auth":
+            err_msg = (
+                "OpenRouter API key is missing or invalid. "
+                "Please set OPENROUTER_API_KEY in your .env or ui-next/.env.local file."
+            )
+        else:
+            err_msg = f"{type(last_error).__name__ if last_error else 'Unknown'}: {str(last_error)[:120] if last_error else 'All models failed'}"
         yield _event({"type": "phase_error", "phase": 0, "error": err_msg})
         yield _event({
             "type": "done",
@@ -610,9 +616,17 @@ async def run_stream(
                 continue
             except Exception as exc:
                 logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
-                err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
-                state.errors.append(err_msg)
                 err_type = classify_error(exc)
+                # Provide a clearer message for auth/config errors so users know
+                # it's an API key issue, not a Reasoner login issue.
+                if err_type == "auth":
+                    err_msg = (
+                        "OpenRouter API key is missing or invalid. "
+                        "Please set OPENROUTER_API_KEY in your .env or ui-next/.env.local file."
+                    )
+                else:
+                    err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
+                state.errors.append(err_msg)
                 err_payload = {
                     "type": "error",
                     "error_type": err_type,
@@ -636,7 +650,8 @@ async def run_stream(
                 )
                 await _persist_event(fail_evt)
                 event_version += 1
-                if name in CRITICAL_PHASES:
+                # Auth errors are fatal — no point burning tokens on every phase.
+                if err_type == "auth" or name in CRITICAL_PHASES:
                     break
                 continue
             duration = time.monotonic() - phase_start
@@ -691,7 +706,7 @@ async def run_stream(
                 phase_name=name,
                 result={"data": data},
                 tokens=state.phase_tokens.get(phase_key, {"input": 0, "output": 0}),
-                model_used=",".join([m.get("model", "unknown") for m in state.cost_state._phase_models_by_key.get(phase_key, [])]) or "unknown",
+                model_used=",".join(state.cost_state._phase_models_by_key.get(phase_key, [])) or "unknown",
                 duration_seconds=duration,
             )
             await _persist_event(complete_evt)

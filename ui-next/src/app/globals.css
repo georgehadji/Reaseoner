@@ -1,231 +1,167 @@
 @import "tailwindcss";
 
-:root {
-  --bg: #ffffff;
-  --surface: #f9f9f9;
-  --surface-2: #f3f3f3;
-  --surface-3: #e5e5e5;
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
-  --text: #0a0a0a;
-  --text-2: #171717;
-  --text-muted: #6b7280;
-  --text-subtle: #9ca3af;
-  --accent: #171717;
-  --accent-text: #ffffff;
-  --radius-sm: 6px;
-  --radius: 12px;
-  --radius-lg: 18px;
-  --radius-xl: 24px;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.08);
+@layer base {
+  :root {
+    /* HashiCorp Brand Colors */
+    --mds-color-hcp-brand: #000000;
+    --mds-color-dark-charcoal: #15181e;
+    --mds-color-near-black: #0d0e12;
+    --mds-color-light-gray: #f1f2f3;
+    --mds-color-mid-gray: #d5d7db;
+    --mds-color-cool-gray: #b2b6bd;
+    --mds-color-dark-gray: #656a76;
+    --mds-color-charcoal: #3b3d45;
+    --mds-color-near-white: #efeff1;
+
+    /* Product Brand Colors */
+    --mds-color-terraform-button-background: #7b42bc;
+    --mds-color-vault-button-background: #ffcf25;
+    --mds-color-waypoint-button-background-focus: #14c6cb;
+    --mds-color-waypoint-button-background-hover: #12b6bb;
+    --mds-color-vagrant-brand: #1868f2;
+    --mds-color-palette-purple-300: #911ced;
+    --mds-color-foreground-action-visited: #a737ff;
+
+    /* Semantic Colors */
+    --mds-color-action-blue: #1060ff;
+    --mds-color-link-blue: #2264d6;
+    --mds-color-bright-blue: #2b89ff;
+    --mds-color-palette-amber-200: #bb5a00;
+    --mds-color-palette-amber-100: #fbeabf;
+    --mds-color-vault-radar-gradient-faint-stop: #fff9cf;
+    --mds-color-unified-core-orange-6: #a9722e;
+    --mds-color-unified-core-red-7: #731e25;
+    --mds-color-unified-core-blue-7: #101a59;
+
+    /* Shadows and Focus */
+    --mds-shadow-micro: rgba(97, 104, 117, 0.05) 0px 1px 1px, rgba(97, 104, 117, 0.05) 0px 2px 2px;
+    --mds-color-focus-action-external: #2b89ff; /* Example focus color, adjust as needed */
+
+    /* Default (Dark Mode) */
+    --bg: var(--mds-color-dark-charcoal);
+    --text: var(--mds-color-near-white);
+    --text-2: var(--mds-color-mid-gray);
+    --text-muted: var(--mds-color-dark-gray);
+    --text-subtle: var(--mds-color-dark-gray);
+    --text-small: var(--mds-color-dark-gray);
+
+    --surface: var(--mds-color-dark-charcoal);
+    --surface-2: var(--mds-color-near-black);
+    --surface-3: #475569;
+    --surface-hover: var(--mds-color-dark-charcoal);
+
+    --border: rgba(var(--mds-color-cool-gray), 0.4);
+    --border-strong: var(--mds-color-cool-gray);
+
+    --accent: var(--mds-color-action-blue);
+    --accent-hover: var(--mds-color-bright-blue);
+    --accent-text: var(--mds-color-hcp-brand);
+
+    --shadow: var(--mds-shadow-micro);
+    --shadow-lg: var(--mds-shadow-micro);
+
+    --red: var(--mds-color-unified-core-red-7);
+    --red-bg: #450a0a;
+    --red-border: #7f1d1d;
+
+    --radius: 0.5rem;
+
+    /* Blob / decorative colors - keep if still relevant, update to HashiCorp palette if possible */
+    --blob-1: var(--mds-color-vagrant-brand);
+    --blob-2: var(--mds-color-palette-purple-300);
+    --blob-3: #ec4899;
+    --blob-accent: var(--mds-color-vault-button-background); /* Placeholder, assuming yellow accent */
+
+    /* Legacy aliases used in body base styles - to be removed or mapped */
+    --background: var(--bg);
+    --foreground: var(--text);
+  }
+
+  .light {
+    --bg: #ffffff;
+    --text: var(--mds-color-hcp-brand);
+    --text-2: var(--mds-color-charcoal);
+    --text-muted: var(--mds-color-dark-gray);
+    --text-subtle: var(--mds-color-dark-gray);
+    --text-small: var(--mds-color-dark-gray);
+
+    --surface: #ffffff;
+    --surface-2: var(--mds-color-light-gray);
+    --surface-3: var(--mds-color-mid-gray);
+    --surface-hover: var(--mds-color-light-gray);
+
+    --border: var(--mds-color-mid-gray);
+    --border-strong: var(--mds-color-cool-gray);
+
+    --accent: var(--mds-color-link-blue);
+    --accent-hover: var(--mds-color-bright-blue);
+    --accent-text: #ffffff;
+
+    --shadow: var(--mds-shadow-micro);
+    --shadow-lg: var(--mds-shadow-micro);
+
+    --red: var(--mds-color-unified-core-red-7);
+    --red-bg: #fef2f2;
+    --red-border: #fecaca;
+
+    --background: var(--bg);
+    --foreground: var(--text);
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    /* Font family will be set by Tailwind utility classes using font-hashicorpSans or font-systemUi */
+  }
 }
 
-.dark {
-  --bg: #0a0a0a;
-  --surface: #171717;
-  --surface-2: #1f1f1f;
-  --surface-3: #262626;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #fafafa;
-  --text-2: #e5e5e5;
-  --text-muted: #a1a1aa;
-  --text-subtle: #71717a;
-  --accent: #fafafa;
-  --accent-text: #0a0a0a;
-  --shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+/* ============================================
+   Custom animations for Landing Page
+   ============================================ */
+@keyframes gradient-text {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
-*, *::before, *::after {
-  box-sizing: border-box;
+.animate-gradient-text {
+  animation: gradient-text 8s linear infinite;
 }
 
-html, body {
-  /* Removed fixed height and overflow to allow native scrolling */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 0.2;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.05);
+  }
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.animate-pulse-slow {
+  animation: pulse-slow 10s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
-/* Smooth theme transitions */
-html {
-  transition: background-color 0.25s ease, color 0.25s ease;
-}
-
-body, .transition-theme {
-  transition: background-color 0.25s ease, color 0.25s ease, border-color 0.25s ease;
-}
-
-/* Scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: var(--border-strong);
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-subtle);
-}
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
-}
-
-/* Focus — polished double-ring for all interactive elements */
-button:focus-visible,
-a:focus-visible,
-[role="button"]:focus-visible,
-textarea:focus-visible,
-input:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
-}
-
-/* Skip link for keyboard users */
-.skip-link {
-  position: absolute;
-  top: -40px;
-  left: 0;
-  z-index: 9999;
-  padding: 8px 16px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-size: 14px;
-  font-weight: 500;
-  text-decoration: none;
-  transition: top 0.2s;
-}
-.skip-link:focus {
-  top: 0;
-}
-
-/* Selection */
-::selection {
-  background: rgba(99, 102, 241, 0.3);
-  color: var(--text);
-}
-
-/* Markdown content base */
-.markdown-body {
-  line-height: 1.65;
-  overflow-wrap: break-word;
-  word-break: break-word;
-}
-.markdown-body p {
-  margin-bottom: 0.75em;
-}
-.markdown-body p:last-child {
-  margin-bottom: 0;
-}
-.markdown-body h1,
-.markdown-body h2,
-.markdown-body h3,
-.markdown-body h4 {
-  font-weight: 600;
-  margin-top: 1em;
-  margin-bottom: 0.5em;
-}
-.markdown-body h3 {
-  display: inline-block;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 0.35em 0.75em;
-  font-size: 0.85rem;
-  margin-top: 1.25em;
-  margin-bottom: 0.75em;
-}
-.markdown-body ul,
-.markdown-body ol {
-  margin-left: 1.25em;
-  margin-bottom: 0.75em;
-}
-.markdown-body li {
-  margin-bottom: 0.25em;
-}
-.markdown-body a {
-  color: #3b82f6;
-  text-decoration: underline;
-}
-.markdown-body code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.9em;
-  background: var(--surface-2);
-  padding: 0.15em 0.35em;
-  border-radius: var(--radius-sm);
-}
-.markdown-body pre {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1em;
-  overflow-x: auto;
-  margin-bottom: 0.75em;
-}
-.markdown-body pre code {
-  background: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: 0.85em;
-}
-.markdown-body blockquote {
-  border-left: 3px solid var(--border-strong);
-  padding-left: 1em;
-  color: var(--text-muted);
-  margin-bottom: 0.75em;
-}
-.markdown-body table {
-  width: 100%;
-  border-collapse: collapse;
-  margin-bottom: 0.75em;
-}
-.markdown-body th,
-.markdown-body td {
-  border: 1px solid var(--border);
-  padding: 0.5em 0.75em;
-  text-align: left;
-}
-.markdown-body th {
-  background: var(--surface);
-  font-weight: 600;
-}
-
-/* Code block container */
-.code-block {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  overflow: hidden;
-  margin-bottom: 0.75em;
-}
-.code-block-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.5em 0.75em;
-  background: var(--surface-2);
-  border-bottom: 1px solid var(--border);
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-.code-block pre {
-  margin: 0;
-  padding: 1em;
-  overflow-x: auto;
-  background: transparent;
-  border: none;
-  border-radius: 0;
+/* ============================================
+   Accessibility utilities
+   ============================================ */
+@layer utilities {
+  .skip-link {
+    @apply absolute -left-[9999px] top-auto h-1 w-1 overflow-hidden;
+    z-index: -999;
+  }
+  .skip-link:focus {
+    @apply left-0 top-0 h-auto w-auto p-4 rounded-md;
+    background-color: var(--mds-color-vault-button-background); /* Using Vault Yellow */
+    color: var(--mds-color-hcp-brand); /* Using Black */
+    z-index: 50;
+  }
 }

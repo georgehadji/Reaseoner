@@ -14,6 +14,7 @@ import { copyToClipboard, cn } from '@/lib/utils';
 import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ManifestationVisuals } from './ManifestationVisuals';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useAppStore } from '@/stores/app-store';
 
 export interface RenderedPhase {
   index: number;
@@ -74,13 +75,13 @@ function PhaseIndicator({
           {TIMING.streamingBounceDelays.map((delay) => (
             <span
               key={delay}
-              className="h-2 w-2 animate-bounce rounded-full bg-[var(--text-muted)]"
+              className="h-2 w-2 animate-bounce rounded-full bg-mds-color-dark-gray"
               style={{ animationDelay: `${delay}ms` }}
             />
           ))}
         </div>
         {name ? (
-          <span className="text-xs font-medium text-[var(--text-muted)]">
+          <span className="text-xs font-medium text-mds-color-dark-gray">
             Running {name}…
           </span>
         ) : null}
@@ -90,9 +91,9 @@ function PhaseIndicator({
           {models.map((m) => (
             <span
               key={m}
-              className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-subtle)]"
+              className="inline-flex items-center gap-1 rounded-full border border-mds-color-cool-gray/[0.4] bg-mds-color-charcoal px-2 py-0.5 text-[10px] font-medium text-mds-color-mid-gray"
             >
-              <span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              <span className="h-1.5 w-1.5 rounded-full bg-mds-color-waypoint-button-background-focus" />
               {m.split('/').pop() || m}
             </span>
           ))}
@@ -103,9 +104,9 @@ function PhaseIndicator({
           {agents.map((a) => (
             <Tooltip key={a.name} text={a.task}>
               <span
-                className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-0.5 text-[10px] font-medium text-[var(--text-subtle)]"
+                className="inline-flex items-center gap-1 rounded-full border border-mds-color-cool-gray/[0.4] bg-mds-color-charcoal px-2 py-0.5 text-[10px] font-medium text-mds-color-mid-gray"
               >
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--accent)]" />
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-mds-color-waypoint-button-background-focus" />
                 {a.name}
               </span>
             </Tooltip>
@@ -138,17 +139,15 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
   }, []);
 
   return (
-    <div className="mb-2 w-full max-w-3xl overflow-hidden rounded-[28px] border border-[var(--border)] bg-[linear-gradient(135deg,rgba(255,196,132,0.18),rgba(255,255,255,0.88)_38%,rgba(143,212,255,0.2))] p-4 shadow-[var(--shadow)]">
-      <div className="relative overflow-hidden rounded-xl border border-white/50 bg-[var(--surface)]/80 p-5 backdrop-blur">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,191,117,0.18),transparent_42%),radial-gradient(circle_at_bottom_right,rgba(104,185,255,0.16),transparent_38%)]" />
-
+    <div className="mb-2 w-full max-w-3xl overflow-hidden rounded-[8px] border border-mds-color-cool-gray/[0.4] bg-mds-color-dark-charcoal p-4 shadow-micro-shadow">
+      <div className="relative overflow-hidden rounded-[8px] border border-mds-color-mid-gray/[0.5] bg-mds-color-near-black/[0.8] p-5 backdrop-blur">
         <div className="relative mb-4 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.22em] text-[var(--text-muted)]">
+          <div className="flex items-center gap-2 font-systemUi text-caption font-semibold uppercase tracking-[0.22em] text-mds-color-dark-gray">
             <Wand2 className="h-3.5 w-3.5" />
             Rendering Image
           </div>
-          <div className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-white/70 px-2.5 py-1 text-[10px] font-medium text-[var(--text-subtle)]">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
+          <div className="inline-flex items-center gap-1 rounded-full border border-mds-color-cool-gray/[0.4] bg-mds-color-light-gray/[0.7] px-2.5 py-1 text-caption font-medium text-mds-color-charcoal">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-mds-color-vault-button-background" />
             {Math.round(progress * 100)}%
           </div>
         </div>
@@ -156,9 +155,9 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
         <ManifestationVisuals progress={progress} />
 
         <div className="relative mt-5 space-y-3">
-          <div className="h-2 overflow-hidden rounded-full bg-[var(--surface-2)]">
+          <div className="h-2 overflow-hidden rounded-full bg-mds-color-charcoal">
             <motion.div
-              className="h-full bg-[linear-gradient(90deg,#f59e0b,#fb7185,#38bdf8)] transition-all duration-300 ease-linear"
+              className="h-full bg-mds-color-vagrant-brand transition-all duration-300 ease-linear"
               style={{ width: `${progress * 100}%` }}
               animate={{
                 opacity: [0.8, 1, 0.8],
@@ -166,13 +165,13 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
               transition={{ duration: 2, repeat: Infinity }}
             />
           </div>
-          <div className="flex items-center justify-between gap-3 text-xs text-[var(--text-subtle)]">
+          <div className="flex items-center justify-between gap-3 font-systemUi text-caption text-mds-color-dark-gray">
             <span>{progress < 0.3 ? 'Expanding prompt & testing providers...' : progress < 0.7 ? 'Coalescing visual structures...' : 'Finalizing grain and atmosphere...'}</span>
-            <span className="font-medium text-[var(--text-muted)]">Working…</span>
+            <span className="font-medium text-mds-color-dark-gray">Working…</span>
           </div>
           {prompt ? (
-            <div className="rounded-2xl border border-[var(--border)] bg-white/70 px-4 py-3 text-sm text-[var(--text)]">
-              <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--text)]">Prompt</span>
+            <div className="rounded-[8px] border border-mds-color-cool-gray/[0.4] bg-mds-color-light-gray/[0.7] px-4 py-3 text-sm font-systemUi text-mds-color-hcp-brand">
+              <span className="mr-2 text-caption font-semibold uppercase tracking-[0.18em] text-mds-color-hcp-brand">Prompt</span>
               {prompt}
             </div>
           ) : null}
@@ -225,16 +224,16 @@ function MessageActions({
   const showFeedback = isEnabled('feedback-loop') && messageId && onFeedback;
 
   return (
-    <div className="mt-2 flex items-center justify-center gap-3">
+    <div className="mt-2 flex items-center justify-center gap-3 text-mds-color-dark-gray">
       <button
         type="button"
         onClick={handleCopy}
-        className="flex items-center gap-1 text-xs text-[var(--text-subtle)] transition-colors hover:text-[var(--text)]"
+        className="flex items-center gap-1 text-caption transition-colors hover:text-mds-color-near-white"
         aria-label="Copy response"
       >
         {copied ? (
           <>
-            <Check className="h-3.5 w-3.5" /> Copied
+            <Check className="h-3.5 w-3.5 text-mds-color-bright-blue" /> Copied!
           </>
         ) : (
           <>
@@ -242,19 +241,14 @@ function MessageActions({
           </>
         )}
       </button>
-      {duration !== undefined && duration > 0 ? (
-        <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-2)] px-2 py-0.5 text-xs font-medium text-[var(--text-muted)]">
-          <Clock className="h-3 w-3" />
-          {formatDuration(duration)}
-        </span>
-      ) : null}
+
       {showTokens ? (
-        <span className="text-xs text-[var(--text-subtle)]">
+        <span className="text-xs text-mds-color-dark-gray">
           {(tokens.input ?? 0).toLocaleString()} in · {(tokens.output ?? 0).toLocaleString()} out · {(tokens.total ?? 0).toLocaleString()} total
         </span>
       ) : null}
       {cost !== undefined && cost > 0 ? (
-        <span className="text-xs text-[var(--text-subtle)]">
+        <span className="text-xs text-mds-color-dark-gray">
           ${cost.toFixed(4)}
         </span>
       ) : null}
@@ -266,8 +260,8 @@ function MessageActions({
             className={cn(
               'rounded-full p-1 text-xs transition-colors',
               feedbackGiven === 'up'
-                ? 'bg-green-500/10 text-green-500'
-                : 'text-[var(--text-subtle)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+                ? 'bg-mds-color-unified-core-blue-7/[0.1] text-mds-color-unified-core-blue-7'
+                : 'text-mds-color-dark-gray hover:bg-mds-color-charcoal hover:text-mds-color-near-white'
             )}
             aria-label="Thumbs up"
             disabled={feedbackGiven !== null}
@@ -280,8 +274,8 @@ function MessageActions({
             className={cn(
               'rounded-full p-1 text-xs transition-colors',
               feedbackGiven === 'down'
-                ? 'bg-red-500/10 text-red-500'
-                : 'text-[var(--text-subtle)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]'
+                ? 'bg-mds-color-unified-core-red-7/[0.1] text-mds-color-unified-core-red-7'
+                : 'text-mds-color-dark-gray hover:bg-mds-color-charcoal hover:text-mds-color-near-white'
             )}
             aria-label="Thumbs down"
             disabled={feedbackGiven !== null}
@@ -295,17 +289,32 @@ function MessageActions({
 }
 
 function ContinueButton({ onContinue }: { onContinue?: () => void }) {
+  const user = useAppStore((s) => s.user);
   if (!isEnabled('continue-generating') || !onContinue) return null;
+
+  const isDisabled = !user;
+
+  const button = (
+    <button
+      type="button"
+      onClick={onContinue}
+      className="inline-flex items-center gap-2 rounded-[5px] border border-mds-color-cool-gray/[0.4] bg-mds-color-dark-charcoal px-4 py-2 font-systemUi text-caption font-medium text-mds-color-mid-gray transition-colors hover:bg-mds-color-near-black disabled:cursor-not-allowed disabled:opacity-50"
+      disabled={isDisabled}
+    >
+      <ChevronDown className="h-3.5 w-3.5" />
+      Continue reasoning…
+    </button>
+  );
+
   return (
     <div className="mt-3 flex justify-center">
-      <button
-        type="button"
-        onClick={onContinue}
-        className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]"
-      >
-        <ChevronDown className="h-3.5 w-3.5" />
-        Continue generating…
-      </button>
+      {isDisabled ? (
+        <Tooltip text="Please sign in to continue your reasoning session.">
+          {button}
+        </Tooltip>
+      ) : (
+        button
+      )}
     </div>
   );
 }
@@ -351,7 +360,7 @@ function ChatFeedComponent({
                   {msg.attachments.map((att) => (
                     <div
                       key={att.id}
-                      className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-xs text-[var(--text-muted)]"
+                      className="inline-flex items-center gap-2 rounded-[8px] border border-mds-color-cool-gray/[0.4] bg-mds-color-charcoal px-3 py-1.5 font-systemUi text-sm-body text-mds-color-dark-gray"
                     >
                       {att.previewUrl ? (
                         <img src={att.previewUrl} alt={att.name} className="h-5 w-5 rounded object-cover" />
@@ -359,7 +368,7 @@ function ChatFeedComponent({
                         <FileText className="h-4 w-4 shrink-0" />
                       )}
                       <span className="max-w-[120px] truncate">{att.name}</span>
-                      <span className="text-[10px] text-[var(--text-subtle)]">
+                      <span className="font-systemUi text-caption text-mds-color-dark-gray">
                         {(att.size / 1024 / 1024).toFixed(1)}MB
                       </span>
                     </div>
@@ -388,15 +397,15 @@ function ChatFeedComponent({
           if (isEnhancedPrompt) {
             return (
               <div key={msg.id} className="flex w-full justify-center px-4">
-                <div className="w-full max-w-3xl rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-4 py-3">
-                  <div className="mb-2 flex items-center gap-2 text-xs font-medium text-[var(--text-muted)]">
+                <div className="w-full max-w-3xl rounded-[8px] border border-mds-color-cool-gray/[0.4] bg-mds-color-charcoal px-4 py-3">
+                  <div className="mb-2 flex items-center gap-2 font-systemUi text-caption font-medium text-mds-color-dark-gray">
                     <Sparkles className="h-3.5 w-3.5" />
                     Prompt Enhanced
                   </div>
-                  <div className="mb-2 text-sm text-[var(--text-subtle)] line-through opacity-70">
+                  <div className="mb-2 font-systemUi text-sm-body text-mds-color-dark-gray line-through opacity-70">
                     {msg.meta?.original}
                   </div>
-                  <div className="text-sm font-medium text-[var(--text)]">
+                  <div className="font-systemUi text-sm-body font-medium text-mds-color-near-white">
                     {msg.meta?.enhanced}
                   </div>
                 </div>
@@ -405,7 +414,7 @@ function ChatFeedComponent({
           }
           return (
             <div key={msg.id} className="flex w-full justify-center">
-              <div className="max-w-3xl rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-4 py-2 text-xs text-[var(--text-subtle)]">
+              <div className="max-w-3xl rounded-full border border-mds-color-cool-gray/[0.4] bg-mds-color-charcoal px-4 py-2 font-systemUi text-sm-body text-mds-color-dark-gray">
                 {msg.content}
               </div>
             </div>
@@ -437,7 +446,7 @@ function ChatFeedComponent({
                   {msg.images.map((img, idx) => (
                     <figure
                       key={idx}
-                      className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-2)] shadow-[var(--shadow)]"
+                      className="overflow-hidden rounded-[8px] border border-mds-color-cool-gray/[0.4] bg-mds-color-charcoal shadow-micro-shadow"
                     >
                       <button
                         type="button"
@@ -452,15 +461,15 @@ function ChatFeedComponent({
                           loading="lazy"
                         />
                       </button>
-                      <figcaption className="flex items-center justify-between gap-3 border-t border-[var(--border)] px-3 py-2 text-xs text-[var(--text-subtle)]">
+                      <figcaption className="flex items-center justify-between gap-3 border-t border-mds-color-cool-gray/[0.4] px-3 py-2 font-systemUi text-caption text-mds-color-dark-gray">
                         <span className="truncate">
-                          LLM model used: <span className="font-medium text-[var(--text)]">{img.model || 'unknown'}</span>
+                          LLM model used: <span className="font-medium text-mds-color-near-white">{img.model || 'unknown'}</span>
                         </span>
                         <a
                           href={img.data}
                           download={getDownloadName(img.model)}
                           onClick={(event) => event.stopPropagation()}
-                          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-[var(--border)] px-2.5 py-1 text-[10px] font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface)]"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-full border border-mds-color-cool-gray/[0.4] px-2.5 py-1 font-systemUi text-[10px] font-medium text-mds-color-near-white transition-colors hover:bg-mds-color-near-black"
                         >
                           <Download className="h-3 w-3" />
                           Download
@@ -478,9 +487,9 @@ function ChatFeedComponent({
                 </div>
               )}
               {msg.streamingContent ? (
-                <div className="w-full max-w-3xl whitespace-pre-wrap text-[18px] leading-relaxed text-[var(--text)]">
+                <div className="w-full max-w-3xl whitespace-pre-wrap font-systemUi text-body font-normal leading-relaxed text-mds-color-near-white">
                   {msg.streamingContent}
-                  <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle" />
+                  <span className="inline-block h-[1em] w-0.5 animate-pulse bg-mds-color-action-blue align-middle" />
                 </div>
               ) : phases.length > 0 ? (
                 <div className="w-full">
@@ -528,19 +537,19 @@ function ChatFeedComponent({
           onClick={() => setSelectedImage(null)}
         >
           <div
-            className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-[var(--surface)] shadow-2xl"
+            className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[8px] border border-mds-color-mid-gray/[0.1] bg-mds-color-dark-charcoal shadow-micro-shadow"
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3">
+            <div className="flex items-center justify-between gap-3 border-b border-mds-color-cool-gray/[0.4] px-4 py-3">
               <div className="min-w-0">
-                <div className="text-xs uppercase tracking-[0.18em] text-[var(--text-muted)]">Generated Image</div>
-                <div className="truncate text-sm text-[var(--text)]">LLM model used: {selectedImage.model || 'unknown'}</div>
+                <div className="font-systemUi text-caption uppercase tracking-[0.18em] text-mds-color-dark-gray">Generated Image</div>
+                <div className="truncate font-systemUi text-sm-body text-mds-color-near-white">LLM model used: {selectedImage.model || 'unknown'}</div>
               </div>
               <div className="flex items-center gap-2">
                 <a
                   href={selectedImage.data}
                   download={getDownloadName(selectedImage.model)}
-                  className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] px-3 py-1.5 text-xs font-medium text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+                  className="inline-flex items-center gap-2 rounded-full border border-mds-color-cool-gray/[0.4] px-3 py-1.5 font-systemUi text-sm-body font-medium text-mds-color-near-white transition-colors hover:bg-mds-color-charcoal"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Download
@@ -548,7 +557,7 @@ function ChatFeedComponent({
                 <button
                   type="button"
                   onClick={() => setSelectedImage(null)}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--border)] text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-mds-color-cool-gray/[0.4] text-mds-color-near-white transition-colors hover:bg-mds-color-charcoal"
                   aria-label="Close image preview"
                 >
                   <X className="h-4 w-4" />
@@ -570,7 +579,7 @@ function ChatFeedComponent({
         <button
           type="button"
           onClick={onScrollToBottom}
-          className="fixed bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-xs font-medium text-[var(--text)] shadow-[var(--shadow-lg)] transition-colors hover:bg-[var(--surface-2)]"
+          className="fixed bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full border border-mds-color-cool-gray/[0.4] bg-mds-color-dark-charcoal px-4 py-2 font-systemUi text-sm-body font-medium text-mds-color-near-white shadow-micro-shadow transition-colors hover:bg-mds-color-charcoal"
         >
           New content below ↓
         </button>

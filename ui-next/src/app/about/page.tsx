@@ -14,7 +14,7 @@ export default function AboutPage() {
       <main className="mx-auto max-w-4xl px-4 py-12 flex-1 w-full">
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-[var(--text)] sm:text-5xl">
-          About <span className="text-[var(--accent)]">ARA</span>
+          About <span className="text-[var(--accent)]">Reasoner</span>
         </h1>
         <p className="mt-4 text-lg text-[var(--text-muted)] max-w-2xl mx-auto">
           Advanced Reasoning Architecture. A multi-method AI system designed for complex questions, strategic decisions, and deep research tasks.
@@ -29,7 +29,7 @@ export default function AboutPage() {
           <div>
             <h3 className="text-xl font-bold text-[var(--text)]">Multi-Method Pipeline</h3>
             <p className="mt-2 text-sm text-[var(--text-muted)]">
-              Instead of one-shot completions, ARA breaks down problems using specialized phases: decomposition, RAG vetting, multi-perspective generation, and rigorous synthesis.
+              Instead of one-shot completions, Reasoner breaks down problems using specialized phases: decomposition, RAG vetting, multi-perspective generation, and rigorous synthesis.
             </p>
           </div>
         </div>

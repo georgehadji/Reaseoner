@@ -229,6 +229,7 @@ class RunStateManager:
             pass
         event = await self._get_fallback().get_cancel_event(run_id)
         if event is not None and event.is_set():
+            event.clear()
             return True
         return False
 

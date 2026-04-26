@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const faqs = [
   {
-    q: "What is ARA?",
+    q: "What is Reasoner?",
     a: "ARA (Advanced Reasoning Architecture) is an AI platform that breaks down complex queries into manageable phases, verifying facts, running multiple models, and searching the web to synthesize a high-quality final answer."
   },
   {

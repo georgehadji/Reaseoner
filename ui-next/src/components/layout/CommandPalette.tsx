@@ -69,7 +69,7 @@ export function CommandPalette({
       { id: 'tier', label: tier === 'premium' ? 'Switch to Budget' : 'Switch to Premium', icon: <ArrowUpCircle className="h-4 w-4" />, action: onToggleTier },
       { id: 'copy', label: 'Copy last response', icon: <Copy className="h-4 w-4" />, shortcut: 'Ctrl+Shift+C', action: onCopyLastResponse },
       { id: 'pricing', label: 'View Pricing', icon: <CreditCard className="h-4 w-4" />, action: () => { onClose(); router.push('/pricing'); } },
-      { id: 'about', label: 'About ARA', icon: <Info className="h-4 w-4" />, action: () => { onClose(); router.push('/about'); } },
+      { id: 'about', label: 'About Reasoner', icon: <Info className="h-4 w-4" />, action: () => { onClose(); router.push('/about'); } },
       { id: 'settings', label: 'Account Settings', icon: <Command className="h-4 w-4" />, action: () => { onClose(); router.push('/settings'); } },
     ],
     [onNew, onClearComposer, onToggleTheme, onToggleSidebar, onToggleNeuro, onToggleTier, tier, onCopyLastResponse, router, onClose]

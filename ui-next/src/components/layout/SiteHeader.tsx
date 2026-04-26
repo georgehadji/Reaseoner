@@ -14,7 +14,7 @@ export function SiteHeader() {
     <header className="flex h-16 shrink-0 items-center justify-between px-6 lg:px-12 border-b border-[var(--border)] bg-[var(--bg)]">
       <Link href="/" className="flex items-center gap-2 font-bold text-xl hover:opacity-80 transition-opacity">
         <Brain className="h-6 w-6 text-[var(--accent)]" />
-        <span>ARA</span>
+        <span>Reasoner</span>
       </Link>
       <nav className="hidden md:flex gap-6 text-sm font-medium text-[var(--text-muted)]">
         <Link href="/about" className="hover:text-[var(--text)] transition-colors">About</Link>
@@ -42,7 +42,7 @@ export function SiteHeader() {
               Sign In
             </button>
             <button
-              onClick={() => router.push('/signup')}
+              onClick={() => router.push('/chat')}
               className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-90"
             >
               Get Started

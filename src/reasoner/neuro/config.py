@@ -179,20 +179,7 @@ def _build_persona(name: str, data: dict) -> PersonaConfig:
 
 
 def load_config(path: Optional[str] = None) -> NeuroConfig:
-    """
-    Load configuration from YAML file.
-    
-    Args:
-        path: Optional path to config file
-        
-    Returns:
-        NeuroConfig instance with loaded configuration
-        
-    Raises:
-        FileNotFoundError: If config file not found and no defaults available
-        yaml.YAMLError: If config file contains invalid YAML
-        ValueError: If config file is corrupted
-    """
+    print("[DEBUG] neuro/config.py: load_config started")
     import logging
     logger = logging.getLogger(__name__)
     
@@ -207,13 +194,18 @@ def load_config(path: Optional[str] = None) -> NeuroConfig:
             if env_path:
                 config_path = Path(env_path)
             else:
+                print("[DEBUG] neuro/config.py: checking default config paths")
                 for candidate in DEFAULT_CONFIG_PATHS:
-                    if candidate.exists():
-                        config_path = candidate
-                        break
+                    print(f"[DEBUG] neuro/config.py: checking {candidate}")
+                    try:
+                        if candidate.exists():
+                            config_path = candidate
+                            break
+                    except Exception:
+                        continue
 
         if not config_path or not config_path.exists():
-            logger.info("No config file found, using defaults")
+            print("[DEBUG] neuro/config.py: no config file found, using defaults")
             return _apply_defaults(NeuroConfig())
 
         logger.info(f"Loading config from {config_path}")

@@ -65,6 +65,8 @@ async def upload_file(
             results = await save_uploaded_files(files, user_id=str(user.id), force_ocr=force_ocr)
             return {"success": True, "files": results}
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Upload failed: {e}")
         return {"success": False, "error": "Internal server error"}

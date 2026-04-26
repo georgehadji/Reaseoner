@@ -9,6 +9,7 @@ polluting route handlers with auth logic.
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
 import re
 from typing import Optional
@@ -30,14 +31,28 @@ from reasoner.core.settings import settings
 from reasoner.rate_limiter import RateLimitConfig, get_rate_limiter
 from reasoner.presets import get_preset_tier
 
+# ── Rate Limiter Singleton ──
+_rate_limiter_instance: RateLimiter | None = None
+
+def _get_rate_limiter_instance() -> RateLimiter:
+    """Factory for RateLimiter instance."""
+    global _rate_limiter_instance
+    if _rate_limiter_instance is None:
+        _rate_limiter_instance = get_rate_limiter(
+            RateLimitConfig(
+                requests_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+                requests_per_hour=settings.RATE_LIMIT_PER_HOUR,
+                burst_size=settings.RATE_LIMIT_BURST,
+            )
+        )
+    return _rate_limiter_instance
+
+def _reset_rate_limiter_instance() -> None:
+    """Reset rate limiter singleton (useful for tests)."""
+    global _rate_limiter_instance
+    _rate_limiter_instance = None
+
 security = HTTPBearer(auto_error=False)
-rate_limiter = get_rate_limiter(
-    RateLimitConfig(
-        requests_per_minute=settings.RATE_LIMIT_PER_MINUTE,
-        requests_per_hour=settings.RATE_LIMIT_PER_HOUR,
-        burst_size=settings.RATE_LIMIT_BURST,
-    )
-)
 
 
 _BASE64URL_RE = re.compile(r'^[A-Za-z0-9_-]+$')
@@ -185,6 +200,8 @@ async def check_rate_limit(
     """
     Check rate limit using user_id if authenticated, otherwise IP.
     """
+    rate_limiter = _get_rate_limiter_instance()
+
     if user is not None:
         # Authenticated user — use user_id as bucket key with tier multiplier
         # TODO(#501): fetch tier from subscription
@@ -264,7 +281,14 @@ async def check_quota(
     user_tier = SubscriptionTier.FREE
 
     service = _get_quota_service()
-    result = await service.check(str(user.id), user_tier)
+    try:
+        result = await service.check(str(user.id), user_tier)
+    except Exception:
+        # If DB is unavailable, allow the request (fail open) rather than
+        # hard-failing every authenticated request.
+        logger = logging.getLogger(__name__)
+        logger.warning("Quota check failed due to DB error, allowing request")
+        return QuotaResult(allowed=True, remaining=-1)
 
     if not result.allowed:
         raise HTTPException(

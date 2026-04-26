@@ -19,17 +19,34 @@ from reasoner.core.settings import settings
 from reasoner.rate_limiter import RateLimitConfig, get_rate_limiter
 from reasoner.exceptions import RateLimitError
 
+# ── Rate Limiter Singleton (for auth_deps) ──
+_rate_limiter_instance_auth_deps: RateLimiter | None = None
+
+def _get_rate_limiter_instance_auth_deps() -> RateLimiter:
+    """Factory for RateLimiter instance within auth_deps."""
+    global _rate_limiter_instance_auth_deps
+    if _rate_limiter_instance_auth_deps is None:
+        _rate_limiter_instance_auth_deps = get_rate_limiter(
+            RateLimitConfig(
+                requests_per_minute=settings.RATE_LIMIT_PER_MINUTE,
+                requests_per_hour=settings.RATE_LIMIT_PER_HOUR,
+                burst_size=settings.RATE_LIMIT_BURST,
+            )
+        )
+    return _rate_limiter_instance_auth_deps
+
 security = HTTPBearer(auto_error=False)
 
-rate_limiter = get_rate_limiter(
-    RateLimitConfig(
-        requests_per_minute=settings.RATE_LIMIT_PER_MINUTE,
-        requests_per_hour=settings.RATE_LIMIT_PER_HOUR,
-        burst_size=settings.RATE_LIMIT_BURST,
-    )
-)
+# ── Auth Manager Singleton (for auth_deps) ──
+_auth_manager_instance_auth_deps: AuthManager | None = None
 
-auth_manager = get_auth_manager()
+def _get_auth_manager_instance_auth_deps() -> AuthManager:
+    """Factory for AuthManager instance within auth_deps."""
+    global _auth_manager_instance_auth_deps
+    if _auth_manager_instance_auth_deps is None:
+        _auth_manager_instance_auth_deps = get_auth_manager()
+    return _auth_manager_instance_auth_deps
+
 
 
 async def get_client_id(request: Request) -> str:
@@ -48,6 +65,7 @@ async def check_rate_limit(
     Check rate limit for request.
     Raises HTTPException if rate limit exceeded.
     """
+    rate_limiter = _get_rate_limiter_instance_auth_deps()
     client_id = await get_client_id(request)
     try:
         allowed, info = await rate_limiter.is_allowed(client_id)
@@ -90,6 +108,7 @@ async def require_auth(
     Require valid API key authentication.
     Raises HTTPException if authentication fails.
     """
+    auth_manager = _get_auth_manager_instance_auth_deps()
     if not credentials:
         raise HTTPException(
             status_code=401,
@@ -115,6 +134,7 @@ async def optional_auth(
     """
     Optional authentication - returns API key if provided, None otherwise.
     """
+    auth_manager = _get_auth_manager_instance_auth_deps()
     if not credentials:
         return None
 

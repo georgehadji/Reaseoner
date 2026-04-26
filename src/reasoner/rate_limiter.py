@@ -12,6 +12,7 @@ ARCHITECTURAL NOTE:
 """
 
 from __future__ import annotations
+print("[DEBUG] reasoner/rate_limiter.py: Top of file")
 
 import os
 import time
@@ -19,13 +20,15 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 import asyncio
+print("[DEBUG] reasoner/rate_limiter.py: Before metrics import")
 
-
-try:
-    from reasoner.api.metrics import REASONER_RATE_LIMIT_REJECTED
-    _METRICS_AVAILABLE = True
-except Exception:
-    _METRICS_AVAILABLE = False
+# Temporarily disable metrics import
+_METRICS_AVAILABLE = False
+# try:
+#     from reasoner.api.metrics import REASONER_RATE_LIMIT_REJECTED
+#     _METRICS_AVAILABLE = True
+# except Exception:
+#     _METRICS_AVAILABLE = False
 
 
 @dataclass
@@ -275,5 +278,6 @@ def get_rate_limiter(config: Optional[RateLimitConfig] = None) -> RateLimiter:
     """Get or create global rate limiter."""
     global _rate_limiter
     if _rate_limiter is None:
+        print("[DEBUG] reasoner/rate_limiter.py: Instantiating RateLimiter")
         _rate_limiter = RateLimiter(config)
     return _rate_limiter

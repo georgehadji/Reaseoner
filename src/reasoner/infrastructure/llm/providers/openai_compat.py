@@ -65,6 +65,7 @@ class OpenAICompatibleProvider(BaseLLMProvider):
         max_retries: int = DEFAULT_MAX_RETRIES,
         extra_body: dict[str, Any] | None = None,
         http_client: "openai.AsyncOpenAI | None" = None,
+        default_headers: dict[str, str] | None = None,
     ) -> None:
         super().__init__(model, max_retries)
         self.extra_body = extra_body or {}
@@ -98,11 +99,14 @@ class OpenAICompatibleProvider(BaseLLMProvider):
 
         # Create a dedicated OpenAI wrapper for this specific key/URL,
         # but share the underlying connection pool.
-        self.client = openai.AsyncOpenAI(
-            api_key=api_key or "missing",
-            base_url=base_url,
-            http_client=OpenAICompatibleProvider._shared_pool,
-        )
+        client_kwargs: dict[str, Any] = {
+            "api_key": (api_key or "missing").strip(),
+            "base_url": base_url,
+            "http_client": OpenAICompatibleProvider._shared_pool,
+        }
+        if default_headers:
+            client_kwargs["default_headers"] = default_headers
+        self.client = openai.AsyncOpenAI(**client_kwargs)
 
     # Models that support custom temperature values (0.0-2.0 range).
     # Note: OpenAI models (gpt-*, o1, o3) do NOT accept temperature parameters - they use temperature=1.0 fixed.
@@ -249,12 +253,21 @@ class OpenRouterProvider(OpenAICompatibleProvider):
         max_retries: int = DEFAULT_MAX_RETRIES,
         extra_body: dict[str, Any] | None = None,
     ) -> None:
+        # OpenRouter requires identification headers for every request.
+        from reasoner.core.settings import settings
+        default_headers: dict[str, str] = {}
+        if settings.OPENROUTER_HTTP_REFERER:
+            default_headers["HTTP-Referer"] = settings.OPENROUTER_HTTP_REFERER
+        if settings.OPENROUTER_APP_TITLE:
+            default_headers["X-Title"] = settings.OPENROUTER_APP_TITLE
+
         super().__init__(
             model=model,
             api_key=api_key or os.environ.get("OPENROUTER_API_KEY", ""),
             base_url=self.OPENROUTER_BASE_URL,
             max_retries=max_retries,
             extra_body=extra_body,
+            default_headers=default_headers,
         )
         # Cost tracking
         self.last_input_tokens: int = 0

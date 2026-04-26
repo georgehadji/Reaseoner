@@ -207,7 +207,7 @@ class FeedbackStore:
         conn = self._get_connection()
         cursor = conn.execute(
             """
-            INSERT INTO feedback_entries
+            INSERT OR REPLACE INTO feedback_entries
                 (timestamp, conversation_id, message_id, rating, reason, comment, context_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,

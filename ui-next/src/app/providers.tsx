@@ -24,9 +24,10 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
+    // Initial auth check — use getUser() to validate JWT with Supabase server
+    // (getSession() only reads from localStorage and does not verify the token)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUser(user ?? null);
       setAuthLoading(false);
     });
 

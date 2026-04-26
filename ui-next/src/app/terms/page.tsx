@@ -20,7 +20,7 @@ export default function TermsPage() {
         <p className="mb-4">You agree not to use the platform for any unlawful purpose or in any way that interrupts, damages, or impairs the service. You are responsible for maintaining the confidentiality of your account.</p>
 
         <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">4. Intellectual Property</h2>
-        <p className="mb-4">You retain all rights to the data you input into the service. However, by using the service, you grant ARA a license to process this data to provide the reasoning outputs.</p>
+        <p className="mb-4">You retain all rights to the data you input into the service. However, by using the service, you grant Reasoner a license to process this data to provide the reasoning outputs.</p>
 
         <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">5. Limitation of Liability</h2>
         <p className="mb-4">ARA shall not be liable for any indirect, incidental, special, consequential or punitive damages resulting from your use of or inability to use the service.</p>

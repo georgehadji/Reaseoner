@@ -111,6 +111,8 @@ async def run_with_context(
         else:
             return {"success": False, "error": "Failed to generate solution"}
 
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Context analysis failed: %s", exc, exc_info=False)
         return {"success": False, "error": "Internal server error"}

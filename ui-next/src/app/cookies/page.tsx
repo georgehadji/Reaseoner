@@ -22,7 +22,7 @@ export default function CookiesPage() {
         </ul>
         
         <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">Managing Cookies</h2>
-        <p className="mb-4">Most web browsers allow you to control cookies through their settings. However, if you disable strictly necessary cookies, you will not be able to log in or use the core ARA application.</p>
+        <p className="mb-4">Most web browsers allow you to control cookies through their settings. However, if you disable strictly necessary cookies, you will not be able to log in or use the core Reasoner application.</p>
       </div>
       </main>
       <SiteFooter />

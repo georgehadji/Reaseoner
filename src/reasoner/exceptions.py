@@ -249,5 +249,16 @@ def classify_error(error: Exception) -> str:
         return "parse"
     elif isinstance(error, PipelineError):
         return "pipeline"
-    else:
-        return "unknown"
+    # Recognize common third-party provider errors even when not wrapped
+    error_name = type(error).__name__
+    if error_name in ("AuthenticationError", "PermissionDeniedError"):
+        return "auth"
+    if error_name == "RateLimitError":
+        return "rate_limit"
+    if error_name in ("NotFoundError", "BadRequestError"):
+        return "model_not_found"
+    if error_name in ("APITimeoutError", "TimeoutError"):
+        return "timeout"
+    if error_name in ("APIConnectionError", "InternalServerError", "APIError"):
+        return "unavailable"
+    return "unknown"

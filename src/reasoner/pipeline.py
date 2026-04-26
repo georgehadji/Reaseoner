@@ -326,6 +326,11 @@ class ARAPipeline(
             user_prompt=user_prompt,
             **kwargs)
         
+        from reasoner.infrastructure.llm.ports import DegradedLLMResponse
+        if isinstance(raw, DegradedLLMResponse):
+            logger.error(f"LLM degraded for role={role}: {raw.error}")
+            raise RuntimeError(raw.error)
+        
         if not raw or not raw.strip():
             logger.warning(f"LLM returned empty response for role={role}; possible content filter or API error")
 

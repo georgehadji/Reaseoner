@@ -19,9 +19,14 @@ try:
     def _ensure_dotenv() -> None:
         global _dotenv_loaded
         if not _dotenv_loaded:
-            # override=True ensures the .env file is the authoritative source
-            # and that updating the file is reflected without restarting the shell.
-            load_dotenv(Path(__file__).parent.parent.parent.parent / ".env", override=False)
+            # Load .env first, then .env.local as fallback (Next.js convention).
+            # Also check ui-next/.env.local so the backend can share the frontend key.
+            # .env uses override=True so it wins over stale shell env vars.
+            # Local files use override=False so they only fill gaps.
+            root = Path(__file__).parent.parent.parent.parent
+            load_dotenv(root / ".env", override=True)
+            load_dotenv(root / ".env.local", override=False)
+            load_dotenv(root / "ui-next" / ".env.local", override=False)
             _dotenv_loaded = True
 
     _ensure_dotenv()
@@ -61,7 +66,7 @@ class Settings:
 
     # ── Server bind configuration ──
     SERVER_HOST: str = os.getenv("SERVER_HOST", "127.0.0.1")
-    SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8000"))
+    SERVER_PORT: int = int(os.getenv("SERVER_PORT", "8003"))
     UVICORN_HOST: str = os.getenv("UVICORN_HOST", "127.0.0.1")
 
     # ── CSRF ──

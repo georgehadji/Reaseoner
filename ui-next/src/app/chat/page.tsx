@@ -204,6 +204,7 @@ export default function ChatPage() {
   const toggleTier = useAppStore((s) => s.toggleTier);
   const recentCommands = useAppStore((s) => s.recentCommands);
   const addRecentCommand = useAppStore((s) => s.addRecentCommand);
+  const collapsed = useAppStore((s) => s.sidebarCollapsed);
 
   const { history, refresh: refreshHistory, remove: removeHistory } = useConversationHistory();
   const { startRun, startFollowup, stopRun } = usePipelineStream();
@@ -945,9 +946,8 @@ export default function ChatPage() {
       />
 
       <div className="relative flex flex-1 flex-col sm:ml-0 overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
+        <header className={`flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4 ${collapsed ? 'ml-14 sm:ml-0' : ''}`}>
           <div className="flex items-center gap-3">
-            <span className="font-semibold tracking-tight">ARA Chat</span>
             <Tooltip text={serverOnline === true ? 'Online' : serverOnline === false ? 'Offline' : 'Checking…'}>
               <div
                 className={`h-2 w-2 rounded-full ${

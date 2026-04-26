@@ -4,6 +4,8 @@ import { useAppStore } from '@/stores/app-store';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Brain, Zap, Shield, Database, Code, Globe } from 'lucide-react';
 import Link from 'next/link';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 export default function LandingPage() {
   const user = useAppStore((s) => s.user);
@@ -11,43 +13,7 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col">
-      <header className="flex h-16 items-center justify-between px-6 lg:px-12 border-b border-[var(--border)]">
-        <div className="flex items-center gap-2 font-bold text-xl">
-          <Brain className="h-6 w-6 text-[var(--accent)]" />
-          <span>ARA</span>
-        </div>
-        <nav className="hidden md:flex gap-6 text-sm font-medium text-[var(--text-muted)]">
-          <Link href="/about" className="hover:text-[var(--text)] transition-colors">About</Link>
-          <Link href="/pricing" className="hover:text-[var(--text)] transition-colors">Pricing</Link>
-          <Link href="/faq" className="hover:text-[var(--text)] transition-colors">FAQ</Link>
-          <Link href="/help" className="hover:text-[var(--text)] transition-colors">Docs</Link>
-        </nav>
-        <div className="flex items-center gap-3">
-          {user ? (
-            <button
-              onClick={() => router.push('/chat')}
-              className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-90 flex items-center gap-2"
-            >
-              Go to App <ArrowRight className="h-4 w-4" />
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => router.push('/login')}
-                className="text-sm font-medium hover:text-[var(--text)] transition-colors"
-              >
-                Sign In
-              </button>
-              <button
-                onClick={() => router.push('/signup')}
-                className="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-90"
-              >
-                Get Started
-              </button>
-            </>
-          )}
-        </div>
-      </header>
+      <SiteHeader />
 
       <main className="flex-1">
         {/* Hero Section */}
@@ -100,15 +66,7 @@ export default function LandingPage() {
         </section>
       </main>
 
-      <footer className="border-t border-[var(--border)] py-12 text-center text-sm text-[var(--text-muted)]">
-        <div className="flex flex-wrap justify-center gap-6 mb-4">
-          <Link href="/terms" className="hover:text-[var(--text)] transition-colors">Terms of Service</Link>
-          <Link href="/privacy" className="hover:text-[var(--text)] transition-colors">Privacy Policy</Link>
-          <Link href="/cookies" className="hover:text-[var(--text)] transition-colors">Cookie Policy</Link>
-          <Link href="/contact" className="hover:text-[var(--text)] transition-colors">Contact</Link>
-        </div>
-        <p>© {new Date().getFullYear()} Advanced Reasoning Architecture. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

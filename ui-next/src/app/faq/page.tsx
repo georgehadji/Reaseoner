@@ -27,12 +27,16 @@ const faqs = [
   }
 ];
 
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
+
 export default function FAQPage() {
-  const [openIdx, setOpenIdx] = useState<number | null>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-16">
-      <Link href="/" className="text-[var(--accent)] hover:underline mb-8 inline-block">&larr; Back to Home</Link>
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      <SiteHeader />
+      <main className="mx-auto max-w-3xl px-4 py-16 flex-1 w-full">
       <h1 className="text-4xl font-bold mb-2">Frequently Asked Questions</h1>
       <p className="text-[var(--text-muted)] mb-12">Find answers to common questions about ARA.</p>
       
@@ -40,13 +44,13 @@ export default function FAQPage() {
         {faqs.map((faq, idx) => (
           <div key={idx} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden transition-colors">
             <button
-              onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
+              onClick={() => setOpenIndex(openIndex === idx ? null : idx)}
               className="flex w-full items-center justify-between p-5 text-left font-medium text-[var(--text)] hover:bg-[var(--surface-2)]"
             >
               {faq.q}
-              {openIdx === idx ? <ChevronUp className="h-5 w-5 text-[var(--text-muted)]" /> : <ChevronDown className="h-5 w-5 text-[var(--text-muted)]" />}
+              {openIndex === idx ? <ChevronUp className="h-5 w-5 text-[var(--text-muted)]" /> : <ChevronDown className="h-5 w-5 text-[var(--text-muted)]" />}
             </button>
-            {openIdx === idx && (
+            {openIndex === idx && (
               <div className="p-5 pt-0 text-[var(--text-2)] border-t border-[var(--border)] mt-2">
                 <p className="pt-3">{faq.a}</p>
               </div>
@@ -62,6 +66,8 @@ export default function FAQPage() {
           Contact Support
         </Link>
       </div>
+      </main>
+      <SiteFooter />
     </div>
   );
 }

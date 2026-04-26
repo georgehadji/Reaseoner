@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
@@ -13,8 +14,9 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
-      <Link href="/" className="text-[var(--accent)] hover:underline mb-8 inline-block">&larr; Back to Home</Link>
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      <SiteHeader />
+      <main className="mx-auto max-w-2xl px-4 py-16 flex-1 w-full">
       <h1 className="text-4xl font-bold mb-8">Contact Support</h1>
       
       {submitted ? (
@@ -74,6 +76,8 @@ export default function ContactPage() {
           </button>
         </form>
       )}
+      </main>
+      <SiteFooter />
     </div>
   );
 }

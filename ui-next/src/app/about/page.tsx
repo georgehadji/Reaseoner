@@ -2,12 +2,16 @@
 
 import { Brain, Cpu, Database, Network, ShieldCheck, Zap } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 export default function AboutPage() {
   const router = useRouter();
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-12">
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      <SiteHeader />
+      <main className="mx-auto max-w-4xl px-4 py-12 flex-1 w-full">
       <div className="mb-12 text-center">
         <h1 className="text-4xl font-extrabold tracking-tight text-[var(--text)] sm:text-5xl">
           About <span className="text-[var(--accent)]">ARA</span>
@@ -76,6 +80,8 @@ export default function AboutPage() {
           Start Reasoning
         </button>
       </div>
+      </main>
+      <SiteFooter />
     </div>
   );
 }

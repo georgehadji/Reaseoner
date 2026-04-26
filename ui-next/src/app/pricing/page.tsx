@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { Check, X } from 'lucide-react';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 const plans = [
   {
@@ -66,8 +68,10 @@ export default function PricingPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12">
-      <div className="mb-8 text-center">
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      <SiteHeader />
+      <main className="mx-auto max-w-5xl px-4 py-12 flex-1 w-full">
+        <div className="mb-8 text-center">
         <h1 className="text-3xl font-bold text-[var(--text)]">Choose Your Plan</h1>
         <p className="mt-2 text-[var(--text-muted)]">Upgrade to unlock more queries and premium features</p>
       </div>
@@ -119,6 +123,8 @@ export default function PricingPage() {
           </div>
         ))}
       </div>
+      </main>
+      <SiteFooter />
     </div>
   );
 }

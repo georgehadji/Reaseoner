@@ -125,3 +125,13 @@ def top_candidate(candidates: list[VSCandidate]) -> VSCandidate:
     if not candidates:
         raise ValueError("Cannot select top candidate from empty list")
     return max(candidates, key=lambda c: (c.probability, -candidates.index(c)))
+
+
+def compute_verbalized_entropy(candidates: list[VSCandidate]) -> float:
+    """Shannon entropy of the candidate probability distribution."""
+    import math
+
+    probs = [c.probability for c in candidates if c.probability > 0]
+    if not probs:
+        return 0.0
+    return -sum(p * math.log(p) for p in probs)

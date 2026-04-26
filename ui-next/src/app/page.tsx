@@ -186,6 +186,7 @@ function fileToDataUrl(file: File): Promise<string> {
 }
 
 export default function Home() {
+  const user = useAppStore((s) => s.user);
   const running = useAppStore((s) => s.running);
   const setRunning = useAppStore((s) => s.setRunning);
   const composerText = useAppStore((s) => s.composerText);
@@ -976,6 +977,28 @@ export default function Home() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {!user && (
+              <>
+                <button
+                  onClick={() => router.push('/about')}
+                  className="text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+                >
+                  About
+                </button>
+                <button
+                  onClick={() => router.push('/pricing')}
+                  className="text-sm font-medium text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+                >
+                  Pricing
+                </button>
+                <button
+                  onClick={() => router.push('/login')}
+                  className="rounded-lg bg-[var(--accent)] px-3 py-1.5 text-sm font-medium text-[var(--accent-text)] transition-opacity hover:opacity-90"
+                >
+                  Sign In
+                </button>
+              </>
+            )}
             <UserMenu />
             <ThemeToggle />
           </div>

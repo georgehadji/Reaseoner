@@ -1,10 +1,13 @@
 import Link from 'next/link';
 import { BookOpen, Key, Zap, Shield } from 'lucide-react';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 export default function HelpPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 py-16">
-      <Link href="/" className="text-[var(--accent)] hover:underline mb-8 inline-block">&larr; Back to Home</Link>
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      <SiteHeader />
+      <main className="mx-auto max-w-4xl px-4 py-16 flex-1 w-full">
       <h1 className="text-4xl font-bold mb-4">Help Center & Documentation</h1>
       <p className="text-[var(--text-muted)] mb-12 text-lg">Learn how to get the most out of the Advanced Reasoning Architecture.</p>
       
@@ -33,6 +36,8 @@ export default function HelpPage() {
           <p className="text-[var(--text-2)] text-sm">Understanding your monthly quota, tokens, and how to upgrade or cancel your subscription.</p>
         </a>
       </div>
+      </main>
+      <SiteFooter />
     </div>
   );
 }

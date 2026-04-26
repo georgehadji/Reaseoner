@@ -48,6 +48,7 @@ LOG_VS_PROBE_DOMAIN = "vs_probe_domain"
 LOG_VS_PROBE_COUNT = "vs_probe_count"
 LOG_VS_NLI_SCORES = "vs_nli_scores"
 LOG_VS_K = "vs_k"
+LOG_VS_MODE_COLLAPSE = "vs_mode_collapse"
 
 # Deployment profiles
 class VSDeploymentProfile:

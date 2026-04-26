@@ -6,6 +6,8 @@ import { useSubscription } from '@/hooks/useSubscription';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { User, ShieldAlert } from 'lucide-react';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
 
 export default function SettingsPage() {
   const user = useAppStore((s) => s.user);
@@ -59,7 +61,9 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-12">
+    <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
+      <SiteHeader />
+      <main className="mx-auto max-w-3xl px-4 py-12 flex-1 w-full">
       <h1 className="mb-8 text-3xl font-bold text-[var(--text)]">Account Settings</h1>
 
       {message.text && (
@@ -127,6 +131,8 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
+      </main>
+      <SiteFooter />
     </div>
   );
 }

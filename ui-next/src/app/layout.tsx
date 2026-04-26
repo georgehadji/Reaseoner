@@ -13,12 +13,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="h-full overflow-hidden bg-[var(--bg)] text-[var(--text)]">
+    <html lang="en" className="antialiased" suppressHydrationWarning>
+      <body className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col">
         <a href="#main-content" className="skip-link">Skip to main content</a>
-        <main id="main-content" className="h-full">
-          <Providers>{children}</Providers>
-        </main>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

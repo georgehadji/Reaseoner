@@ -61,7 +61,7 @@ export default function FAQPage() {
 
       <div className="mt-12 text-center p-8 rounded-xl bg-[var(--surface-2)] border border-[var(--border)]">
         <h2 className="text-xl font-bold mb-2">Still have questions?</h2>
-        <p className="text-[var(--text-muted)] mb-4">We're here to help.</p>
+        <p className="text-[var(--text-muted)] mb-4">We&apos;re here to help.</p>
         <Link href="/contact" className="inline-block rounded-lg bg-[var(--accent)] px-6 py-2 text-sm font-medium text-[var(--accent-text)] hover:opacity-90">
           Contact Support
         </Link>

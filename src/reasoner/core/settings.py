@@ -117,6 +117,7 @@ class Settings:
 
     # ── Database ──
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
 
     @property
     def internal_api_base_url(self) -> str:

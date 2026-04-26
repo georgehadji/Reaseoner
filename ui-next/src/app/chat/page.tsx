@@ -187,7 +187,7 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
-export default function Home() {
+export default function ChatPage() {
   const router = useRouter();
   const user = useAppStore((s) => s.user);
   const running = useAppStore((s) => s.running);
@@ -931,7 +931,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-[var(--bg)] text-[var(--text)]">
+    <div className="flex h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] overflow-hidden">
       <Sidebar
         conversations={history}
         onLoad={handleLoad}
@@ -944,7 +944,7 @@ export default function Home() {
         lastAssistantResponse={messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1)?.content}
       />
 
-      <div className="relative flex flex-1 flex-col sm:ml-0">
+      <div className="relative flex flex-1 flex-col sm:ml-0 overflow-hidden">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4">
           <div className="flex items-center gap-3">
             <span className="font-semibold tracking-tight">ARA Chat</span>

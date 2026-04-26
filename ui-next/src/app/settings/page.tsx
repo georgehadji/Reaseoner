@@ -33,8 +33,9 @@ export default function SettingsPage() {
       });
       if (error) throw error;
       setMessage({ type: 'success', text: 'Password reset email sent!' });
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to send reset email' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to send reset email';
+      setMessage({ type: 'error', text: msg });
     } finally {
       setLoading(false);
     }

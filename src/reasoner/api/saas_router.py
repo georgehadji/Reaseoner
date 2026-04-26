@@ -109,7 +109,7 @@ async def get_quota_status(user: User = Depends(get_current_user)):
     """Return current usage and remaining quota."""
     service = _get_quota_service()
     result = await service.check(str(user.id), SubscriptionTier.FREE)
-    # TODO Phase 4: use actual user tier
+    # TODO(#502): use actual user tier
     used = (TIER_LIMITS[SubscriptionTier.FREE] - result.remaining) if result.remaining >= 0 else 0
     return {
         "used": used,

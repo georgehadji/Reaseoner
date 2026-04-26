@@ -346,7 +346,7 @@ async def _run_stream_with_metrics(req: RunRequest, user: User | None):
     from reasoner.api.metrics import REASONER_QUERIES_TOTAL, QueryTimer
     from reasoner.logging_utils import set_log_context
 
-    tier = "anonymous" if user is None else "free"  # TODO Phase 4: actual tier
+    tier = "anonymous" if user is None else "free"  # TODO(#502): actual tier
     preset = req.preset or "auto-budget"
     set_log_context(user_id=str(user.id) if user else None, tier=tier, preset=preset)
 
@@ -403,7 +403,7 @@ async def run_pipeline(
                 status_code=409,
                 detail=f"Run {req.client_run_id} is already in progress",
             )
-    # TODO Phase 4: use actual user tier from subscription DB
+    # TODO(#502): use actual user tier from subscription DB
     return StreamingResponse(
         _run_stream_with_metrics(req, user),
         media_type="text/event-stream",

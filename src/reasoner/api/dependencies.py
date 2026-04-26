@@ -187,7 +187,7 @@ async def check_rate_limit(
     """
     if user is not None:
         # Authenticated user — use user_id as bucket key with tier multiplier
-        # TODO Phase 3: fetch tier from subscription
+        # TODO(#501): fetch tier from subscription
         client_id = f"user:{user.id}"
         try:
             allowed, info = await rate_limiter.is_allowed_for_user(client_id, tier="default")
@@ -259,7 +259,7 @@ async def check_quota(
     FastAPI dependency: check if user has remaining quota.
     Raises HTTPException 429 if exceeded.
     """
-    # TODO Phase 4: fetch actual subscription tier from DB
+    # TODO(#502): fetch actual subscription tier from DB
     # For now, use free tier as conservative default
     user_tier = SubscriptionTier.FREE
 

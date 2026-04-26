@@ -1,21 +1,52 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
-import { loadAllConversations, saveConversation as dbSaveConversation, deleteConversation as dbDeleteConversation, clearAllConversations as dbClearAllConversations } from '@/lib/db';
+import {
+  loadConversationsPage,
+  saveConversation as dbSaveConversation,
+  deleteConversation as dbDeleteConversation,
+  clearAllConversations as dbClearAllConversations,
+  ConversationPage,
+} from '@/lib/db';
 import { Conversation } from '@/lib/types';
 
 export function useConversationHistory() {
   const history = useAppStore((s) => s.history);
   const setHistory = useAppStore((s) => s.setHistory);
 
+  const [page, setPage] = useState<ConversationPage | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
+
   useEffect(() => {
-    loadAllConversations().then(setHistory).catch(console.error);
+    loadConversationsPage()
+      .then((firstPage) => {
+        setPage(firstPage);
+        setHistory(firstPage.items);
+      })
+      .catch(console.error);
   }, [setHistory]);
 
+  const loadMore = useCallback(async () => {
+    if (!page?.nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const next = await loadConversationsPage(page.nextCursor);
+      setPage((prev) =>
+        prev ? { items: [...prev.items, ...next.items], nextCursor: next.nextCursor } : next,
+      );
+      setHistory([...history, ...next.items]);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [page, loadingMore, setHistory, history]);
+
   const refresh = async () => {
-    const conversations = await loadAllConversations();
-    setHistory(conversations);
+    const firstPage = await loadConversationsPage();
+    setPage(firstPage);
+    setHistory(firstPage.items);
   };
 
   const save = async (conversation: Conversation) => {
@@ -33,5 +64,5 @@ export function useConversationHistory() {
     await refresh();
   };
 
-  return { history, refresh, save, remove, clear };
+  return { history, page, loadingMore, loadMore, refresh, save, remove, clear };
 }

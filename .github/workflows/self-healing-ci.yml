@@ -469,7 +469,18 @@ jobs:
       
       - name: Start SearXNG
         run: |
-          docker compose -f docker-compose.searxng.yml up -d --wait
+          docker compose -f docker-compose.searxng.yml up -d
+          # Poll for readiness (the container's healthcheck may take 30-60s)
+          for i in {1..30}; do
+            if curl -sf http://localhost:8888/ > /dev/null 2>&1; then
+              echo "[OK] SearXNG is ready"
+              break
+            fi
+            echo "Waiting for SearXNG... ($i/30)"
+            sleep 2
+          done
+          # Verify it's responding
+          curl -sf http://localhost:8888/ || echo "WARNING: SearXNG not responding, tests may fail"
       
       - name: Run SearXNG Integration Tests
         env:

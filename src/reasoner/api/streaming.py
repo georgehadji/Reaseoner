@@ -19,7 +19,7 @@ from reasoner.core.constants import (
 )
 from reasoner.hypergate import HyperGateAgent
 from reasoner.llm import ProviderRouter, _REGISTRY
-from reasoner.models import PipelineState
+from reasoner.models import PipelineState, TaskType
 from reasoner.pipeline import ARAPipeline
 from reasoner.application.services.preset_service import PresetService
 from reasoner.application.services.search_service import SearchService
@@ -488,17 +488,31 @@ async def run_stream(
                 logger.warning("Prompt enhancement failed, using original: %s", exc)
                 state.enhanced_problem = state.problem
 
-        async def decompose_and_vet(state: PipelineState):
-            await pipeline._phase_1_decompose(state)
+        # --- ARTICLE DETECTION: mirror pipeline.run() logic for streaming path ---
+        from reasoner.application.mixins.article_pipeline import is_article_request
+        if is_article_request(state.problem):
+            state.task_type = TaskType.TECHNICAL
+            state.decomposition = ["article workflow"]
+            state.method = "writing"
+            logger.info("Article request detected in stream — routing to writing method")
+
+        async def _run_context_vetting(state: PipelineState):
             await pipeline._phase_context_vetting(state, source_type=req.source_type)
 
         from reasoner.application.flows import build_default_flow_registry
 
-        phases = [
+        phases: list[tuple[float, str, Any, Any]] = [
             (0, "Classification", pipeline._phase_0_classify, _ser_0),
-            (1, "Decomposition", decompose_and_vet, _ser_1),
-            (1.5, "Deep Read", pipeline._phase_deep_read, _ser_1_5),
         ]
+        if not (state.method == "writing" or state.decomposition):
+            phases.append((1, "Decomposition", pipeline._phase_1_decompose, _ser_1))
+            phases.append((1.25, "Context Vetting", _run_context_vetting, _ser_1))
+        else:
+            # Writing method: skip generic decomposition; article pipeline has its own.
+            # Insert no-op phases to preserve phase numbering for downstream logic.
+            phases.append((1, "Decomposition", lambda s: None, _ser_1))
+            phases.append((1.25, "Context Vetting", lambda s: None, _ser_1))
+        phases.append((1.5, "Deep Read", pipeline._phase_deep_read, _ser_1_5))
 
         flow = build_default_flow_registry(pipeline)
         method = pipeline._get_method_from_preset()

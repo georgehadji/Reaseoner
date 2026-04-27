@@ -13,7 +13,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from reasoner.core.constants import TRUNCATION
+from reasoner.core.constants import (
+    DEFAULT_MAX_TOKENS,
+    PHASE_TOKEN_BUDGETS,
+    TRUNCATION,
+)
 from reasoner.infrastructure.llm.router import ProviderRouter
 from reasoner.models import PipelineState
 
@@ -96,6 +100,12 @@ class LLMExecutor:
                 return cached_response, {**token_meta, "cost_usd": 0.0, "model": model_id, "cached": True}
 
         # ── LLM call ──────────────────────────────────────────────────────
+        # Defensive: ensure max_tokens is always set before reaching the provider.
+        # Callers should set it explicitly; this is a fallback for missing values.
+        if "max_tokens" not in kwargs:
+            kwargs["max_tokens"] = PHASE_TOKEN_BUDGETS.get(role, DEFAULT_MAX_TOKENS)
+            logger.debug(f"[EXECUTOR] defaulted max_tokens={kwargs['max_tokens']} for role={role}")
+
         logger.info(f"[CACHE] MISS for {role}")
         raw, metadata = await self.router.call(
             role=role,

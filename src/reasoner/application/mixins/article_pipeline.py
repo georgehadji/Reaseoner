@@ -41,8 +41,16 @@ from reasoner.core.constants import (
 logger = logging.getLogger(__name__)
 
 _WRITING_INDICATORS = [
+    # English
     r"\b(write|draft|compose|author|create)\b.*\b(article|essay|blog|report|paper|explainer)\b",
     r"\barticle\b.*\b(about|on)\b",
+    # Greek (γράψε=write, άρθρο=article, έκθεση=essay, κείμενο=text)
+    r"\b(γράψε|γράψτε|συντάξε|συντάξτε|δημιούργησε|δημιουργήστε)\b.*\b(άρθρο|έκθεση|αναφορά|κείμενο|paper)\b",
+    r"\b(άρθρο|έκθεση)\b.*\b(για|σχετικά\s+με|πάνω\s+σε)\b",
+    # Spanish (escribe=write, artículo=article, ensayo=essay)
+    r"\b(escribe|escribir|redacta|redactar|crea|crear)\b.*\b(artículo|ensayo|blog|reporte|paper)\b",
+    # French (écris=write, article=article, essai=essay)
+    r"\b(écris|écrire|rédige|rédiger|rédigez|rédiges|crée|créer)\b.*\b(article|essai|blog|rapport|paper)\b",
 ]
 
 _PAPER_INDICATORS = [

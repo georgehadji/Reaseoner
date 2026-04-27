@@ -7,19 +7,32 @@ Usage:
   python push_to_github.py "feat: add timing tracking"
 """
 
+import os
 import subprocess
 import sys
 from datetime import datetime
 
 
-def run(cmd: list[str], check: bool = True) -> subprocess.CompletedProcess:
+def run(cmd: list[str], check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
     print(f"$ {' '.join(cmd)}")
-    return subprocess.run(cmd, check=check)
+    return subprocess.run(cmd, check=check, capture_output=capture, text=True)
+
+
+def unlock_git_index() -> None:
+    """Remove stale git index.lock if present."""
+    lock_file = ".git/index.lock"
+    if os.path.exists(lock_file):
+        try:
+            os.remove(lock_file)
+            print("[INFO] Removed stale .git/index.lock")
+        except OSError as exc:
+            print(f"[WARN] Could not remove {lock_file}: {exc}")
 
 
 def main() -> int:
-    # Check for custom message
     custom_msg = sys.argv[1] if len(sys.argv) > 1 else None
+
+    unlock_git_index()
 
     # Show status
     run(["git", "status", "--short"], check=False)
@@ -40,17 +53,14 @@ def main() -> int:
     run(["git", "add", "-A"])
 
     # Commit message
-    if custom_msg:
-        msg = custom_msg
-    else:
-        msg = f"update: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+    msg = custom_msg if custom_msg else f"update: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
     run(["git", "commit", "-m", msg])
 
     # Push
     run(["git", "push", "origin", "HEAD"])
 
-    print("\n✅ Pushed to GitHub successfully!")
+    print("\n[OK] Pushed to GitHub successfully!")
     return 0
 
 

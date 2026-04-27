@@ -11,6 +11,13 @@ search:
   formats:
     - html
     - json
+  # Suspension recovery: private instances restart frequently, so recover fast
+  suspended_times:
+    SearxEngineAccessDenied: 300      # 5 min (was 24h)
+    SearxEngineCaptcha: 300           # 5 min (was 24h)
+    SearxEngineTooManyRequests: 60    # 1 min (was 1h)
+    cf_SearxEngineCaptcha: 300        # 5 min (was 15 days!)
+    cf_SearxEngineAccessDenied: 300   # 5 min (was 24h)
 
 server:
   # The secret key is injected via environment variable
@@ -21,37 +28,68 @@ server:
 ui:
   static_use_hash: true
 
-# Enable a reasonable default set of engines
+# Enable a diverse set of engines across tiers for resilience.
+# Weights: higher = ranked higher in merged results.
 engines:
+  # Tier 1 — Always reliable, never block
   - name: bing
     engine: bing
     shortcut: bi
-    enabled: true
+    weight: 2
+    timeout: 3.0
+
   - name: duckduckgo
     engine: duckduckgo
     shortcut: ddg
-    enabled: true
+    weight: 2
+    timeout: 3.0
+
+  - name: startpage
+    engine: startpage
+    shortcut: sp
+    weight: 1
+    timeout: 4.0
+
+  # Tier 2 — High quality but sometimes blocked on cloud IPs
   - name: google
     engine: google
     shortcut: go
-    enabled: true
+    weight: 3
+    timeout: 5.0
+
   - name: brave
     engine: brave
     shortcut: br
-    enabled: true
+    weight: 1
+    timeout: 4.0
+
+  # Tier 3 — Vertical specialists
   - name: wikipedia
     engine: wikipedia
     shortcut: wp
-    enabled: true
+    weight: 1
+
   - name: arxiv
     engine: arxiv
     shortcut: arx
-    enabled: true
+    weight: 2
+    timeout: 6.0
+
   - name: github
     engine: github
     shortcut: gh
-    enabled: true
+    weight: 2
+    timeout: 5.0
+
   - name: stackoverflow
-    engine: stackoverflow
+    engine: stackexchange
+    api_site: 'stackoverflow'
     shortcut: se
-    enabled: true
+    weight: 2
+    timeout: 5.0
+
+  - name: semantic_scholar
+    engine: semantic_scholar
+    shortcut: ss
+    weight: 1
+    timeout: 5.0

@@ -43,6 +43,14 @@ def _get_build_provider():
 
 logger = logging.getLogger(__name__)
 
+# Circuit breaker for SearXNG — prevents 30s hangs when instance is down
+from reasoner.circuit_breaker import get_circuit_breaker
+
+_SEARXNG_CB = get_circuit_breaker("searxng")
+_SEARXNG_CB.config.failure_threshold = 3
+_SEARXNG_CB.config.success_threshold = 2
+_SEARXNG_CB.config.timeout_seconds = 30.0
+
 # Source type categories for specialized searches
 SOURCE_TYPE_ENGINES: dict[str, list[str]] = {
     "general": [],  # Use default engines
@@ -349,6 +357,14 @@ class DiscoveryClient:
         When page 1 yields fewer than 3 passing results, automatically retries
         with page 2 and merges unique new results.
         """
+        # FAST-FAIL: circuit breaker prevents 30s hangs when SearXNG is down
+        if not await _SEARXNG_CB.can_execute():
+            logger.warning(
+                "SearXNG circuit breaker OPEN — skipping search for %r",
+                query[:60],
+            )
+            return []
+
         if domain:
             query = f"site:{domain} {query}"
 
@@ -389,9 +405,13 @@ class DiscoveryClient:
                     passed, total_raw, (passed / total_raw) * 100, query[:80],
                 )
 
+            # Record success (HTTP OK, even if all results were filtered out)
+            await _SEARXNG_CB.record_success()
             return refined[:num_results]
 
         except Exception as exc:
+            # Record failure so circuit breaker can detect outage pattern
+            await _SEARXNG_CB.record_failure()
             logger.error("Web discovery failed: %s", exc)
             return []
 
@@ -708,7 +728,11 @@ async def get_search_client(
     source_type: Optional[SourceType] = None,
 ) -> tuple[SearchClient, Optional[SourceType]]:
     """Factory: returns Perplexity via OpenRouter if key available, else SearXNG."""
+    searxng_open = not await _SEARXNG_CB.can_execute()
+
     if settings.OPENROUTER_API_KEY:
+        if searxng_open:
+            logger.info("SearXNG circuit OPEN — using Perplexity exclusively")
         try:
             return PerplexitySearchClient(), source_type
         except ValueError:

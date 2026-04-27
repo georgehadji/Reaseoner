@@ -76,8 +76,9 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "qwen3.5-397b-a17b":   {"model": "qwen/qwen3.5-397b-a17b"},
     "qwen3.6-flash":       {"model": "qwen/qwen3.6-flash"},
     "qwen3.6-35b-a3b":     {"model": "qwen/qwen3.6-35b-a3b"},
-    "qwen3.6-max-preview": {"model": "qwen/qwen3.6-max-preview"},
-    "qwen3.6-27b":         {"model": "qwen/qwen3.6-27b"},
+    "qwen3.6-plus-preview": {"model": "qwen/qwen3.6-plus-preview"},
+    "qwen3.6-max-preview":  {"model": "qwen/qwen3.6-max-preview"},
+    "qwen3.6-27b":          {"model": "qwen/qwen3.6-27b"},
     # Kimi
     "kimi-k2-5":        {"model": "moonshotai/kimi-k2.5"},
     "kimi-k2-6":        {"model": "moonshotai/kimi-k2.6"},

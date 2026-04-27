@@ -209,11 +209,10 @@ export const API = {
 export const DEFAULTS = {
   tier: 'budget' as 'budget' | 'premium',
   topK: 2,
-  typewriterWordsPerSecond: 20,
 };
 
 export const LIMITS = {
-  imagePromptMaxChars: 2000,
+  imagePromptMaxChars: 4000,
   maxFileSizeBytes: 10 * 1024 * 1024,
   maxAttachments: 5,
   maxRecentCommands: 3,

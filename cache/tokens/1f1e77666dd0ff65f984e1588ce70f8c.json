@@ -1,0 +1,1 @@
+{"key": "1f1e77666dd0ff65f984e1588ce70f8c", "problem_hash": "ec2b972438a10d5e", "phase": "context_vetting", "model_id": "google/gemini-2.5-flash-lite", "prompt_hash": "329fbc776a012bc6", "response": "```json\n{\"flagged\": []}\n```", "tokens_used": 9343, "created_at": 9168.218, "ttl_seconds": 3600, "access_count": 0, "last_accessed": 9168.218}

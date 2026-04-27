@@ -50,11 +50,17 @@ def _anonymize_ip(ip: str | None) -> str | None:
         if len(parts) == 4:
             return f"{parts[0]}.{parts[1]}.{parts[2]}.0"
         return ip
-    # IPv6: mask last 64 bits (only if we can identify 4+ parts)
+    # IPv6: mask last 64 bits (interface identifier)
     if ":" in ip:
-        parts = [p for p in ip.split(":") if p]
-        if len(parts) >= 4:
-            return ":".join(parts[:4]) + ":0000:0000:0000:0000"
+        try:
+            import ipaddress
+            addr = ipaddress.IPv6Address(ip)
+            network = ipaddress.IPv6Network(
+                (int(addr) & 0xFFFFFFFFFFFFFFFF0000000000000000, 64), strict=False
+            )
+            return str(network.network_address)
+        except ValueError:
+            pass
         return ip
     return ip
 

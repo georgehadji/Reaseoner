@@ -199,6 +199,83 @@ def sanitize_for_prompt(text: str) -> tuple[str, list[str]]:
     return result.sanitized, result.warnings
 
 
+def clean_llm_artifacts(text: str) -> str:
+    """
+    Strip invisible Unicode characters and LLM-specific control tokens from
+    output text before it reaches the user.
+
+    Safe to call on any string; returns the input unchanged if nothing matches.
+    """
+    if not text:
+        return text
+
+    # ── Invisible / zero-width Unicode characters ─────────────────────────
+    # Strip entirely — these are never meaningful in prose.
+    _STRIP_CODEPOINTS = (
+        "​"  # zero-width space          (injected by AI-bypass tools)
+        "‌"  # zero-width non-joiner
+        "‍"  # zero-width joiner
+        "‎"  # left-to-right mark
+        "‏"  # right-to-left mark
+        "﻿"  # byte order mark / zero-width no-break space
+        "­"  # soft hyphen
+        "͏"  # combining grapheme joiner
+        "؜"  # arabic letter mark
+        "⁠"  # word joiner
+        "⁡"  # invisible function application
+        "⁢"  # invisible times
+        "⁣"  # invisible separator
+        "⁤"  # invisible plus
+        "⁪"  # inhibit symmetric swapping
+        "⁫"  # activate symmetric swapping
+        "⁬"  # inhibit arabic form shaping
+        "⁭"  # activate arabic form shaping
+        "⁮"  # national digit shapes
+        "⁯"  # nominal digit shapes
+        "￹"  # interlinear annotation anchor
+        "￺"  # interlinear annotation separator
+        "￻"  # interlinear annotation terminator
+        "�"  # replacement character (artifact of bad decoding)
+    )
+    _strip_table = str.maketrans("", "", _STRIP_CODEPOINTS)
+    text = text.translate(_strip_table)
+
+    # ── Unicode spaces → regular ASCII space ──────────────────────────────
+    # Covers en-space, em-space, thin-space, hair-space, non-breaking space,
+    # narrow no-break space, ideographic space, etc.
+    _SPACE_CHARS = re.compile(
+        r"[   -   　]"
+    )
+    text = _SPACE_CHARS.sub(" ", text)
+
+    # ── Bidi override characters (can hide malicious text visually) ────────
+    _BIDI_STRIP = re.compile(r"[‪-‮⁦-⁩]")
+    text = _BIDI_STRIP.sub("", text)
+
+    # ── Line/paragraph separator → newline ────────────────────────────────
+    text = text.replace(" ", "\n").replace(" ", "\n\n")
+
+    # ── LLM control / chat-template tokens ────────────────────────────────
+    # Listed in order of likelihood; use a single compiled pattern for speed.
+    _LLM_TOKENS = re.compile(
+        r"<\|(?:endoftext|im_start|im_end|end|eot_id|"
+        r"start_header_id|end_header_id|pad|unk|sep|cls|mask|"
+        r"system|user|assistant|begin_of_text|end_of_text)\|>"
+        r"|<</?SYS>>"
+        r"|\[/?INST\]"
+        r"|<\|pad\|>|<\|unk\|>"
+        r"|<pad>|<unk>|<sep>|<cls>|<mask>"
+        r"|▁(?=\s)"   # SentencePiece leading space before whitespace
+    )
+    text = _LLM_TOKENS.sub("", text)
+
+    # ── Trailing whitespace normalization ─────────────────────────────────
+    # Collapse multiple consecutive blank lines (>2) to at most two.
+    text = re.sub(r"\n{3,}", "\n\n", text)
+
+    return text
+
+
 def sanitize_for_logging(text: str, max_length: int = 200) -> str:
     """
     Sanitize text for logging (removes sensitive patterns).

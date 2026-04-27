@@ -341,16 +341,16 @@ IMAGE_GEN_REMOTE_TIMEOUT_SECONDS: float = 20.0
 IMAGE_GEN_COMPLETION_TIMEOUT_SECONDS: float = 90.0
 IMAGE_GEN_ENHANCEMENT_MODEL: str = MODEL_GEMINI_FLASH
 IMAGE_GEN_PRESETS: dict[str, list[str]] = {
-    "budget": ["flux.2-flex", "riverflow-v2-fast-preview"],
-    "premium": ["flux.2-pro", "riverflow-v2-pro"],
-    IMAGE_GEN_BUDGET_PRESET: ["flux.2-flex", "riverflow-v2-fast-preview"],
-    IMAGE_GEN_PREMIUM_PRESET: ["flux.2-pro", "riverflow-v2-pro"],
+    "budget": ["riverflow-v2-fast-preview", "gemini-flash-image"],
+    "premium": ["gemini-pro-image", "gpt-5-image"],
+    IMAGE_GEN_BUDGET_PRESET: ["riverflow-v2-fast-preview", "gemini-flash-image"],
+    IMAGE_GEN_PREMIUM_PRESET: ["gemini-pro-image", "gpt-5-image"],
 }
 IMAGE_GEN_FALLBACKS: dict[str, list[str]] = {
-    "budget": ["seedream-4.5", "flux.2-pro", "riverflow-v2-standard-preview"],
-    "premium": ["flux.2-max", "riverflow-v2-max-preview", "seedream-4.5"],
-    IMAGE_GEN_BUDGET_PRESET: ["seedream-4.5", "flux.2-pro", "riverflow-v2-standard-preview"],
-    IMAGE_GEN_PREMIUM_PRESET: ["flux.2-max", "riverflow-v2-max-preview", "seedream-4.5"],
+    "budget": ["seedream-4.5", "flux.2-pro"],
+    "premium": ["gemini-3.1-flash-image-preview", "gemini-flash-image"],
+    IMAGE_GEN_BUDGET_PRESET: ["seedream-4.5", "flux.2-pro"],
+    IMAGE_GEN_PREMIUM_PRESET: ["gemini-3.1-flash-image-preview", "gemini-flash-image"],
 }
 IMAGE_GEN_ENHANCEMENT_SYSTEM_PROMPT: str = (
     "You are an expert image-generation prompt engineer for DALL-E 3, Midjourney, and Flux. "

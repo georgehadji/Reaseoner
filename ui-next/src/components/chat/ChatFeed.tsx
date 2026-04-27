@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { Copy, Check, Sparkles, Clock, FileText, Image as ImageIcon, Wand2, Download, X, ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
 import { ChatMessage, MemoryBadge } from './ChatMessage';
 import { MarkdownRenderer } from './MarkdownRenderer';
+import { StreamingMarkdown } from './StreamingMarkdown';
 import { PhaseRenderer } from '@/components/phases/PhaseRenderer';
 import { ErrorMessage } from './ErrorMessage';
 import { WidgetRenderer } from '@/components/widgets/WidgetRenderer';
@@ -30,7 +31,6 @@ export interface ChatFeedMessage {
   attachments?: Attachment[];
   phases?: RenderedPhase[];
   isStreaming?: boolean;
-  animated?: boolean; // false = skip typewriter effect (e.g. loaded history)
   currentPhaseName?: string;
   tokens?: TokenCount;
   duration?: number;
@@ -169,12 +169,6 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
             <span>{progress < 0.3 ? 'Sampling models...' : progress < 0.7 ? 'Diffusing...' : 'Rendering...'}</span>
             <span className="font-medium text-mds-color-dark-gray">Working…</span>
           </div>
-          {prompt ? (
-            <div className="rounded-[8px] border border-mds-color-cool-gray/[0.4] bg-mds-color-light-gray/[0.7] px-4 py-3 text-sm font-systemUi text-mds-color-hcp-brand">
-              <span className="mr-2 text-caption font-semibold uppercase tracking-[0.18em] text-mds-color-hcp-brand">Prompt</span>
-              {prompt}
-            </div>
-          ) : null}
         </div>
       </div>
     </div>
@@ -487,21 +481,18 @@ function ChatFeedComponent({
                 </div>
               )}
               {msg.streamingContent ? (
-                <div className="w-full max-w-3xl whitespace-pre-wrap font-systemUi text-body font-normal leading-relaxed text-mds-color-near-white">
-                  {msg.streamingContent}
-                  <span className="inline-block h-[1em] w-0.5 animate-pulse bg-mds-color-action-blue align-middle" />
-                </div>
+                <StreamingMarkdown
+                  text={msg.streamingContent}
+                  isStreaming={msg.isStreaming}
+                />
               ) : phases.length > 0 ? (
                 <div className="w-full">
                   {visiblePhases.map((phase, idx) => {
-                    const isLastPhase = idx === phases.length - 1;
                     return (
                       <PhaseRenderer
                         key={`${msg.id}-${phase.phase}-${idx}`}
                         phase={phase}
                         onComplete={() => handlePhaseComplete(msg.id, idx)}
-                        animationKey={`${msg.id}-${phase.index}`}
-                        animated={msg.animated !== false && isLastPhase}
                         forceOpen={forceOpen}
                         errorPhases={errorPhases}
                       />

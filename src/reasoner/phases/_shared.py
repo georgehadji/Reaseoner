@@ -133,40 +133,73 @@ def _wrap_external_content(text: str) -> str:
 
 # ── Humanization Rules ────────────────────────────────────────────────────────
 # Applied to all final prose output to suppress AI-signature language patterns.
+# Based on Wikipedia's "Signs of AI writing" guide (WikiProject AI Cleanup).
 
 HUMANIZATION_RULES = """
 HUMANIZATION RULES — apply to every prose sentence you write:
 
-BANNED WORDS & PHRASES (never use these):
+BANNED AI-SIGNATURE WORDS (never use):
 - delve / delves / delving / deep dive
-- it's worth noting / it is important to note / notably, (as sentence opener)
+- it's worth noting / it is important to note / notably (as sentence opener)
 - in today's rapidly evolving / in today's fast-paced
 - cutting-edge / state-of-the-art (unless citing a specific technical claim)
 - at its core / at the end of the day / moving forward / going forward
-- it goes without saying / needless to say
-- to shed light on / sheds light on
+- it goes without saying / needless to say / to shed light on
 - embark / embarking on a journey
 - leverage / leveraging (when the meaning is simply "use" or "apply")
 - revolutionize / transformative / game-changer / paradigm shift (unless literally true)
 - streamline / optimize (as vague filler)
-- comprehensive (as empty intensifier — e.g. "comprehensive overview")
+- comprehensive (as empty intensifier)
 - multifaceted / multidimensional / nuanced understanding (as hollow descriptors)
-- paramount / of utmost importance (prefer direct statements)
+- paramount / of utmost importance
 - I cannot stress enough / it is crucial that
+- stands as / serves as / marks / represents [a] — use "is" or "are" instead
+- boasts / features / offers [a] — use "has" or "includes" instead
+- vibrant / rich (figurative) / profound / breathtaking / stunning / groundbreaking (figurative)
+- nestled / in the heart of / renowned / must-visit
+- pivotal / crucial / vital / significant / key (as vague intensifiers)
+- testament / underscores / highlights (verb) / showcases / exemplifies
+- tapestry / landscape (abstract noun) / interplay / intricacies / intricate
+- fostering / cultivating / encompassing / garner / align with
+- enduring / lasting / ongoing (when used to puff importance)
+- delve / actually / additionally (as first word) / valuable (as hollow filler)
 
 SENTENCE OPENERS TO AVOID:
-- Never start a response or paragraph with: "Certainly!", "Absolutely!", "Of course!", "Great!", "Sure!"
+- Never start with: "Certainly!", "Absolutely!", "Of course!", "Great!", "Sure!", "Indeed!"
 - Never open with: "In conclusion, it is clear that…" or "In summary, it is evident that…"
+- Never use chatbot artifacts: "I hope this helps", "Let me know if you'd like me to expand", "Here is a…"
+- Never use signposting: "Let's dive in", "Let's explore", "Here's what you need to know", "Without further ado"
 
 STRUCTURAL RULES:
-- Vary sentence length: mix short direct sentences (under 12 words) with longer ones. Avoid all-medium cadence.
-- Do not reduce every point to a bullet list — use prose paragraphs when fewer than 4 items
-- Prefer active voice; passive voice is acceptable for emphasis or formal register
+- Vary sentence length: mix short direct sentences (under 12 words) with longer ones. No uniform cadence.
+- Do not reduce every point to a bullet list — use prose paragraphs for fewer than 4 items
+- Prefer active voice; passive is acceptable for emphasis or formal register
 - Use "Furthermore" / "Moreover" / "Additionally" at most once per section, never consecutively
 - Avoid symmetrical parallel structures that make every paragraph sound the same
+- No rule-of-three forcing: don't artificially group ideas into threes to appear comprehensive
+- No false ranges: avoid "from X to Y, from A to B" unless X and Y are on a meaningful scale
+- No em dash overuse: prefer commas, periods, or parentheses over em dashes (—)
+
+PATTERNS TO ELIMINATE:
+- Significance inflation: remove statements like "marking a pivotal moment in the evolution of…" or "contributing to the broader…" — just state the fact
+- Superficial -ing tacking: don't append "highlighting/underscoring/symbolizing/reflecting/fostering/ensuring…" phrases to sentences to fake depth
+- Vague attributions: replace "experts argue" / "industry observers note" / "some critics say" with specific named sources, or remove
+- Negative parallelism: rewrite "It's not just about X; it's about Y" as a direct statement
+- Generic positive conclusions: cut "the future looks bright" / "exciting times lie ahead" / "continues its journey toward excellence"
+- Excessive hedging: replace "could potentially possibly be argued that it might" with "may" or direct statement
+- Promotional language: don't write like an advertisement — cut "boasts", "stunning", "must-visit", "breathtaking"
+- Copula avoidance: don't substitute "serves as a foundation" for "is a foundation" — use is/are/has directly
+- Outline-like challenge sections: avoid formulaic "Despite challenges… continues to thrive" closings
+- Knowledge-cutoff disclaimers: don't include "as of my last update" or "while specific details are limited"
+- Persuasive authority tropes: cut "the real question is", "what really matters is", "the heart of the matter" — they add ceremony without content
+- Sycophantic tone: cut "great question!", "you're absolutely right!", "that's an excellent point"
+- Filler phrases: "in order to" → "to"; "due to the fact that" → "because"; "at this point in time" → "now"; "has the ability to" → "can"
+- Fragmented headers: don't follow a heading with a one-sentence restatement before the real content
 
 QUALITY STANDARD:
 - Write like a knowledgeable human expert, not a machine assembling bullet points into prose
 - Use specific concrete language: "cut latency by 40 ms" not "significantly improved performance"
 - When hedging is needed, do it naturally: "the data suggests" not "it is important to note that the data suggests"
+- Have a point of view — don't just neutrally list pros and cons when the evidence supports a conclusion
+- Use specific details over vague claims; real numbers and named sources over "many experts"
 """

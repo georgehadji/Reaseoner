@@ -158,14 +158,15 @@ def build_default_flow_registry(pipeline: ARAPipeline) -> PipelineFlow:
 
     # ── Writing (Research-Backed Article with CoVE, Pre-Mortem, SoT) ───
     flow.register("writing", [
-        PhaseStep(2,    "Decompose Topic",      pipeline._phase_article_decompose,      _ser_2),
-        PhaseStep(2.5,  "Retrieve Sources",     pipeline._phase_article_retrieve,       _ser_2),
-        PhaseStep(3,    "Extract Claims (CoVE)", pipeline._phase_article_extract_claims, _ser_3),
-        PhaseStep(3.5,  "Adversarial Verify",   pipeline._phase_article_verify,         _ser_3, critical=True),
-        PhaseStep(4,    "Synthesize (SoT)",     pipeline._phase_article_synthesize,     _ser_4),
-        PhaseStep(4.25, "Pre-Mortem",           pipeline._phase_article_pre_mortem,     _ser_4),
-        PhaseStep(4.5,  "Journal Review",       pipeline._phase_article_critic,         _ser_4),
-        PhaseStep(5,    "Final Assembly",       pipeline._phase_article_assemble,       _ser_5),
+        PhaseStep(2,    "Decompose Topic",       pipeline._phase_article_decompose,      _ser_2),
+        PhaseStep(2.5,  "Retrieve Sources",      pipeline._phase_article_retrieve,       _ser_2),
+        PhaseStep(3,    "Extract Claims (CoVE)", pipeline._phase_article_extract_claims,  _ser_3),
+        PhaseStep(3.5,  "Adversarial Verify",    pipeline._phase_article_verify,          _ser_3, critical=True),
+        PhaseStep(4,    "Synthesize (SoT)",      pipeline._phase_article_synthesize,      _ser_4),
+        PhaseStep(4.25, "Pre-Mortem",            pipeline._phase_article_pre_mortem,      _ser_4),
+        PhaseStep(4.5,  "Journal Review",        pipeline._phase_article_critic,          _ser_4),
+        PhaseStep(5,    "Final Assembly",        pipeline._phase_article_assemble,        _ser_5),
+        PhaseStep(5.5,  "Humanize",              pipeline._phase_article_humanize,        _ser_5),
     ])
 
     # ── Cross-Language (Translate → Multi-Perspective → Back-Translate) ─

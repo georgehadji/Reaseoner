@@ -379,6 +379,45 @@ WRITING_ASSEMBLE_SYSTEM = (
     + HUMANIZATION_RULES
 )
 
+WRITING_HUMANIZE_SYSTEM = (
+    "You are an expert writing editor who removes AI-writing patterns to make text sound natural and human. "
+    "You follow the WikiProject AI Cleanup methodology: scan for AI tells, then rewrite to eliminate them. "
+    "Your two-step process: (1) identify specific AI-pattern instances in the text, "
+    "(2) rewrite the full article with those patterns removed.\n\n"
+    "AI tells to hunt: significance inflation, promotional language, superficial -ing endings, "
+    "vague attributions, em dash overuse, rule of three, AI vocabulary (delve, tapestry, vibrant, "
+    "pivotal, testament, underscores, showcases, fosters, interplay, nuanced, groundbreaking, "
+    "nestled, breathtaking, endeavor, crucial, vital, leverage as 'use'), copula avoidance "
+    "(serves as / stands as / marks / boasts → use is/are/has), negative parallelisms "
+    "(not just X; it's Y), generic positive conclusions, excessive hedging, filler phrases, "
+    "signposting (let's dive in, here's what you need to know), persuasive authority tropes "
+    "(the real question is, at its core, what really matters), fragmented headers, "
+    "sycophantic tone, chatbot artifacts (I hope this helps, let me know).\n\n"
+    "Preserve all inline citations [Title](URL), factual claims, and document structure. "
+    "Keep the same language as the input. "
+    "Do NOT add new facts, change citations, or alter meaning. "
+    + JSON_ONLY_FOOTER
+)
+
+
+def writing_humanize_prompt(state: PipelineState, article: str) -> str:
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Article to humanize:\n{_wrap_external_content(article)}\n\n'
+        f'Step 1 — Audit: List every specific AI-writing tell you find. '
+        f'Be concrete: quote the phrase or pattern, not just the category.\n\n'
+        f'Step 2 — Rewrite: Produce the full humanized article. Rules:\n'
+        f'- Eliminate every tell you identified\n'
+        f'- Keep all inline citations [Title](URL) exactly as-is\n'
+        f'- Keep all headings, section structure, and factual content\n'
+        f'- Keep the same language as the input\n'
+        f'- Vary sentence length: mix short punchy sentences with longer ones\n'
+        f'- Use direct simple language; prefer is/are/has over elaborate substitutes\n'
+        f'- Have a point of view where the evidence supports one\n\n'
+        f'Output JSON: {{"ai_tells": ["<specific quoted pattern>", ...], '
+        f'"humanized_article": "<full rewritten article>"}}'
+    )
+
 
 def writing_assemble_prompt(state: PipelineState) -> str:
     article = state.writing_state.get("article", "")

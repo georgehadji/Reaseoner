@@ -213,6 +213,12 @@ class CircuitBreaker:
             self._stats.last_success_time = time.monotonic()
 
             if self._state == CircuitState.HALF_OPEN:
+                # Release the half-open slot acquired by can_execute() /
+                # _try_acquire_call so that partial successes do not
+                # permanently exhaust half_open_max_calls.
+                self._stats.half_open_current_calls = max(
+                    0, self._stats.half_open_current_calls - 1
+                )
                 if self._stats.consecutive_successes >= self.config.success_threshold:
                     self._state = CircuitState.CLOSED
                     self._stats.consecutive_successes = 0

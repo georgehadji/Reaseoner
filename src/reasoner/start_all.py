@@ -59,30 +59,6 @@ def run_preflight_checks() -> bool:
     return result.returncode == 0
 
 
-def _import_smoke_test() -> bool:
-    """Verify the backend app imports cleanly before spawning uvicorn."""
-    print("[CHECK] Import smoke test...")
-    print(f"[DEBUG] _import_smoke_test: Using Python executable: {sys.executable}")
-    cmd = [
-        sys.executable,
-        "-c",
-        (
-            "import sys; "
-            f"sys.path.insert(0, '{ (REPO_ROOT / 'src').as_posix() }'); "
-            "import reasoner.api; "
-            "print('Import OK', flush=True)"
-        ),
-    ]
-    print(f"[DEBUG] _import_smoke_test: Running command: {' '.join(cmd)}")
-    result = subprocess.run(cmd, text=True)
-    print(f"[DEBUG] _import_smoke_test: Command finished with returncode {result.returncode}")
-    if result.returncode != 0:
-        print("[FAIL]  Backend import failed.")
-        return False
-    print("[OK]    Backend imports cleanly")
-    return True
-
-
 def _port_in_use(port: int) -> tuple[bool, int | None]:
     """Check if a TCP port is already bound. Returns (in_use, pid)."""
     try:
@@ -321,6 +297,16 @@ def shutdown_process(name: str, proc: subprocess.Popen):
     except Exception:
         proc.kill()
         proc.wait()
+
+
+def _import_smoke_test() -> bool:
+    """Quick import check to verify the backend package loads cleanly."""
+    try:
+        import reasoner.api  # noqa: F401
+        return True
+    except Exception as exc:
+        print(f"[ERROR] Import smoke test failed: {exc}")
+        return False
 
 
 def main() -> int:

@@ -10,8 +10,11 @@ not present in the JSON.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -44,7 +47,8 @@ def _load_openrouter_pricing() -> dict[str, ModelPricing]:
                     db[model_id] = ModelPricing(float(prompt), float(completion))
                 except ValueError:
                     continue
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to load pricing from %s: %s", json_path, exc)
         pass
     return db
 

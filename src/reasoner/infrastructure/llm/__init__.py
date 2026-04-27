@@ -2,6 +2,7 @@
 
 from reasoner.infrastructure.llm.ports import BaseLLMProvider, LLMResponse, LLMConfig, Message
 from reasoner.infrastructure.llm.exceptions import LLMError
+from reasoner.infrastructure.llm.executor import LLMExecutor
 
 __all__ = [
     "BaseLLMProvider",
@@ -9,4 +10,5 @@ __all__ = [
     "LLMConfig",
     "Message",
     "LLMError",
+    "LLMExecutor",
 ]

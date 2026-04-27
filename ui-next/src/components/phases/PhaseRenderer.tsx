@@ -2,9 +2,9 @@
 
 import { useRef, useEffect, memo } from 'react';
 import { RenderedPhase } from '@/components/chat/ChatFeed';
-import { DEFAULTS, TEXT_SIZES } from '@/lib/config';
-import { TypewriterMarkdown } from '@/components/chat/TypewriterMarkdown';
+import { TEXT_SIZES } from '@/lib/config';
 import { MarkdownRenderer } from '@/components/chat/MarkdownRenderer';
+import { SynthesisRenderer } from './SynthesisRenderer';
 import { PhaseCard } from './PhaseCard';
 import { SynthesisCard } from './SynthesisCard';
 import { ClassificationCard } from './ClassificationCard';
@@ -20,8 +20,6 @@ function isSynthesisPhase(name: string): boolean {
 interface PhaseRendererProps {
   phase: RenderedPhase;
   onComplete?: () => void;
-  animationKey?: string;
-  animated?: boolean;
   forceOpen?: boolean | null;
   errorPhases?: number[];
 }
@@ -104,17 +102,8 @@ function getVettedContext(data: unknown): Array<Record<string, unknown>> {
   return context.filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null);
 }
 
-export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null, errorPhases = [] }: PhaseRendererProps) {
+export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, forceOpen = null, errorPhases = [] }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
-
-  // Trigger onComplete for non-animated phases so the next phase can be revealed
-  const completionRef = useRef(false);
-  useEffect(() => {
-    if (!animated && onComplete && !completionRef.current) {
-      completionRef.current = true;
-      onComplete();
-    }
-  }, [animated, onComplete]);
   const tokens = getTokens(data);
   const models = getModels(data);
   const subagents = getSubagents(data);
@@ -130,11 +119,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
   // Direct Response / Web Search: render inline without a phase card
   if (name === 'Direct Response' || name === 'Web Search') {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
-    return animated ? (
-      <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
-    ) : (
-      <MarkdownRenderer>{md}</MarkdownRenderer>
-    );
+    return <MarkdownRenderer>{md}</MarkdownRenderer>;
   }
 
   // Classification
@@ -179,11 +164,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
-        {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
-        ) : (
-          <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
-        )}
+        <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       </PhaseCard>
     );
   }
@@ -198,11 +179,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
-        {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
-        ) : (
-          <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
-        )}
+        <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       </PhaseCard>
     );
   }
@@ -220,11 +197,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
-        {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
-        ) : (
-          <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
-        )}
+        <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       </PhaseCard>
     );
   }
@@ -299,31 +272,10 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
                 </ul>
               </section>
             )}
-            {synthesisSections.sources.length > 0 && (
-              <section id="sources" className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-4">
-                <h3 className="mb-2 text-sm font-semibold text-[var(--text)]">Sources</h3>
-                <ul className="space-y-1 text-[15px] text-[var(--text)]">
-                  {synthesisSections.sources.map((source, i) => (
-                    <li key={i}>
-                      {source.url ? (
-                        <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline">
-                          {source.title || source.url}
-                        </a>
-                      ) : (
-                        source.title || 'Source'
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
+
           </div>
         )}
-        {animated ? (
-          <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} />
-        ) : (
-          <MarkdownRenderer>{md}</MarkdownRenderer>
-        )}
+        <SynthesisRenderer text={md} />
       </SynthesisCard>
     );
   }
@@ -335,8 +287,8 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, an
   return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
       {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
-      {animated ? (
-        <TypewriterMarkdown text={md} wordsPerSecond={DEFAULTS.typewriterWordsPerSecond} onComplete={onComplete} animationKey={animationKey} className={phaseTextClass} />
+      {isSynth ? (
+        <SynthesisRenderer text={md} className={phaseTextClass} />
       ) : (
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       )}
@@ -386,7 +338,7 @@ function VettedContextBlock({ items }: { items: Array<Record<string, unknown>> }
   );
 }
 
-/** Helper that fires onComplete once after mount (for non-typewriter cards). */
+/** Helper that fires onComplete once after mount. */
 function CompletionTrigger({ onComplete }: { onComplete: () => void }) {
   const fired = useRef(false);
   useEffect(() => {

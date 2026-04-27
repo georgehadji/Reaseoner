@@ -41,6 +41,7 @@ from reasoner.models import (PipelineState, SolutionCandidate, CritiqueScore, St
                 MetaEvaluation, ClaimLabel, PerspectiveType, FinalSolution, MetaCognitiveAudit, TaskType)
 from reasoner.parsing import ParseError, extract_json, safe_list, safe_float, _parse_critique_scores
 from reasoner.llm import LLMError, ProviderRouter
+from reasoner.infrastructure.llm.executor import LLMExecutor
 from reasoner.core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
 from reasoner.core.temperatures import PHASE_TEMPERATURES
 from reasoner.core.constants import (
@@ -52,7 +53,7 @@ from reasoner.core.constants import (
 )
 from reasoner.core.search import get_discovery_client  # Import for web search
 from reasoner.token_cache import get_token_cache # TOKEN OPTIMIZATION: Token-aware caching
-from reasoner.sanitization import sanitize_for_prompt  # SECURITY: prompt-injection defense
+from reasoner.sanitization import sanitize_for_prompt, clean_llm_artifacts  # SECURITY: prompt-injection defense
 import reasoner.phases as phases # Refactored phases
 from reasoner.application.mixins.search_mixin import SearchMixin
 from reasoner.application.mixins.perspective_mixin import PerspectiveMixin
@@ -178,8 +179,14 @@ class ARAPipeline(
         self.domain = kwargs.get('domain', None)  # For domain-specific search
         self.enhance_prompt = kwargs.get('enhance_prompt', False)
         self.attachments = kwargs.get('attachments', [])
-        self.phase_configs = self._PHASE_CONFIGS.copy() # Simplified for brevity
+        self.phase_configs = self._PHASE_CONFIGS.copy()
         self.perspectives = list(DEFAULT_PERSPECTIVES)
+        self._executor = LLMExecutor(
+            router=router,
+            phase_configs=self.phase_configs,
+            token_cache=token_cache,
+            caching_enabled=TOKEN_OPTIMIZATION["caching"],
+        )
 
     def _log(self, phase: str, message: str, state: PipelineState) -> None:
         if self.verbose: logger.info(f"[{phase}] {message}")
@@ -267,124 +274,8 @@ class ARAPipeline(
         phase_key: str | None = None,
         **kwargs
     ) -> tuple[str, dict[str, Any]]:
-        """
-        Call LLM with token-aware caching and cost tracking.
-
-        TOKEN OPTIMIZATION: Checks cache before making LLM call.
-        Cache hit = 100% token savings for that call.
-        COST TRACKING: Accumulates costs in PipelineState for billing.
-        """
-        # Resolve temperature from centralized registry unless explicitly overridden
-        if "temperature" not in kwargs:
-            lookup = phase_key or role
-            if lookup in self.phase_configs:
-                kwargs["temperature"] = self.phase_configs[lookup].temperature
-            else:
-                for name, cfg in self.phase_configs.items():
-                    if cfg.role == role:
-                        kwargs["temperature"] = cfg.temperature
-                        break
-        # Check cache if enabled
-        if token_cache and TOKEN_OPTIMIZATION["caching"]:
-            problem = state.problem
-            model_id = self.router.get(role).model if hasattr(self.router, 'get') else "unknown"
-
-            # Use full prompt for cache key on context-sensitive phases to avoid stale hits
-            cache_prompt = user_prompt if role in ("synthesis", "context_vetting", "primary") else user_prompt[:TRUNCATION.PROBLEM]
-            cached_response = await token_cache.get(
-                problem=problem,
-                phase=role,
-                model_id=model_id,
-                prompt=cache_prompt,
-            )
-
-            if cached_response:
-                self._log("CACHE", f"HIT for {role} (saved ~{len(cached_response)//4} tokens)", state)
-                # Estimate tokens and accumulate (role may be called multiple times)
-                estimated_input = len(user_prompt)//4
-                estimated_output = len(cached_response)//4
-                prior = state.detailed_token_usage.get(role, {"input": 0, "output": 0, "total": 0})
-                state.detailed_token_usage[role] = {
-                    "input": prior["input"] + estimated_input,
-                    "output": prior["output"] + estimated_output,
-                    "total": prior["total"] + estimated_input + estimated_output,
-                }
-                state.phase_models[role] = model_id
-                # Per-phase token and model tracking
-                phase_key = getattr(state, '_current_phase_key', None)
-                if phase_key:
-                    if phase_key not in state.phase_tokens:
-                        state.phase_tokens[phase_key] = {"input": 0, "output": 0}
-                    state.phase_tokens[phase_key]["input"] += estimated_input
-                    state.phase_tokens[phase_key]["output"] += estimated_output
-                    if phase_key not in state.cost_state._phase_models_by_key:
-                        state.cost_state._phase_models_by_key[phase_key] = []
-                    if model_id not in state.cost_state._phase_models_by_key[phase_key]:
-                        state.cost_state._phase_models_by_key[phase_key].append(model_id)
-                # Cache hit = no additional cost
-                token_meta = {"input": estimated_input, "output": estimated_output, "total": estimated_input + estimated_output}
-                return cached_response, {**token_meta, "cost_usd": 0.0, "model": model_id, "cached": True}
-
-        # Cache miss - make actual LLM call
-        self._log("CACHE", f"MISS for {role}", state)
-        raw, metadata = await self.router.call(
-            role=role,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            **kwargs)
-        
-        from reasoner.infrastructure.llm.ports import DegradedLLMResponse
-        if isinstance(raw, DegradedLLMResponse):
-            logger.error(f"LLM degraded for role={role}: {raw.error}")
-            raise RuntimeError(raw.error)
-        
-        if not raw or not raw.strip():
-            logger.warning(f"LLM returned empty response for role={role}; possible content filter or API error")
-
-        # Extract cost info from metadata and accumulate in state
-        cost_usd = metadata.get("cost_usd", 0.0)
-        input_tokens = metadata.get("input_tokens", 0)
-        output_tokens = metadata.get("output_tokens", 0)
-        model = metadata.get("model", "unknown")
-        state.phase_models[role] = model
-
-        # Accumulate costs and tokens
-        if cost_usd > 0:
-            state.total_cost_usd += cost_usd
-            state.phase_costs[role] = cost_usd
-        prior = state.detailed_token_usage.get(role, {"input": 0, "output": 0, "total": 0})
-        state.detailed_token_usage[role] = {
-            "input": prior["input"] + input_tokens,
-            "output": prior["output"] + output_tokens,
-            "total": prior["total"] + input_tokens + output_tokens,
-        }
-        # Per-phase token and model tracking
-        phase_key = getattr(state, '_current_phase_key', None)
-        if phase_key:
-            if phase_key not in state.phase_tokens:
-                state.phase_tokens[phase_key] = {"input": 0, "output": 0}
-            state.phase_tokens[phase_key]["input"] += input_tokens
-            state.phase_tokens[phase_key]["output"] += output_tokens
-            # Track models used in this phase
-            if phase_key not in state.cost_state._phase_models_by_key:
-                state.cost_state._phase_models_by_key[phase_key] = []
-            if model not in state.cost_state._phase_models_by_key[phase_key]:
-                state.cost_state._phase_models_by_key[phase_key].append(model)
-
-        # Store in cache
-        if token_cache and TOKEN_OPTIMIZATION["caching"]:
-            model_id = self.router.get(role).model if hasattr(self.router, 'get') else "unknown"
-            cache_prompt = user_prompt if role in ("synthesis", "context_vetting", "primary") else user_prompt[:TRUNCATION.PROBLEM]
-            await token_cache.set(
-                problem=state.problem,
-                phase=role,
-                model_id=model_id,
-                prompt=cache_prompt,
-                response=raw,
-                tokens_used=input_tokens + output_tokens,
-            )
-
-        return raw, metadata
+        """Delegate to LLMExecutor — caching, cost tracking, and routing live there."""
+        return await self._executor.execute(role, system_prompt, user_prompt, state, phase_key, **kwargs)
 
     def _get_method_from_preset(self) -> str:
         """Determines the reasoning method from the preset name."""
@@ -753,6 +644,8 @@ class ARAPipeline(
         if not core_solution:
             # Last resort: strip any JSON fences from raw text so user never sees raw JSON
             core_solution = strip_json_fences(raw)
+
+        core_solution = clean_llm_artifacts(core_solution)
 
         # Citation integrity validator: warn on URLs not present in current context
         allowed_urls = {r.get("url", "").rstrip("/") for r in (state.vetted_context or [])}

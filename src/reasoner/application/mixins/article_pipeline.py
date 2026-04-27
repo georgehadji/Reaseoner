@@ -25,6 +25,8 @@ from reasoner.models import PipelineState, PerspectiveType, SolutionCandidate
 from reasoner.parsing import extract_json
 
 import reasoner.phases as phases
+from reasoner.phases._shared import HUMANIZATION_RULES
+from reasoner.sanitization import clean_llm_artifacts
 from reasoner.application.mixins._protocol import PipelineMixinProtocol
 from reasoner.core.search import get_discovery_client
 from reasoner.core.constants import (
@@ -181,6 +183,7 @@ _SYNTHESIZER_SYSTEM = (
     "You are a disciplined research writer. Write using ONLY verified claims. "
     "Inline citations required. Mark uncertainty explicitly. Do not generalize beyond sources. "
     "No filler. If coverage is incomplete, state gaps. Output JSON only."
+    + HUMANIZATION_RULES
 )
 
 _CRITIC_SYSTEM = (
@@ -1067,7 +1070,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 else:
                     lines.append(f"- [{title_str}]({url})\n")
 
-        final_text = "\n".join(lines)
+        final_text = clean_llm_artifacts("\n".join(lines))
         state.writing_state["final_article"] = final_text
         state.writing_state["claim_traceability"] = traceability
         state.writing_state["sources_cited"] = sources_used
@@ -1081,6 +1084,56 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         ))
 
         self._log("ARTICLE", f"Final assembly complete: {len(final_text)} chars", state)
+
+    # ── Phase 5.5: Humanize ───────────────────────────────────────────────
+
+    async def _phase_article_humanize(self, state: PipelineState) -> None:
+        """Two-pass humanize: audit AI-writing tells, then rewrite to eliminate them."""
+        self._log("ARTICLE", "Humanize pass: auditing AI-writing patterns...", state)
+        article = state.writing_state.get("final_article", "") or state.writing_state.get("article", "")
+        if not article or len(article) < 100:
+            self._log("ARTICLE", "No article to humanize", state)
+            return
+
+        raw, _ = await self._call_llm_cached(
+            role="article_humanize",
+            system_prompt=phases.WRITING_HUMANIZE_SYSTEM,
+            user_prompt=phases.writing_humanize_prompt(state, article),
+            state=state,
+        )
+        try:
+            data = extract_json(raw)
+        except Exception as exc:
+            self._log("ARTICLE", f"Humanize parse error: {exc}", state)
+            state.errors.append(f"Article humanize: parse error: {exc}")
+            return
+
+        humanized = clean_llm_artifacts(data.get("humanized_article", ""))
+        ai_tells = data.get("ai_tells", [])
+
+        if not humanized or len(humanized) < len(article) * 0.5:
+            self._log("ARTICLE", "Humanize returned empty or truncated — keeping original", state)
+            return
+
+        state.writing_state["ai_tells_found"] = ai_tells
+        state.writing_state["final_article"] = humanized
+
+        # Update the candidate with the humanized version
+        if state.candidates:
+            last = state.candidates[-1]
+            state.candidates[-1] = SolutionCandidate(
+                perspective=last.perspective,
+                content=humanized,
+                key_insights=last.key_insights,
+                model_used=last.model_used,
+            )
+
+        self._log(
+            "ARTICLE",
+            f"Humanize complete: {len(ai_tells)} AI tells fixed, "
+            f"{len(humanized)} chars",
+            state,
+        )
 
     # ── Fallback extraction helpers ──────────────────────────────────────────
 

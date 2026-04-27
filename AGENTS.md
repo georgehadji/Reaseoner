@@ -29,15 +29,20 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 | Web Framework | FastAPI 0.109+ with uvicorn |
 | Data Validation | Pydantic v2 |
 | HTTP Client | httpx |
-| LLM Routing | OpenRouter (primary, 350+ models); direct adapters for Anthropic, OpenAI, Google, Perplexity, DeepSeek, Mistral, xAI, Qwen, Kimi, GLM, MiniMax, Ollama |
+| LLM Routing | OpenRouter (primary, 346+ models); direct adapters for Anthropic, OpenAI, Google, Perplexity, DeepSeek, Mistral, xAI, Qwen, Kimi, GLM, MiniMax, Ollama |
 | Search | SearXNG (self-hosted via Docker Compose), Perplexity Sonar |
-| Database | SQLite (event store, feedback), PostgreSQL support via asyncpg, aiosqlite for async SQLite |
-| File Processing | PyPDF2, python-docx, pymupdf, python-magic |
-| Web Scraping | newspaper3k, lxml |
+| Database | PostgreSQL (asyncpg), SQLite (aiosqlite), SQLAlchemy 2 async ORM, Alembic migrations |
+| Cache / Sessions | Redis (quota caching, rate limiting, session store) |
+| Auth | Supabase JWT + local JWT fallback, token-based scoped auth |
+| Billing | Stripe (checkout, webhooks, pro/enterprise tiers) |
+| File Processing | pypdf, python-docx, pymupdf, python-magic |
+| Web Scraping | lxml |
 | Financial Data | yfinance, yahooquery |
 | Math | simpleeval |
 | Memory/Cache | Custom token cache, Neuro-based long-term memory with embedding search |
-| Security | Custom auth manager, token-bucket rate limiter, circuit breaker, input sanitization, prompt-injection filtering |
+| Security | Custom auth manager, token-bucket rate limiter, circuit breaker, input sanitization, prompt-injection filtering, CSRF HMAC-SHA256 |
+| Production WSGI | gunicorn |
+| Monitoring | psutil (memory limits), Sentry tracing |
 
 ### Frontend (`ui-next/`)
 | Layer | Technology |
@@ -51,10 +56,14 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 | Markdown | react-markdown, react-syntax-highlighter, remark-gfm, rehype-highlight |
 | Icons | lucide-react |
 | Animation | framer-motion |
+| Charts | recharts |
+| Payments | `@stripe/react-stripe-js` |
+| Auth | `@supabase/supabase-js` |
+| Error Tracking | `@sentry/nextjs` |
 | Testing | Vitest v4, @testing-library/react, @playwright/test |
 | Linting | ESLint 9 flat config (`eslint.config.mjs`) |
 
-**Critical frontend note:** Tailwind CSS v4 does **NOT** use a `tailwind.config.ts` file. Configuration is CSS-native via `@import "tailwindcss"` in `globals.css` and the `@tailwindcss/postcss` PostCSS plugin. Do **not** create a `tailwind.config.ts`.
+**Critical frontend note:** Tailwind CSS v4 does **NOT** use a `tailwind.config.ts` file. Configuration is CSS-native via `@import "tailwindcss" in `globals.css` and the `@tailwindcss/postcss` PostCSS plugin. Do **not** create a `tailwind.config.ts`.
 
 ---
 
@@ -79,23 +88,28 @@ Reasoner/
 ├── gate_agent.py           # Legacy GateAgent + HyperGateAgent lazy import
 ├── requirements.txt        # Python dependencies (no pyproject.toml / setup.py / setup.cfg)
 ├── pytest.ini              # Test configuration
+├── alembic.ini             # Alembic migration configuration
 ├── .env / .env.example     # Environment variables (NEVER commit .env)
-├── docker-compose.searxng.yml   # SearXNG container setup
+├── docker-compose.yml      # Full production stack (Caddy, backend, frontend, Postgres, Redis, SearXNG)
+├── docker-compose.searxng.yml   # SearXNG-only container setup
 ├── kill_servers.py         # Utility to kill running backend/frontend processes
 ├── kill_servers.bat        # Windows batch equivalent
 ├── push_to_github.py       # Git push helper
 ├── push_to_github.bat      # Windows batch equivalent
-├── tests/                  # 80+ pytest files
+├── tests/                  # 140+ pytest files
 ├── src/reasoner/           # Main Python package
 ├── ui-next/                # Next.js frontend
 ├── cache/                  # Run-related cache
 ├── docs/                   # Markdown documentation (architecture plans, audits, research)
-├── scripts/                # Utility scripts (smoke_test_search.py)
+├── scripts/                # Utility scripts (smoke_test_search.py, scan-secrets.py)
 ├── skills/                 # Project-specific skill definitions for agents
 ├── legacy/                 # Legacy modules (health_check.py, alerts.py, audit.py, etc.)
 ├── .claude/skills/         # Claude-specific skills (ara-add-preset, ara-add-provider, ara-debug, etc.)
 ├── .github/workflows/      # CI/CD (self-healing-ci.yml)
-└── uploads/                # File upload storage
+├── uploads/                # File upload storage
+├── history/                # Pipeline run history JSON files (runtime data)
+├── logs/                   # Runtime logs (e.g., dead_letter_events.jsonl)
+└── vs_vertical_configs/    # Vertical solution configs (aerospace, legal, radiology)
 ```
 
 ### Backend Source (`src/reasoner/`)
@@ -105,10 +119,10 @@ src/reasoner/
 ├── main.py                        # CLI entry point with argparse
 ├── pipeline.py                    # ARAPipeline orchestrator
 ├── models.py                      # Core dataclasses: PipelineState, enums, etc.
-├── core/                          # Domain core abstractions
+├── core/                          # Domain core abstractions (zero I/O)
 │   ├── protocol.py                # PhaseConfig, PhaseResult, Phase Protocol
-│   ├── constants.py               # Token budgets, defaults, truncation rules
-│   ├── settings.py                # Pydantic-settings from .env
+│   ├── constants.py               # Token budgets, defaults, truncation rules, timeouts
+│   ├── settings.py                # Pydantic-settings from .env (ONLY env reader)
 │   ├── temperatures.py            # Per-phase temperature maps
 │   ├── search.py                  # Discovery client for web search
 │   ├── memory.py                  # Memory abstractions
@@ -122,14 +136,17 @@ src/reasoner/
 │       └── __init__.py
 ├── domain/                        # Domain logic
 │   ├── preset_core.py             # Preset data structures
-│   └── preset_registry.py         # Preset definitions and resolution
-├── application/                   # Application layer
+│   ├── preset_registry.py         # Preset definitions and resolution (24+ presets)
+│   ├── saas.py                    # SaaS domain models (User, QuotaResult, tiers)
+│   └── __init__.py
+├── application/                   # Application layer (CQRS + Event Bus + Mixins)
 │   ├── commands/                  # Command handlers
-│   ├── event_bus/                 # In-memory event bus
+│   ├── event_bus/                 # In-memory event bus with backpressure handling
 │   ├── flows/                     # Pipeline flows
 │   ├── handlers/                  # Event handlers
-│   ├── mixins/                    # Method-specific mixins
+│   ├── mixins/                    # Method-specific mixins (13 mixins)
 │   │   ├── article_pipeline.py
+│   │   ├── coding_pipeline.py
 │   │   ├── cognitive_mixin.py
 │   │   ├── debate_mixin.py
 │   │   ├── delphi_mixin.py
@@ -149,7 +166,7 @@ src/reasoner/
 │       ├── preset_service.py
 │       ├── quota_service.py
 │       └── search_service.py
-├── phases/                        # 16+ reasoning method implementations
+├── phases/                        # 17 reasoning method implementations
 │   ├── multi_perspective.py
 │   ├── debate.py
 │   ├── jury.py
@@ -173,42 +190,49 @@ src/reasoner/
 │   ├── llm/                       # LLM abstraction
 │   │   ├── base.py
 │   │   ├── ports.py               # BaseLLMProvider, LLMResponse, LLMConfig, Message
-│   │   ├── registry.py            # Model registry (_REGISTRY)
+│   │   ├── registry.py            # Model registry (_REGISTRY with 70+ entries)
 │   │   ├── router.py              # ProviderRouter
 │   │   ├── providers/             # Provider adapters
 │   │   │   └── openai_compat.py
 │   │   └── extraction/            # JSON extraction utilities
-│   ├── persistence/               # Event store, postgres, snapshots, feedback store
+│   ├── persistence/               # Event store, postgres, snapshots, feedback store, auth store
 │   │   ├── event_store.py
 │   │   ├── feedback_store.py
 │   │   ├── postgres_store.py
 │   │   ├── snapshots.py
 │   │   ├── auth_store.py
 │   │   └── __init__.py
+│   ├── redis/                     # Redis client, RunStateManager
+│   ├── auth/                      # Infrastructure auth implementations
+│   ├── billing/                   # Stripe adapter and billing infrastructure
 │   ├── websocket/                 # WebSocket manager
 │   ├── translation/               # Translation utilities
 │   └── widgets/                   # Widget registry (calculator, stocks, weather, etc.)
 ├── api/                           # FastAPI application
 │   ├── __init__.py                # App factory, CORS, rate limiter, security middleware
-│   ├── routes/                    # REST/SSE routes
-│   │   ├── context.py
-│   │   ├── history.py
-│   │   ├── images.py
-│   │   ├── keys.py
-│   │   ├── legacy_widgets.py
-│   │   ├── pipelines.py
-│   │   ├── uploads.py
-│   │   ├── websocket.py
-│   │   └── widgets.py
-│   ├── schemas.py
+│   ├── saas_router.py             # SaaS routes (auth, quota, history)
+│   ├── billing_router.py          # Stripe billing routes
+│   ├── metrics.py                 # Prometheus metrics endpoint
+│   ├── cron.py                    # Scheduled task endpoints
+│   ├── schemas.py                 # Pydantic v2 request/response models
 │   ├── serializers.py
-│   ├── streaming.py
-│   ├── middleware.py
-│   ├── auth_deps.py
+│   ├── streaming.py               # SSE streaming utilities
+│   ├── middleware.py              # Custom middleware (security, audit, memory, timeout)
+│   ├── auth_deps.py               # Auth dependency injection
 │   ├── cache.py
 │   ├── csrf.py
 │   ├── history.py
-│   └── run_state.py
+│   ├── run_state.py
+│   └── routes/                    # REST/SSE route modules
+│       ├── context.py
+│       ├── history.py
+│       ├── images.py
+│       ├── keys.py
+│       ├── legacy_widgets.py
+│       ├── pipelines.py
+│       ├── uploads.py
+│       ├── websocket.py
+│       └── widgets.py
 ├── hypergate/                     # HyperGate pre-router
 │   ├── hyperagent.py
 │   ├── base_sub_agent.py
@@ -254,6 +278,13 @@ src/reasoner/
 │   ├── test_generation_engine.py
 │   ├── generated_tests/           # Auto-generated pytest files
 │   └── README.md
+├── security/                      # URL validation, security utilities
+├── vs_vertical_configs/           # Vertical solution configs
+├── utils/                         # json_safe.py and general utilities
+├── logs/                          # Runtime log storage
+├── documents/                     # Document vector store
+├── history/                       # Pipeline run history storage
+├── uploads/                       # Uploaded file storage
 └── [utility modules]
     ├── auth.py                    # Token-based auth with scopes
     ├── rate_limiter.py            # Token bucket rate limiter
@@ -291,6 +322,7 @@ ui-next/src/
 │       ├── feedback/route.ts
 │       ├── cache/route.ts
 │       ├── csrf/route.ts
+│       ├── billing/               # Stripe checkout session routes
 │       └── neuro/                 # Neuro memory routes
 │           ├── health/route.ts
 │           ├── learn/route.ts
@@ -341,6 +373,10 @@ python -m pytest tests/ --cov=src/reasoner --cov-report=html
 # Python linting (no formal config file — manual consistency)
 ruff check src/reasoner/
 ruff format src/reasoner/
+
+# Database migrations
+alembic upgrade head
+alembic revision --autogenerate -m "description"
 ```
 
 ### Frontend
@@ -361,6 +397,9 @@ python start_all.py
 uvicorn asgi:app --reload --port 8003
 docker compose -f docker-compose.searxng.yml up -d
 cd ui-next && npm run dev
+
+# Full production stack (Caddy, backend, frontend, Postgres, Redis, SearXNG)
+docker compose up -d
 ```
 
 ### SearXNG (Search)
@@ -396,6 +435,7 @@ docker compose -f docker-compose.searxng.yml up -d
 
 - **Framework:** pytest with pytest-asyncio, pytest-timeout
 - **Location:** `tests/` directory at repo root
+- **Count:** 140+ test files
 - **Naming:** `test_*.py` files, `Test…` classes
 - **Configuration:** `pytest.ini` sets `testpaths = tests` and `pythonpath = src`
 - **Markers:**
@@ -403,6 +443,7 @@ docker compose -f docker-compose.searxng.yml up -d
   - `integration` — integration tests
   - `timeout` — tests with timeout threshold (requires pytest-timeout)
   - `searxng` — tests requiring a live SearXNG instance
+- **Async config:** `asyncio_mode = auto` and `asyncio_default_fixture_loop_scope = session` in `pytest.ini`. All async fixtures share a single event loop for the entire test session because the project uses in-memory singletons (rate limiter, circuit breaker, auth store) that persist across tests.
 - **Fixtures:** Defined in `tests/conftest.py`:
   - `sample_pipeline_state`, `sample_llm_messages`, `sample_llm_config`, `mock_llm_response`
   - `sample_widget_params`, `sample_domain_events`
@@ -417,6 +458,7 @@ docker compose -f docker-compose.searxng.yml up -d
   - Add regression coverage when fixing parsing, routing, or UI rendering bugs
   - Assert on both happy and fallback paths
   - Use `pytest --run-slow` to include slow tests
+  - `--durations=10` is enabled by default to show the 10 slowest tests per run
 
 ---
 
@@ -425,9 +467,10 @@ docker compose -f docker-compose.searxng.yml up -d
 ### Required Environment Variables (`.env`)
 Copy `.env.example` to `.env` and fill in:
 
+**LLM API Keys**
 | Variable | Purpose |
 |----------|---------|
-| `OPENROUTER_API_KEY` | Primary LLM access (recommended single key) |
+| `OPENROUTER_API_KEY` | Primary LLM access (recommended single key for 346+ models) |
 | `OPENAI_API_KEY` | Direct OpenAI access (optional) |
 | `ANTHROPIC_API_KEY` | Direct Anthropic access (optional) |
 | `GOOGLE_API_KEY` | Direct Google Gemini access (optional) |
@@ -438,18 +481,70 @@ Copy `.env.example` to `.env` and fill in:
 | `DASHSCOPE_API_KEY` | Alibaba Qwen access (optional) |
 | `MOONSHOT_API_KEY` | Moonshot Kimi access (optional) |
 | `ZHIPUAI_API_KEY` | ZhipuAI GLM access (optional) |
-| `ADMIN_API_KEY` | Required for production admin endpoints |
-| `SEARXNG_URL` | SearXNG instance URL (default: http://localhost:8888) |
+
+**Security & Admin**
+| Variable | Purpose |
+|----------|---------|
+| `ADMIN_API_KEY` | Required for production admin endpoints; generate with `secrets.token_urlsafe(32)` |
+| `CSRF_SECRET` | HMAC-SHA256 signing secret; generate with `secrets.token_urlsafe(32)` |
+| `ENVIRONMENT` | `development` or `production`; omitting defaults CORS to dev mode (insecure) |
+
+**Server & Networking**
+| Variable | Purpose |
+|----------|---------|
 | `DEBUG` | Must be `false` in production |
 | `LOG_LEVEL` | DEBUG, INFO, WARNING, ERROR, CRITICAL |
-| `SERVER_HOST` / `SERVER_PORT` | FastAPI bind address (default 127.0.0.1:8000) |
-| `UVICORN_HOST` | Uvicorn bind host (default 0.0.0.0) |
+| `SERVER_HOST` / `SERVER_PORT` | FastAPI bind address (default 127.0.0.1:8003) |
+| `UVICORN_HOST` | Uvicorn bind host (default 127.0.0.1; use 0.0.0.0 in containers) |
 | `CORS_ORIGINS` | Comma-separated allowed frontend origins |
 | `REASONER_API_URL` | Frontend proxy target (default http://localhost:8003) |
-| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` / `RATE_LIMIT_BURST` | Rate limiter config |
+| `TRUSTED_PROXIES` | Comma-separated IPs for X-Forwarded-For parsing (optional) |
+
+**Rate Limiting & Resilience**
+| Variable | Purpose |
+|----------|---------|
+| `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_HOUR` / `RATE_LIMIT_BURST` | Token-bucket config |
+| `RATE_LIMITER_MODE` | `memory` (default, unsafe for multi-worker) or `redis` |
+| `CIRCUIT_BREAKER_MODE` | `memory` (default, unsafe for multi-worker) or `redis` |
+| `MEMORY_LIMIT_MB` / `MEMORY_WARNING_MB` | Process memory limits |
+| `REQUEST_TIMEOUT_SECONDS` | Request timeout (default 300) |
+
+**Search & Documents**
+| Variable | Purpose |
+|----------|---------|
+| `SEARXNG_URL` | SearXNG instance URL (default: http://localhost:8888) |
 | `COHERE_RERANK_ENABLED` | Enable Cohere reranking via OpenRouter |
-| `DOCUMENT_SEMANTIC_RETRIEVAL_ENABLED` | Opt-in semantic retrieval for uploaded files |
-| `ORCHESTRATOR_GIT_ENABLED` | Enable Git integration (optional) |
+| `DOCUMENT_SEMANTIC_RETRIEVAL_ENABLED` | Opt-in semantic chunking for uploaded files |
+| `DOCUMENT_CHUNK_SIZE` / `DOCUMENT_CHUNK_OVERLAP` / `DOCUMENT_MAX_CHUNKS_PER_FILE` | Chunking params |
+
+**SaaS Auth**
+| Variable | Purpose |
+|----------|---------|
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | Supabase project credentials |
+| `JWT_SECRET_KEY` | Local dev JWT fallback when Supabase is unavailable |
+| `ENABLE_LEGACY_API_KEY` | Set `true` for v1 API backward compatibility |
+
+**Database & Cache**
+| Variable | Purpose |
+|----------|---------|
+| `DATABASE_URL` | PostgreSQL connection string (default with asyncpg driver) |
+| `POSTGRES_PASSWORD` | Standalone Postgres password |
+| `DB_POOL_SIZE` | Asyncpg connection pool size (default 10) |
+| `REDIS_URL` | Redis connection string (default redis://localhost:6379/0) |
+
+**Stripe Billing**
+| Variable | Purpose |
+|----------|---------|
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe API and webhook secrets |
+| `STRIPE_PRO_PRICE_ID` / `STRIPE_ENTERPRISE_PRICE_ID` | Product price IDs |
+| `APP_URL` | Frontend URL for checkout redirects (default http://localhost:3000) |
+
+**Git Integration (Optional)**
+| Variable | Purpose |
+|----------|---------|
+| `ORCHESTRATOR_GIT_ENABLED` | Enable Git integration |
+| `ORCHESTRATOR_GIT_STRATEGY` | `manual`, `after_each_task`, `after_phase`, or `after_project` |
+| `ORCHESTRATOR_GIT_AUTO_PUSH` | Auto-push to remote (use with caution) |
 
 **NEVER commit `.env` with real values.**
 
@@ -459,28 +554,32 @@ Copy `.env.example` to `.env` and fill in:
 
 - **Input Sanitization:** All user inputs pass through `reasoner.sanitization.sanitize_for_prompt()` before reaching LLM prompts
 - **Prompt Injection Defense:** Layered filtering in sanitization module + adversarial persuasion defense (`ara_persuasion_defense.py`)
-- **Rate Limiting:** Token-bucket rate limiter per client IP (`rate_limiter.py`)
-- **Authentication:** Token-based auth with scoped permissions (`auth.py`)
+- **XSS Prevention:** Regex-based `<script>` stripping, HTML tag removal, NFKC normalization in `RunRequest.validate_problem()`
+- **Rate Limiting:** Token-bucket rate limiter per client IP (`rate_limiter.py`); Redis backend available for multi-worker deployments
+- **Authentication:** Token-based auth with scoped permissions (`auth.py`); Supabase JWT primary, local JWT fallback
 - **Circuit Breaker:** Automatic fallback when providers fail (`circuit_breaker.py`)
 - **CSRF Protection:** CSRF token endpoints for state-changing operations (HMAC-SHA256 signed, verified in Next.js API routes **and** FastAPI backend via `require_csrf`)
-- **Security Headers:** X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS (production), CSP (dynamic WebSocket origin allowlist)
+- **Security Headers:** X-Frame-Options, X-Content-Type-Options, Referrer-Policy, HSTS (production), dynamic CSP with WebSocket origin allowlist
 - **CORS:** Restricted to known origins (configurable via `CORS_ORIGINS` env var) with an explicit header whitelist
 - **Frontend proxy validation:** Next.js API routes validate upstream URLs against port allowlists and block private IPs in production
-- **Horizontal Scaling Limitations:** Rate limiter, circuit breaker, and auth store are in-memory by default. For multi-worker deployments, enable `AUTH_PERSISTENCE_ENABLED=true` and place a shared rate limiter (e.g., Redis or reverse-proxy) in front of the app. Set `RATE_LIMITER_MODE` / `CIRCUIT_BREAKER_MODE` to configure backends.
+- **Admin endpoint hardening:** Admin endpoints require BOTH a valid JWT with `admin` scope AND a correct `X-Admin-Key` header; uses `secrets.compare_digest()` for constant-time comparison
+- **Environment guard:** `ENVIRONMENT=development` explicitly logs an insecure-CORS warning on startup
+- **Horizontal Scaling Limitations:** Rate limiter, circuit breaker, and auth store are in-memory by default. For multi-worker deployments, enable `AUTH_PERSISTENCE_ENABLED=true`, set `RATE_LIMITER_MODE=redis` / `CIRCUIT_BREAKER_MODE=redis`, and place a shared rate limiter (e.g., Redis or reverse-proxy) in front of the app.
 
 ---
 
 ## 9. Architecture Patterns
 
-1. **Event Sourcing** — Pipeline state derived from domain events stored in SQLite
-2. **CQRS** — Separate command and query handlers
+1. **Event Sourcing** — Pipeline state derived from domain events stored in SQLite/PostgreSQL
+2. **CQRS** — Separate command and query handlers in `application/`
 3. **Hexagonal Architecture** — Domain depends on protocols (Widget, Phase), not concrete implementations
-4. **Mixin Pattern** — Method-specific behaviors composed via mixins (DebateMixin, JuryMixin, etc.)
-5. **Provider Router with Fallbacks** — Cross-lab diversity with automatic fallback on failure
+4. **Mixin Pattern** — Method-specific behaviors composed via 13 mixins; explicit `PipelineMixinProtocol` contract
+5. **Provider Router with Fallbacks** — Cross-lab diversity with automatic fallback on failure; `_REGISTRY` maps 70+ model IDs
 6. **HyperGate Pre-Routing** — 6 parallel sub-agents detect language, complexity, directness, web need, and optimal method
-7. **Token Optimization** — Phase-specific budgets, context compression, caching
-8. **Security in Depth** — Input sanitization, prompt injection filtering, rate limiting, scoped auth, CSRF protection
+7. **Token Optimization** — Phase-specific budgets (`PHASE_TOKEN_BUDGETS`), context compression (`ContextCompressor`), token-aware caching
+8. **Security in Depth** — Input sanitization, prompt injection filtering, rate limiting, scoped auth, CSRF protection, XSS prevention
 9. **Dual-Stream Frontend** — SSE carries all phase data/events; WebSocket is used ONLY for control signals (stop, status) to avoid double-processing
+10. **SaaS-Ready** — Supabase auth, Stripe billing, Redis caching, PostgreSQL persistence, quota enforcement, tiered presets
 
 ---
 
@@ -495,9 +594,9 @@ Copy `.env.example` to `.env` and fill in:
 
 ---
 
-## 11. Reasoning Methods (16+)
+## 11. Reasoning Methods (17)
 
-The pipeline supports 16+ reasoning methodologies. Each method has its own phase module and renderer:
+The pipeline supports 17 reasoning methodologies. Each method has its own phase module and renderer:
 
 1. **Multi-Perspective** — Parallel constructive/destructive/systemic/minimalist analysis
 2. **Debate** — Adversarial reasoning with opening, rebuttal, judge phases

@@ -5,8 +5,6 @@ from __future__ import annotations
 from reasoner.core.constants import (
     IMAGE_GEN_BUDGET_PRESET,
     IMAGE_GEN_PREMIUM_PRESET,
-    MODEL_FLUX_2_FLEX,
-    MODEL_FLUX_2_PRO,
     MODEL_GEMINI_PRO_IMAGE,
 )
 from reasoner.domain.preset_core import PipelinePreset
@@ -1634,30 +1632,30 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": IMAGE_GEN_BUDGET_PRESET,
         "name": "Image Generation (Budget)",
-        "description": "Generate images using Flux 2 Flex and Riverflow v2 Fast Preview as primary models, with Seedream 4.5, Flux 2 Pro, and Riverflow v2 Standard Preview as fallbacks.",
-        "primary_id": MODEL_FLUX_2_FLEX,
+        "description": "Generate images using Riverflow v2 Fast Preview and Gemini Flash Image as primary models, with Seedream 4.5 and Flux 2 Pro as fallbacks.",
+        "primary_id": "riverflow-v2-fast-preview",
         "routing": {},
         "fallback_routing": {},
         "notes": [
-            "Flux 2 Flex: efficient open‑source image model, fast and cost‑effective",
             "Riverflow v2 Fast Preview: optimized for speed with good quality",
+            "Gemini Flash Image: Google multimodal model with fast generation and strong instruction following",
             "Seedream 4.5 fallback: ByteDance's capable image model",
             "Flux 2 Pro fallback: higher quality with more detail",
-            "Riverflow v2 Standard Preview fallback: balanced quality and speed",
         ],
     },
     {
         "id": IMAGE_GEN_PREMIUM_PRESET,
         "name": "Image Generation (Premium)",
-        "description": "Generate images using Flux 2 Pro and Riverflow v2 Pro as primary models, with Flux 2 Max, Riverflow v2 Max Preview, and Seedream 4.5 as fallbacks.",
+        "description": "Generate images using Gemini 3 Pro Image Preview and GPT-5 Image as primary models, with Gemini 3.1 Flash Image Preview and Gemini Flash Image as fallbacks.",
         "primary_id": MODEL_GEMINI_PRO_IMAGE,
         "required_tier": "pro",
         "routing": {},
         "fallback_routing": {},
         "notes": [
-            "Gemini 3 Pro Image Preview: $2/M input, $12/M output — best text-in-image, 2K/4K support",
-            "GPT-5 Image fallback: OpenAI flagship with excellent instruction following",
-            "Gemini 3.1 Flash Image Preview final fallback: fast high-quality safety net",
+            "Gemini 3 Pro Image Preview primary: $2/M input, $12/M output — best text-in-image, 2K/4K support",
+            "GPT-5 Image primary: OpenAI flagship with excellent instruction following",
+            "Gemini 3.1 Flash Image Preview fallback: fast high-quality safety net",
+            "Gemini Flash Image final fallback: speed-optimized multimodal safety net",
         ],
     },
 ]

@@ -196,9 +196,9 @@ class GenerateImageRequest(BaseModel):
         v = v.strip()
         if not v:
             raise ValueError("Prompt cannot be empty")
-        if len(v) > 2000:
+        if len(v) > 4000:
             # Enforce a hard limit to avoid request rejection downstream.
-            v = v[:2000]
+            v = v[:4000]
         return v
 
     @field_validator("preset")

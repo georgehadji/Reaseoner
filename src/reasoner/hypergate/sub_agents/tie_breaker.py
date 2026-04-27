@@ -23,9 +23,9 @@ _SYSTEM = (
     "- 'web_search': perform a live web search and return results\n"
     "- 'pipeline': run a structured multi-phase reasoning pipeline\n\n"
     "If action is 'pipeline', also specify the best method from this list:\n"
-    "debate, scientific, socratic, multi_perspective, iterative, research, "
+    "debate, scientific, socratic, multi_perspective, jury, research, "
     "pre_mortem, bayesian, dialectical, analogical, delphi, "
-    "cove, sot, tot, pot, self_discover\n\n"
+    "cove, sot, tot, pot, self_discover, writing, coding\n\n"
     "Output ONLY valid JSON with exactly four keys: "
     "'action' (direct|web_search|pipeline), "
     "'method' (method name or null), "
@@ -36,9 +36,9 @@ _SYSTEM = (
 
 _VALID_ACTIONS = {"direct", "web_search", "pipeline"}
 _VALID_METHODS = {
-    "debate", "scientific", "socratic", "multi_perspective", "iterative",
+    "debate", "scientific", "socratic", "multi_perspective", "jury",
     "research", "pre_mortem", "bayesian", "dialectical", "analogical", "delphi",
-    "cove", "sot", "tot", "pot", "self_discover",
+    "cove", "sot", "tot", "pot", "self_discover", "writing", "coding",
 }
 
 

@@ -54,3 +54,5 @@ settings.json
 
 # Git worktrees
 .worktrees/
+# Local agent profile configs (may contain secrets)
+.openclaude-profile.json

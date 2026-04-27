@@ -2,8 +2,7 @@
   "profile": "openai",
   "env": {
     "OPENAI_BASE_URL": "https://api.deepseek.com/v1",
-    "OPENAI_MODEL": "deepseek-v4-pro",
-    "OPENAI_API_KEY": "sk-3b352fa5b3644d12b5bd2c5ea6fa5245"
+    "OPENAI_MODEL": "deepseek-v4-pro"
   },
   "createdAt": "2026-04-25T17:45:02.879Z"
 }

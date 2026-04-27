@@ -28,7 +28,7 @@ import reasoner.phases as phases
 from reasoner.phases._shared import HUMANIZATION_RULES
 from reasoner.sanitization import clean_llm_artifacts
 from reasoner.application.mixins._protocol import PipelineMixinProtocol
-from reasoner.core.search import get_discovery_client
+from reasoner.core.search import get_search_client
 from reasoner.core.constants import (
     ARTICLE_MAX_SOURCE_COUNT,
     ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION,
@@ -305,9 +305,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             subquestions = [{"id": "Q0", "question": state.problem, "priority": "high", "risk": "low"}]
 
         try:
-            client, _ = await get_discovery_client()
+            client, _ = await get_search_client()
         except Exception as e:
-            self._log("ARTICLE", f"Discovery client failed: {e}", state)
+            self._log("ARTICLE", f"Search client failed: {e}", state)
             state.errors.append(f"Article retrieve: {e}")
             return
 
@@ -359,15 +359,45 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             reverse=True,
         )[:ARTICLE_MAX_SOURCE_COUNT]
 
+        self._log("ARTICLE", f"Initial retrieval: {len(ranked_sources)} ranked sources from {len(all_sources)} unique hits", state)
+
+        # Fallback: if no sources from subquestions, try a broad search with the original problem
+        if not ranked_sources:
+            self._log("ARTICLE", "No sources from subquestions — trying broad fallback search...", state)
+            try:
+                fallback_results = await client.search(
+                    state.problem,
+                    num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY * 2,
+                    domain=self.domain,
+                )
+                for res in fallback_results:
+                    url = res.get("url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        all_sources.append({
+                            "title": res.get("title", ""),
+                            "url": url,
+                            "date": res.get("published", ""),
+                            "authority_score": res.get("score", res.get("freshness_score", 0.0)),
+                            "excerpt": res.get("content", "")[:800],
+                            "source_type": res.get("source_type", "website"),
+                            "query_id": "FALLBACK",
+                            "query_text": state.problem,
+                        })
+                ranked_sources = sorted(
+                    (_normalize_source_record(source) for source in all_sources),
+                    key=lambda source: (float(source.get("authority_score", 0.0)), len(source.get("excerpt", ""))),
+                    reverse=True,
+                )[:ARTICLE_MAX_SOURCE_COUNT]
+            except Exception as exc:
+                self._log("ARTICLE", f"Fallback search failed: {exc}", state)
+
         state.web_discovery_results = ranked_sources
         state.writing_state["retrieved_sources"] = ranked_sources
         self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources from {len(all_sources)} unique hits", state)
 
-        # Hard rule: mark aborted if no sources (downstream phases handle the fallback)
         if not ranked_sources:
-            state.writing_state["aborted"] = True
-            state.errors.append("Article pipeline: ABORT — no sources found")
-            self._log("ARTICLE", "ABORT: no sources found — will fall back to knowledge-only synthesis", state)
+            self._log("ARTICLE", "No sources found — falling back to knowledge-only synthesis", state)
         elif len(ranked_sources) < ARTICLE_MIN_SOURCE_COUNT:
             self._log(
                 "ARTICLE",

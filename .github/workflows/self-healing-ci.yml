@@ -533,6 +533,7 @@ jobs:
       
       - name: Generate Healing Summary
         run: |
+          mkdir -p healing
           python3 -c '
           import subprocess, json
           timestamp = subprocess.check_output(["date", "-Iseconds"]).decode().strip()

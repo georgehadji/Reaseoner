@@ -10,7 +10,34 @@ from __future__ import annotations
 import asyncio
 import time
 
-from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+try:
+    from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+    _PROMETHEUS_AVAILABLE = True
+except Exception:  # pragma: no cover
+    _PROMETHEUS_AVAILABLE = False
+
+    class _NoOpMetric:
+        """Stub metric that silently accepts all operations."""
+        def __init__(self, *args, **kwargs):
+            pass
+        def labels(self, *args, **kwargs):
+            return self
+        def observe(self, *args, **kwargs):
+            pass
+        def inc(self, *args, **kwargs):
+            pass
+        def set(self, *args, **kwargs):
+            pass
+
+    Counter = _NoOpMetric
+    Histogram = _NoOpMetric
+    Gauge = _NoOpMetric
+
+    def generate_latest(*args, **kwargs):
+        return b""
+
+    CONTENT_TYPE_LATEST = "text/plain; charset=utf-8"
+
 from fastapi import Response
 
 # Request counters

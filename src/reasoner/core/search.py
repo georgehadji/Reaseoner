@@ -333,8 +333,6 @@ class DiscoveryClient:
             else:
                 logger.debug("Filtered out search result: %s", result.get("url"))
 
-        if not refined and raw:
-            refined = raw[:num_results]
         return refined, len(raw)
 
     async def search(

@@ -6,7 +6,7 @@ from reasoner.core.constants import (
     ARTICLE_MIN_SOURCE_COUNT,
     JSON_ONLY_FOOTER,
 )
-from reasoner.phases._shared import get_language_instruction, _wrap_user_input, _wrap_external_content
+from reasoner.phases._shared import get_language_instruction, _wrap_user_input, _wrap_external_content, HUMANIZATION_RULES
 
 # ── CoVE for Claims ──────────────────────────────────────────────────────────
 
@@ -146,6 +146,24 @@ ARTICLE_SOT_SOLVE_SYSTEM = (
     "Inline markdown citations required. Do not generalize beyond sources. "
     "Every non-trivial factual paragraph must include at least one citation. "
     + JSON_ONLY_FOOTER
+    + HUMANIZATION_RULES
+)
+
+ACADEMIC_SOT_SYSTEM = (
+    "You are an expert academic writer. Generate a scholarly paper skeleton following academic "
+    "conventions (IMRaD or thesis structure). Each section must be self-contained, citable, "
+    "and written in formal academic register. Assign appropriate word targets per section. "
+    + JSON_ONLY_FOOTER
+)
+
+ACADEMIC_SOT_SOLVE_SYSTEM = (
+    "You are a disciplined academic writer. Write ONE section of a scholarly paper using ONLY "
+    "the provided verified claims. Use formal academic tone: third-person voice, precise language, "
+    "hedged claims where evidence is limited (e.g. 'suggests', 'indicates', 'appears to'). "
+    "Every factual statement requires an inline citation [Source: URL]. "
+    "State limitations explicitly if evidence is thin. Do not generalize beyond sources. "
+    + JSON_ONLY_FOOTER
+    + HUMANIZATION_RULES
 )
 
 
@@ -167,9 +185,52 @@ def article_sot_skeleton_prompt(state, claims_json: str) -> str:
     )
 
 
+def academic_sot_skeleton_prompt(state, claims_json: str) -> str:
+    doc_type = state.writing_state.get("document_type", "paper")
+    if doc_type == "thesis":
+        sections_guide = (
+            "Abstract | Introduction (research question, scope, significance) | "
+            "Literature Review (existing scholarship, theoretical framework, research gap) | "
+            "Methodology (research design, data sources, analytical approach) | "
+            "Findings (primary results, organized thematically) | "
+            "Analysis & Discussion (interpretation, implications, limitations) | "
+            "Conclusion (contributions, synthesis, future research) | "
+            "Bibliography"
+        )
+        word_targets = (
+            "Abstract: 250, Introduction: 600, Literature Review: 1000, "
+            "Methodology: 600, Findings: 800, Analysis & Discussion: 800, Conclusion: 500"
+        )
+    else:
+        sections_guide = (
+            "Abstract | Introduction (background, research question, objectives) | "
+            "Literature Review (related work, theoretical basis) | "
+            "Methodology (approach, data, analysis method) | "
+            "Results & Discussion (findings, interpretation, limitations) | "
+            "Conclusion (summary, implications, future work) | "
+            "References"
+        )
+        word_targets = (
+            "Abstract: 200, Introduction: 400, Literature Review: 600, "
+            "Methodology: 400, Results & Discussion: 600, Conclusion: 300"
+        )
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Topic: {state.problem}\n'
+        f'Document Type: {doc_type.title()}\n\n'
+        f'Verified Claims:\n{claims_json}\n\n'
+        f'Generate an academic skeleton following this structure:\n{sections_guide}\n\n'
+        f'Target word counts: {word_targets}\n\n'
+        f'For each section assign the relevant claim_ids and specify its academic purpose.\n\n'
+        f'Output JSON: {{"sections": [{{'
+        f'"id": "S1", "heading": "...", "claim_ids": ["C1"], '
+        f'"purpose": "...", "dependencies": [], "word_count": 400'
+        f'}}]}}'
+    )
+
+
 def article_sot_solve_prompt(state, section: dict, claims_json: str) -> str:
     section_heading = section.get("heading", "")
-    section_claims = section.get("claim_ids", [])
     return (
         f'{get_language_instruction(state)}\n\n'
         f'Topic: {state.problem}\n\n'
@@ -181,6 +242,28 @@ def article_sot_solve_prompt(state, section: dict, claims_json: str) -> str:
         f'- Do not invent new facts\n'
         f'- Target word count: {section.get("word_count", 200)}\n\n'
         f'Output JSON: {{"content": "...", "word_count": 200}}'
+    )
+
+
+def academic_sot_solve_prompt(state, section: dict, claims_json: str) -> str:
+    section_heading = section.get("heading", "")
+    doc_type = state.writing_state.get("document_type", "paper")
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Document Type: {doc_type.title()}\n'
+        f'Topic: {state.problem}\n\n'
+        f'Section: {section_heading}\n'
+        f'Section purpose: {section.get("purpose", "")}\n\n'
+        f'Verified Claims for this section:\n{claims_json}\n\n'
+        f'Write this section in formal academic style. Rules:\n'
+        f'- Use ONLY the provided claims as evidence\n'
+        f'- Third-person voice, formal register\n'
+        f'- Inline citations as [Source: URL]\n'
+        f'- Hedge where evidence is limited: "suggests", "indicates", "appears to"\n'
+        f'- State gaps or limitations explicitly if evidence is thin\n'
+        f'- Do not use first-person ("I", "we") unless writing an acknowledgements section\n'
+        f'- Target word count: {section.get("word_count", 400)}\n\n'
+        f'Output JSON: {{"content": "...", "word_count": 400}}'
     )
 
 
@@ -223,6 +306,7 @@ WRITING_DRAFT_SYSTEM = (
     "Separate clearly: FACT (from sources) vs INTERPRETATION (your analysis). "
     "The article must read like a publishable high-end magazine or journal explainer, not a generic blog post. "
     + JSON_ONLY_FOOTER
+    + HUMANIZATION_RULES
 )
 
 
@@ -294,6 +378,7 @@ WRITING_ASSEMBLE_SYSTEM = (
     "Remove or flag unverified claims. Add a 'Sources' section at the end. "
     "The final output must preserve only actual source links used in the article body. "
     + JSON_ONLY_FOOTER
+    + HUMANIZATION_RULES
 )
 
 

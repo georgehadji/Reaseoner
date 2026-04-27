@@ -248,8 +248,20 @@ def _searxng_is_healthy() -> bool:
 
 
 def _docker_available() -> bool:
-    """Check if docker compose CLI is available."""
-    return shutil.which("docker") is not None
+    """Check if docker compose CLI is available and the daemon responds."""
+    if shutil.which("docker") is None:
+        return False
+    # Verify the daemon is actually responsive (not frozen)
+    try:
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
 
 
 def _start_searxng() -> bool:
@@ -260,14 +272,19 @@ def _start_searxng() -> bool:
     cmd = [
         "docker", "compose",
         "-f", str(SEARXNG_COMPOSE_FILE),
-        "up", "-d", "--wait",
+        "up", "-d",
     ]
     print(f"[START] SearXNG via Docker Compose ({SEARXNG_URL})")
-    result = subprocess.run(cmd, cwd=str(REPO_ROOT))
+    try:
+        result = subprocess.run(cmd, cwd=str(REPO_ROOT), timeout=30)
+    except subprocess.TimeoutExpired:
+        print("[WARN] Docker Compose timed out after 30s. Daemon may be unresponsive or pulling images.")
+        return False
     if result.returncode != 0:
         print("[WARN] Failed to start SearXNG container.")
         return False
     # Poll health endpoint
+    print("[WAIT]  Polling SearXNG health...")
     for _ in range(30):
         if _searxng_is_healthy():
             print("[OK]    SearXNG is healthy")

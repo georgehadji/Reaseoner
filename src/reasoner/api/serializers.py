@@ -509,7 +509,34 @@ def _ser_4(state: PipelineState) -> dict:
             "tokens": state.phase_tokens.get("Phase 4: Round 2 Estimates", {"input": 0, "output": 0}),
         }
 
+    # Writing flow — SoT synthesis (check before pre_mortem/critic since article persists)
     writing = _get_v(state, 'writing_state', {})
+    if writing and (writing.get("article") or writing.get("sot_sections")):
+        return {
+            "writing_state": {
+                "article": writing.get("article", ""),
+                "title": writing.get("title", ""),
+                "abstract": writing.get("abstract", ""),
+                "sections": writing.get("sections", []),
+                "sot_skeleton": writing.get("sot_skeleton", []),
+                "sot_sections": writing.get("sot_sections", []),
+                "gaps_noted": writing.get("gaps_noted", []),
+            },
+            "tokens": state.phase_tokens.get("Phase 4: Synthesize (SoT)", {"input": 0, "output": 0}),
+        }
+
+    # Writing flow — Journal Review (checked before pre_mortem since both may exist)
+    if writing and writing.get("critic_corrections"):
+        return {
+            "writing_state": {
+                "critic_corrections": writing["critic_corrections"],
+                "critic_score": writing.get("critic_score", 0),
+                "must_revise": writing.get("must_revise", False),
+            },
+            "tokens": state.phase_tokens.get("Phase 4.5: Journal Review", {"input": 0, "output": 0}),
+        }
+
+    # Writing flow — Pre-Mortem
     if writing and writing.get("pre_mortem"):
         pm = writing["pre_mortem"]
         return {
@@ -523,15 +550,7 @@ def _ser_4(state: PipelineState) -> dict:
             },
             "tokens": state.phase_tokens.get("Phase 4.25: Pre-Mortem", {"input": 0, "output": 0}),
         }
-    if writing and writing.get("critic_corrections"):
-        return {
-            "writing_state": {
-                "critic_corrections": writing["critic_corrections"],
-                "critic_score": writing.get("critic_score", 0),
-                "must_revise": writing.get("must_revise", False),
-            },
-            "tokens": state.phase_tokens.get("Phase 4: Journal Review", {"input": 0, "output": 0}),
-        }
+
     if writing and writing.get("factcheck_reviews"):
         return {
             "writing_state": {
@@ -667,6 +686,73 @@ def _ser_5(state: PipelineState) -> dict:
         result["tokens"] = state.phase_tokens.get("Phase 5: Convergence", {"input": 0, "output": 0})
         return result
 
+    # ── Default (Synthesis) ──
+    # Check final_solution first so the Synthesis phase shows the clean synthesized
+    # output.  writing_state.final_article is the fallback for Final Assembly.
+    fs = _get_v(state, 'final_solution')
+    if fs is not None:
+        meta = _get_v(fs, 'meta_audit', {})
+
+        # Action blueprint handling
+        raw_bp = _get_v(fs, 'action_blueprint', [])
+        clean_bp = []
+        for step in (raw_bp if isinstance(raw_bp, list) else []):
+            if isinstance(step, dict):
+                # Only accept dicts that have at least one expected key or a non-empty action
+                if not any(k in step for k in ("step", "action", "time_horizon", "go_criteria", "fallback")):
+                    continue
+                entry = {
+                    "step": _get_v(step, 'step', ''),
+                    "action": _get_v(step, 'action', ''),
+                    "time_horizon": _get_v(step, 'time_horizon', ''),
+                    "go_criteria": _get_v(step, 'go_criteria', ''),
+                    "fallback": _get_v(step, 'fallback', '')
+                }
+                if entry["step"] or entry["action"]:
+                    clean_bp.append(entry)
+            elif step is not None and str(step).strip():
+                clean_bp.append({"step": "", "action": str(step).strip(), "time_horizon": "", "go_criteria": "", "fallback": ""})
+
+        # Claim labels handling
+        raw_labels = _get_v(fs, 'claim_labels', {})
+        clean_labels = {k: (v.value if hasattr(v, 'value') else str(v)) for k, v in (raw_labels.items() if isinstance(raw_labels, dict) else {})}
+
+        # Aggregate tokens across all phases
+        total_input = sum(t.get("input", 0) for t in state.phase_tokens.values())
+        total_output = sum(t.get("output", 0) for t in state.phase_tokens.values())
+
+        # Build meta_audit only when source data exists
+        meta_audit: dict[str, Any] = {}
+        if meta:
+            meta_audit = {
+                "most_dangerous_assumption": _get_v(meta, 'most_dangerous_assumption', ''),
+                "dominant_bias": _get_v(meta, 'dominant_bias', ''),
+                "remaining_uncertainty": _get_v(meta, 'remaining_uncertainty', ''),
+                "assumption_failure_impact": _get_v(meta, 'assumption_failure_impact', ''),
+                "non_obvious_insight": _get_v(meta, 'non_obvious_insight', ''),
+            }
+
+        result = {
+            "core_solution": _get_v(fs, 'core_solution', ''),
+            "critical_insights": _get_v(fs, 'critical_insights', []),
+            "action_blueprint": clean_bp,
+            "open_questions": _get_v(fs, 'open_questions', []),
+            "claim_labels": clean_labels,
+            "meta_audit": meta_audit,
+            "tokens": {"input": total_input, "output": total_output}
+        }
+
+        # Cross-language metadata
+        cross_lang = _get_v(state, 'cross_language_state', {})
+        if cross_lang and cross_lang.get("source_language"):
+            result["cross_language"] = {
+                "source_language": cross_lang["source_language"],
+                "target_language": cross_lang.get("target_language", ""),
+                "back_translated": cross_lang.get("back_translated", False),
+            }
+
+        return result
+
     writing = _get_v(state, 'writing_state', {})
     if writing and writing.get("final_article"):
         return {
@@ -687,72 +773,7 @@ def _ser_5(state: PipelineState) -> dict:
             "tokens": state.phase_tokens.get("Phase 5: Final Assembly", {"input": 0, "output": 0}),
         }
 
-    # ── Default (Synthesis) ──
-    fs = _get_v(state, 'final_solution')
-    if fs is None:
-        return {}
-
-    meta = _get_v(fs, 'meta_audit', {})
-
-    # Action blueprint handling
-    raw_bp = _get_v(fs, 'action_blueprint', [])
-    clean_bp = []
-    for step in (raw_bp if isinstance(raw_bp, list) else []):
-        if isinstance(step, dict):
-            # Only accept dicts that have at least one expected key or a non-empty action
-            if not any(k in step for k in ("step", "action", "time_horizon", "go_criteria", "fallback")):
-                continue
-            entry = {
-                "step": _get_v(step, 'step', ''),
-                "action": _get_v(step, 'action', ''),
-                "time_horizon": _get_v(step, 'time_horizon', ''),
-                "go_criteria": _get_v(step, 'go_criteria', ''),
-                "fallback": _get_v(step, 'fallback', '')
-            }
-            if entry["step"] or entry["action"]:
-                clean_bp.append(entry)
-        elif step is not None and str(step).strip():
-            clean_bp.append({"step": "", "action": str(step).strip(), "time_horizon": "", "go_criteria": "", "fallback": ""})
-
-    # Claim labels handling
-    raw_labels = _get_v(fs, 'claim_labels', {})
-    clean_labels = {k: (v.value if hasattr(v, 'value') else str(v)) for k, v in (raw_labels.items() if isinstance(raw_labels, dict) else {})}
-
-    # Aggregate tokens across all phases
-    total_input = sum(t.get("input", 0) for t in state.phase_tokens.values())
-    total_output = sum(t.get("output", 0) for t in state.phase_tokens.values())
-
-    # Build meta_audit only when source data exists
-    meta_audit: dict[str, Any] = {}
-    if meta:
-        meta_audit = {
-            "most_dangerous_assumption": _get_v(meta, 'most_dangerous_assumption', ''),
-            "dominant_bias": _get_v(meta, 'dominant_bias', ''),
-            "remaining_uncertainty": _get_v(meta, 'remaining_uncertainty', ''),
-            "assumption_failure_impact": _get_v(meta, 'assumption_failure_impact', ''),
-            "non_obvious_insight": _get_v(meta, 'non_obvious_insight', ''),
-        }
-
-    result = {
-        "core_solution": _get_v(fs, 'core_solution', ''),
-        "critical_insights": _get_v(fs, 'critical_insights', []),
-        "action_blueprint": clean_bp,
-        "open_questions": _get_v(fs, 'open_questions', []),
-        "claim_labels": clean_labels,
-        "meta_audit": meta_audit,
-        "tokens": {"input": total_input, "output": total_output}
-    }
-
-    # Cross-language metadata
-    cross_lang = _get_v(state, 'cross_language_state', {})
-    if cross_lang and cross_lang.get("source_language"):
-        result["cross_language"] = {
-            "source_language": cross_lang["source_language"],
-            "original_problem": cross_lang.get("original_problem", ""),
-            "translated": cross_lang.get("direction") == "out",
-        }
-
-    return result
+    return {}
 
 
 def _event(data: dict) -> str:

@@ -106,6 +106,15 @@ function getVettedContext(data: unknown): Array<Record<string, unknown>> {
 
 export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, animationKey, animated = true, forceOpen = null, errorPhases = [] }: PhaseRendererProps) {
   const { index, phase: phaseNum, name, data } = phase;
+
+  // Trigger onComplete for non-animated phases so the next phase can be revealed
+  const completionRef = useRef(false);
+  useEffect(() => {
+    if (!animated && onComplete && !completionRef.current) {
+      completionRef.current = true;
+      onComplete();
+    }
+  }, [animated, onComplete]);
   const tokens = getTokens(data);
   const models = getModels(data);
   const subagents = getSubagents(data);

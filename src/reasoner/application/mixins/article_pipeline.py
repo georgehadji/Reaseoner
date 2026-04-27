@@ -43,13 +43,37 @@ _WRITING_INDICATORS = [
     r"\barticle\b.*\b(about|on)\b",
 ]
 
+_PAPER_INDICATORS = [
+    r"\b(write|draft|compose|create|prepare)\b.*\b(paper|thesis|dissertation|academic\s+report)\b",
+    r"\b(academic\s+paper|research\s+paper|term\s+paper|scientific\s+paper)\b",
+    # Greek patterns
+    r"\b(πτυχιακ[ήη]|διπλωματικ[ήη]|ακαδημαϊκ[ήη]\s+εργασ[ίι]α|επιστημονικ[ήη]\s+εργασ[ίι]α)\b",
+    r"\b(ερευνητικ[ήη]\s+εργασ[ίι]α|γράψ[εε]\b.*\bεργασ[ίι]α)\b",
+]
+
+_THESIS_INDICATORS = [
+    r"\b(thesis|dissertation|phd|master.{0,3}s\s+thesis)\b",
+    # Greek patterns
+    r"\b(πτυχιακ[ήη]\s+εργασ[ίι]α|διπλωματικ[ήη]\s+εργασ[ίι]α|διδακτορικ[ήη]|μεταπτυχιακ[ήη])\b",
+]
+
 _REFERENTIAL_SIGNALS = ["continue", "expand", "revise that", "elaborate", "add more"]
+
+
+def detect_document_type(problem: str) -> str:
+    """Classify writing request: 'article' | 'paper' | 'thesis'."""
+    lower = problem.lower()
+    if any(re.search(p, lower) for p in _THESIS_INDICATORS):
+        return "thesis"
+    if any(re.search(p, lower) for p in _PAPER_INDICATORS):
+        return "paper"
+    return "article"
 
 
 def is_article_request(problem: str) -> bool:
     """Detect if the user is asking for a structured written piece."""
     lower = problem.lower()
-    return any(re.search(p, lower) for p in _WRITING_INDICATORS)
+    return any(re.search(p, lower) for p in _WRITING_INDICATORS + _PAPER_INDICATORS + _THESIS_INDICATORS)
 
 
 def is_referential_followup(problem: str, history: list) -> bool:
@@ -199,6 +223,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
     # ── Phase 2: Decomposer ──────────────────────────────────────────────
 
     async def _phase_article_decompose(self, state: PipelineState) -> None:
+        doc_type = detect_document_type(state.problem)
+        state.writing_state["document_type"] = doc_type
+        self._log("ARTICLE", f"Document type detected: {doc_type}", state)
         self._log("ARTICLE", "Decomposing topic into subquestions...", state)
         raw, _ = await self._call_llm_cached(
             role="article_decompose",
@@ -236,15 +263,27 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         self._log("ARTICLE", f"Decomposed into {len(subquestions)} subquestions", state)
 
     def _decomposer_prompt(self, state: PipelineState) -> str:
+        doc_type = state.writing_state.get("document_type", "article")
+        if doc_type in ("paper", "thesis"):
+            structure_hint = (
+                f'This is an academic {doc_type}. Decompose into research questions that map to:\n'
+                f'Introduction → Literature Review → Methodology → Results → Discussion → Conclusion\n'
+                f'Identify theoretical gaps, methodological considerations, and empirical evidence requirements.\n'
+            )
+        else:
+            structure_hint = (
+                f'Maximize coverage, minimize overlap\n'
+                f'Identify uncertainty explicitly\n'
+                f'Tag high-risk hallucination zones\n'
+            )
         return (
             f'{phases.get_language_instruction(state)}\n\n'
-            f'Topic: {state.problem}\n\n'
+            f'Topic: {state.problem}\n'
+            f'Document type: {doc_type}\n\n'
             f'Decompose into atomic research questions.\n'
             f'Constraints:\n'
-            f'- Maximize coverage, minimize overlap\n'
-            f'- Identify uncertainty explicitly\n'
-            f'- Tag high-risk hallucination zones\n\n'
-            f'Output JSON: {{"topic": "...", '
+            f'- {structure_hint}'
+            f'\nOutput JSON: {{"topic": "...", '
             f'"subquestions": [{{'
             f'"id": "Q1", "question": "...", "priority": "high|medium|low", '
             f'"required_evidence": ["empirical"], "risk": "hallucination|controversial|low"'
@@ -595,10 +634,16 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         claims_json = json.dumps(usable_claims, indent=2, ensure_ascii=False)
 
         # ── Step 1: Generate skeleton ──
+        doc_type = state.writing_state.get("document_type", "article")
+        is_academic = doc_type in ("paper", "thesis")
         raw_skeleton, _ = await self._call_llm_cached(
             role="article_sot_skeleton",
-            system_prompt=phases.ARTICLE_SOT_SYSTEM,
-            user_prompt=phases.article_sot_skeleton_prompt(state, claims_json),
+            system_prompt=phases.ACADEMIC_SOT_SYSTEM if is_academic else phases.ARTICLE_SOT_SYSTEM,
+            user_prompt=(
+                phases.academic_sot_skeleton_prompt(state, claims_json)
+                if is_academic
+                else phases.article_sot_skeleton_prompt(state, claims_json)
+            ),
             state=state,
         )
         try:
@@ -633,8 +678,14 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
                 raw_sec, _ = await self._call_llm_cached(
                     role="article_sot_solve",
-                    system_prompt=phases.ARTICLE_SOT_SOLVE_SYSTEM,
-                    user_prompt=phases.article_sot_solve_prompt(state, section, section_claims_json),
+                    system_prompt=(
+                        phases.ACADEMIC_SOT_SOLVE_SYSTEM if is_academic else phases.ARTICLE_SOT_SOLVE_SYSTEM
+                    ),
+                    user_prompt=(
+                        phases.academic_sot_solve_prompt(state, section, section_claims_json)
+                        if is_academic
+                        else phases.article_sot_solve_prompt(state, section, section_claims_json)
+                    ),
                     state=state,
                 )
                 try:
@@ -853,15 +904,33 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
     def _critic_prompt(self, state: PipelineState, article: str, claims: list[dict]) -> str:
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
+        doc_type = state.writing_state.get("document_type", "article")
+        if doc_type in ("paper", "thesis"):
+            reviewer_role = "You are a peer reviewer for an academic journal."
+            criteria = (
+                f'1. Unsupported or uncited statements\n'
+                f'2. Overgeneralizations beyond the evidence\n'
+                f'3. Missing counterarguments or alternative interpretations\n'
+                f'4. Weak or missing methodology justification\n'
+                f'5. Insufficient literature engagement\n'
+                f'6. Informal language that should be academic\n'
+                f'7. Logical gaps between evidence and conclusion\n'
+            )
+        else:
+            reviewer_role = "You are a journal reviewer."
+            criteria = (
+                f'1. Unsupported statements\n'
+                f'2. Overgeneralizations\n'
+                f'3. Missing counterpoints\n'
+                f'4. Weak citations\n'
+            )
         return (
             f'{phases.get_language_instruction(state)}\n\n'
+            f'Document type: {doc_type}\n\n'
             f'Article:\n{article}\n\n'
             f'Original Claims:\n{claims_json}\n\n'
-            f'You are a journal reviewer. Find:\n'
-            f'1. Unsupported statements\n'
-            f'2. Overgeneralizations\n'
-            f'3. Missing counterpoints\n'
-            f'4. Weak citations\n\n'
+            f'{reviewer_role} Find:\n'
+            f'{criteria}\n'
             f'For each issue, specify action: revise|delete|add_caveat\n\n'
             f'Output JSON: {{'
             f'"corrections": [{{'
@@ -918,12 +987,18 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                         "used_in_section": sec_heading,
                     })
 
+        doc_type = state.writing_state.get("document_type", "article")
+        ref_heading = "References" if doc_type in ("paper", "thesis") else "Sources"
+
         # Build final article text
         lines: list[str] = []
         if title:
             lines.append(f"# {title}\n")
         if abstract:
-            lines.append(f"**Abstract:** {abstract}\n")
+            if doc_type in ("paper", "thesis"):
+                lines.append(f"## Abstract\n\n{abstract}\n")
+            else:
+                lines.append(f"**Abstract:** {abstract}\n")
         for sec in sections:
             if isinstance(sec, dict):
                 heading = sec.get("heading", "")
@@ -957,13 +1032,19 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             for c in conflicted:
                 lines.append(f"- Claim {c.get('claim_id', '')}: {c.get('notes', '')}\n")
 
-        # Add sources section last, using actual cited links when available
+        # Add references/sources section — numbered bibliography for academic docs
         if sources_used:
-            lines.append("\n## Sources\n")
-            for s in sources_used:
+            lines.append(f"\n## {ref_heading}\n")
+            for i, s in enumerate(sources_used, 1):
                 url = s.get("url", "")
-                title_str = s.get("title", "")
-                lines.append(f"- [{title_str or url}]({url})\n")
+                title_str = s.get("title", "") or url
+                if doc_type in ("paper", "thesis"):
+                    date_str = s.get("date", "")
+                    year = date_str[:4] if date_str and len(date_str) >= 4 and date_str[:4].isdigit() else ""
+                    year_part = f" ({year})." if year else "."
+                    lines.append(f"{i}. {title_str}{year_part} Retrieved from {url}\n")
+                else:
+                    lines.append(f"- [{title_str}]({url})\n")
 
         final_text = "\n".join(lines)
         state.writing_state["final_article"] = final_text

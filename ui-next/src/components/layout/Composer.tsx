@@ -287,59 +287,57 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   }
 
   /* ── Input box ────────────────────────────────────────── */
-  function InputBox({ minH }: { minH: number }) {
-    return (
-      <div
-        className={cn(
-          'relative rounded-2xl border bg-[var(--surface)] transition-all duration-200',
-          isDragging
-            ? 'border-[var(--accent)] shadow-[var(--accent-glow)]'
-            : 'border-[var(--border)] focus-within:border-[var(--border-strong)] focus-within:shadow-[var(--shadow-lg)]',
-        )}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onPaste={handlePaste}
-      >
-        {isDragging && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent-dim)]">
-            <div className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
-              <Upload className="h-5 w-5" />
-              Drop files here
-            </div>
+  const inputBox = (minH: number) => (
+    <div
+      className={cn(
+        'relative rounded-2xl border bg-[var(--surface)] transition-all duration-200',
+        isDragging
+          ? 'border-[var(--accent)] shadow-[var(--accent-glow)]'
+          : 'border-[var(--border)] focus-within:border-[var(--border-strong)] focus-within:shadow-[var(--shadow-lg)]',
+      )}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      onPaste={handlePaste}
+    >
+      {isDragging && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--accent)] bg-[var(--accent-dim)]">
+          <div className="flex items-center gap-2 text-sm font-medium text-[var(--accent)]">
+            <Upload className="h-5 w-5" />
+            Drop files here
           </div>
-        )}
-
-        <textarea
-          ref={textareaRef}
-          value={composerText}
-          onChange={(e) => { setComposerText(e.target.value); autoResize(); }}
-          onKeyDown={handleKeyDown}
-          placeholder={isImageMode ? 'Describe the image you want to generate…' : 'Ask anything…'}
-          rows={1}
-          className="w-full resize-none bg-transparent px-4 py-3.5 text-[16px] leading-relaxed text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
-          style={{ minHeight: minH }}
-        />
-
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 px-4 pb-2">
-            {attachments.map((att) => (
-              <AttachmentChip key={att.id} att={att} onRemove={removeAttachment} />
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center justify-between px-3 pb-3">
-          <div className="flex items-center gap-1.5">
-            <AttachButton />
-            <TierToggle />
-            <ImageModeToggle />
-          </div>
-          <ActionButton />
         </div>
+      )}
+
+      <textarea
+        ref={textareaRef}
+        value={composerText}
+        onChange={(e) => { setComposerText(e.target.value); autoResize(); }}
+        onKeyDown={handleKeyDown}
+        placeholder={isImageMode ? 'Describe the image you want to generate…' : 'Ask anything…'}
+        rows={1}
+        className="w-full resize-none bg-transparent px-4 py-3.5 text-[16px] leading-relaxed text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
+        style={{ minHeight: minH }}
+      />
+
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-4 pb-2">
+          {attachments.map((att) => (
+            <AttachmentChip key={att.id} att={att} onRemove={removeAttachment} />
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between px-3 pb-3">
+        <div className="flex items-center gap-1.5">
+          <AttachButton />
+          <TierToggle />
+          <ImageModeToggle />
+        </div>
+        <ActionButton />
       </div>
-    );
-  }
+    </div>
+  );
 
   /* ── Centered (empty state) layout ───────────────────── */
   if (centered) {
@@ -350,7 +348,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
             What would you like to solve?
           </h1>
 
-          <InputBox minH={120} />
+          {inputBox(120)}
 
           <div className="mt-3 text-center text-xs text-[var(--text-subtle)]">
             {isImageMode
@@ -375,7 +373,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           </div>
         )}
 
-        <InputBox minH={28} />
+        {inputBox(28)}
 
         <div className="mt-2 text-center text-[11px] text-[var(--text-subtle)]">
           {isImageMode

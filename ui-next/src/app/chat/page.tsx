@@ -956,7 +956,7 @@ export default function ChatPage() {
       />
 
       <div className="relative flex flex-1 flex-col sm:ml-0 overflow-hidden">
-        <header className={`flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4 ${collapsed ? 'ml-14 sm:ml-0' : ''}`}>
+        <header className={`flex h-14 shrink-0 items-center justify-between border-b border-[var(--border)] px-4 ${collapsed ? 'sm:ml-14' : ''}`}>
           <div className="flex items-center gap-3">
             <Tooltip text={serverOnline === true ? 'Online' : serverOnline === false ? 'Offline' : 'Checking…'}>
               <div

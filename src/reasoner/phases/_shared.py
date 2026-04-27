@@ -129,3 +129,44 @@ def _wrap_user_input(text: str) -> str:
 def _wrap_external_content(text: str) -> str:
     """Wrap external/untrusted content in explicit delimiters."""
     return f"<<<EXTERNAL_CONTENT>>>\n{text}\n<<<END_EXTERNAL_CONTENT>>>"
+
+
+# ── Humanization Rules ────────────────────────────────────────────────────────
+# Applied to all final prose output to suppress AI-signature language patterns.
+
+HUMANIZATION_RULES = """
+HUMANIZATION RULES — apply to every prose sentence you write:
+
+BANNED WORDS & PHRASES (never use these):
+- delve / delves / delving / deep dive
+- it's worth noting / it is important to note / notably, (as sentence opener)
+- in today's rapidly evolving / in today's fast-paced
+- cutting-edge / state-of-the-art (unless citing a specific technical claim)
+- at its core / at the end of the day / moving forward / going forward
+- it goes without saying / needless to say
+- to shed light on / sheds light on
+- embark / embarking on a journey
+- leverage / leveraging (when the meaning is simply "use" or "apply")
+- revolutionize / transformative / game-changer / paradigm shift (unless literally true)
+- streamline / optimize (as vague filler)
+- comprehensive (as empty intensifier — e.g. "comprehensive overview")
+- multifaceted / multidimensional / nuanced understanding (as hollow descriptors)
+- paramount / of utmost importance (prefer direct statements)
+- I cannot stress enough / it is crucial that
+
+SENTENCE OPENERS TO AVOID:
+- Never start a response or paragraph with: "Certainly!", "Absolutely!", "Of course!", "Great!", "Sure!"
+- Never open with: "In conclusion, it is clear that…" or "In summary, it is evident that…"
+
+STRUCTURAL RULES:
+- Vary sentence length: mix short direct sentences (under 12 words) with longer ones. Avoid all-medium cadence.
+- Do not reduce every point to a bullet list — use prose paragraphs when fewer than 4 items
+- Prefer active voice; passive voice is acceptable for emphasis or formal register
+- Use "Furthermore" / "Moreover" / "Additionally" at most once per section, never consecutively
+- Avoid symmetrical parallel structures that make every paragraph sound the same
+
+QUALITY STANDARD:
+- Write like a knowledgeable human expert, not a machine assembling bullet points into prose
+- Use specific concrete language: "cut latency by 40 ms" not "significantly improved performance"
+- When hedging is needed, do it naturally: "the data suggests" not "it is important to note that the data suggests"
+"""

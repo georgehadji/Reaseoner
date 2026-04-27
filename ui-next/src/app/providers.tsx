@@ -19,21 +19,17 @@ function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!supabase) {
-      // Supabase not configured — skip auth initialization
       setAuthLoading(false);
       return;
     }
 
-    // Initial auth check — use getUser() to validate JWT with Supabase server
-    // (getSession() only reads from localStorage and does not verify the token)
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUser(user ?? null);
-      setAuthLoading(false);
-    });
-
-    // Listen for auth state changes
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    // Register listener BEFORE any async calls so we don't miss the INITIAL_SESSION
+    // event that fires after Supabase finishes processing the URL (including OAuth code exchange).
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user ?? null);
+      if (event === 'INITIAL_SESSION') {
+        setAuthLoading(false);
+      }
     });
 
     return () => listener.subscription.unsubscribe();

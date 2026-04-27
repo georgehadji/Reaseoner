@@ -248,6 +248,8 @@ PHASE_TIMEOUTS: dict[str, float] = {
     "Critique & Pruning": 90.0,
     "Stress Testing": 90.0,
     "Synthesis": 120.0,
+    # Writing flow — composite SoT phase bundles skeleton + parallel writes + assembly
+    "Synthesize (SoT)": 180.0,
     "default": 90.0,
 }
 

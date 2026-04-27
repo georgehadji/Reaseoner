@@ -1,0 +1,64 @@
+Codemap Diff Report — 2026-04-27 (update 2)
+============================================
+
+FILES SCANNED: ~198 (prev: 185, +13)
+CHANGE ESTIMATE: ~8% — updated in place (< 30% threshold)
+
+NEW FILES:
+  ui-next/src/components/landing/LandingPage.tsx  (landing page composition component)
+  ui-next/src/app/chat/page.patterns.test.ts
+  ui-next/src/app/globals.css.test.ts
+  ui-next/src/components/chat/MarkdownRenderer.patterns.test.ts
+  ui-next/src/components/layout/NeuroPanel.patterns.test.ts
+  ui-next/src/hooks/useConversationHistory.test.ts
+  ui-next/src/hooks/useFeatureFlags.test.ts
+  ui-next/src/hooks/useQuota.test.ts
+  ui-next/src/hooks/useServerStatus.test.ts
+  ui-next/src/lib/conversation-history.test.ts
+  ui-next/src/lib/security-client.patterns.test.ts
+  ui-next/src/lib/security-server.test.ts
+  ui-next/src/stores/app-store.migrate.test.ts
+
+MODIFIED FILES:
+  Backend:
+    src/reasoner/core/constants.py     — Added "Synthesize (SoT)": 180.0 phase timeout
+    src/reasoner/core/search.py        — Removed fallback to raw results when refined is empty
+    src/reasoner/start_all.py          — Docker daemon health check + compose up timeout=30s
+
+  Frontend:
+    ui-next/src/app/landing/page.tsx   — Refactored to thin wrapper; delegates to LandingPage.tsx
+    ui-next/src/app/chat/page.tsx      — Minor updates
+    ui-next/src/app/page.tsx           — Minor updates
+    ui-next/src/components/layout/Composer.tsx     — Refactored (401 lines)
+    ui-next/src/app/globals.css                    — Major styling updates
+    ui-next/src/components/layout/Sidebar.tsx      — Refactored
+    ui-next/src/components/layout/SiteHeader.tsx   — Updated
+    ui-next/src/components/layout/SiteFooter.tsx   — Updated
+    ui-next/src/components/layout/PhaseTimeline.tsx — Updated
+
+ARCHITECTURE CHANGES:
+  + Landing page shell extracted: app/landing/page.tsx → components/landing/LandingPage.tsx
+  + 12 new Vitest test files covering hooks, components, and lib utilities
+
+NEW DEPENDENCIES: None
+
+STALENESS WARNINGS: None — all codemaps fresh.
+
+--- PREVIOUS REPORT (initial generation 2026-04-27) ---
+
+STATUS: Initial generation
+
+NOTABLE FINDINGS:
+  + Redis layer found (infrastructure/redis/)
+  + DeepL translation adapter found (infrastructure/translation/)
+  + VerbalisedSampling system: ara_verbalized_sampling.py, vs_config.py, vs_vertical_configs/
+    (domain verticals: aerospace, legal, radiology)
+  + SaaS infrastructure: domain/saas.py, billing_router.py, saas_router.py, stripe_adapter
+  + Sentry monitoring (@sentry/nextjs)
+  + article_pipeline mixin (18th workflow)
+  + gate_agent.py standalone gate agent
+
+KNOWN ARCHITECTURE VIOLATIONS:
+  1. domain/preset_core.py imports from infrastructure.llm.registry
+  2. api/streaming.py instantiates ARAPipeline directly (bypasses CQRS)
+  3. application/flows/__init__.py imports from api.serializers

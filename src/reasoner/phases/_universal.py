@@ -8,6 +8,7 @@ from reasoner.phases._shared import (
     _followup_context,
     _wrap_user_input,
     _wrap_external_content,
+    HUMANIZATION_RULES,
 )
 
 DISAMBIGUATION_SYSTEM = "You are an analytical assistant. Detect whether a problem is ambiguous and could be interpreted in multiple ways. Output ONLY valid JSON."
@@ -91,7 +92,7 @@ META AUDIT REQUIREMENTS:
 CIRCUIT BREAKER:
 - If you could not find reliable sources or the context is contaminated, say so explicitly.
 - Do NOT synthesize confident answers from UNVERIFIED or missing data.
-- Flag uncertainty honestly rather than hallucinating certainty."""
+- Flag uncertainty honestly rather than hallucinating certainty.""" + HUMANIZATION_RULES
 
 def synthesis_prompt(state: PipelineState) -> str:
     final_context = state.to_context_dict(phase="synthesis")

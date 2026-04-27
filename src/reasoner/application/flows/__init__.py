@@ -147,6 +147,15 @@ def build_default_flow_registry(pipeline: ARAPipeline) -> PipelineFlow:
         PhaseStep(4, "Implement",        pipeline._phase_sd_implement, _ser_4),
     ])
 
+    # ── Coding (Production Code Generation with Adversarial Review) ───
+    flow.register("coding", [
+        PhaseStep(2,   "Spec Analysis",    pipeline._phase_coding_spec,     _ser_2),
+        PhaseStep(3,   "Code Generation",  pipeline._phase_coding_generate,  _ser_3),
+        PhaseStep(3.5, "Security Review",  pipeline._phase_coding_review,    _ser_3, critical=True),
+        PhaseStep(4,   "Test Generation",  pipeline._phase_coding_tests,     _ser_4),
+        PhaseStep(5,   "Final Assembly",   pipeline._phase_coding_assemble,  _ser_5),
+    ])
+
     # ── Writing (Research-Backed Article with CoVE, Pre-Mortem, SoT) ───
     flow.register("writing", [
         PhaseStep(2,    "Decompose Topic",      pipeline._phase_article_decompose,      _ser_2),

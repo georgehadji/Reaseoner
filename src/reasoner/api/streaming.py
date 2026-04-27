@@ -47,7 +47,31 @@ from .serializers import (
 )
 
 logger = logging.getLogger(__name__)
-_preset_service = PresetService()
+
+# NOTE: We instantiate lazily inside run_stream so that preset module
+# reloads (e.g. after editing preset_registry.py) are picked up by
+# long-running processes.
+_preset_service: PresetService | None = None
+
+
+def _ensure_fresh_preset_service() -> PresetService:
+    """Force-reload preset modules in case a long-running process has stale code."""
+    global _preset_service
+    import importlib
+    import sys
+    # Nuke all preset-related modules from sys.modules so they are re-imported fresh
+    for mod_name in list(sys.modules.keys()):
+        if mod_name.startswith(("reasoner.domain.preset", "reasoner.presets", "reasoner.application.services.preset_service")):
+            del sys.modules[mod_name]
+    # Re-import after eviction
+    import reasoner.domain.preset_registry as _pr_mod  # type: ignore[no-redef]
+    import reasoner.presets as _ps_mod  # type: ignore[no-redef]
+    import reasoner.application.services.preset_service as _svc_mod  # type: ignore[no-redef]
+    importlib.reload(_pr_mod)
+    importlib.reload(_ps_mod)
+    importlib.reload(_svc_mod)
+    _preset_service = _svc_mod.PresetService()
+    return _preset_service
 
 
 def _get_phase_subagents(state: PipelineState, phase_name: str) -> list[dict[str, Any]]:
@@ -372,14 +396,22 @@ async def run_stream(
                 })
 
         raw_preset = req.preset or "auto-budget"
-        gate_preset_name, is_auto, auto_tier = _preset_service.resolve(raw_preset)
+        preset_svc = _ensure_fresh_preset_service()
+        gate_preset_name, is_auto, auto_tier = preset_svc.resolve(raw_preset)
         auto_selected_method: str | None = None
 
         agent_model = initial_state.agent_model if initial_state else None
-        effective_preset_name, router = _preset_service.build_router(
+        effective_preset_name, router = preset_svc.build_router(
             gate_preset_name,
             custom_routing=req.routing,
             agent_model=agent_model,
+        )
+        # DEBUG: log a few routing entries so we can verify presets are fresh
+        logger.info(
+            "Preset '%s' primary=%s sample_routing=%s",
+            effective_preset_name,
+            getattr(router.primary, "model", router.primary),
+            {k: router.routing_table.get(k).model if router.routing_table.get(k) else None for k in list(router.routing_table)[:3]},
         )
 
         if not req.force_pipeline:
@@ -401,7 +433,8 @@ async def run_stream(
                 return
 
             if is_auto and decision.method and not req.routing:
-                effective_preset_name, router = _preset_service.build_auto_router(
+                preset_svc = _ensure_fresh_preset_service()
+                effective_preset_name, router = preset_svc.build_auto_router(
                     decision.method,
                     auto_tier,
                     agent_model=agent_model,

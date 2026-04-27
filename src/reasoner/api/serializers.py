@@ -187,6 +187,18 @@ def _ser_2(state: PipelineState) -> dict:
             "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 2:")), {"input": 0, "output": 0}),
         }
 
+    coding = _get_v(state, 'coding_state', {})
+    if coding and coding.get("spec"):
+        return {
+            "coding_state": {
+                "spec": coding["spec"],
+                "language": coding.get("language", ""),
+                "framework": coding.get("framework", ""),
+                "files_to_generate": coding.get("files_to_generate", []),
+            },
+            "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 2:")), {"input": 0, "output": 0}),
+        }
+
     writing = _get_v(state, 'writing_state', {})
     if writing and writing.get("subquestions"):
         return {
@@ -351,6 +363,19 @@ def _ser_3(state: PipelineState) -> dict:
             "tokens": state.phase_tokens.get("Phase 3: Aggregation", {"input": 0, "output": 0}),
         }
 
+    coding = _get_v(state, 'coding_state', {})
+    if coding and coding.get("generated_files"):
+        return {
+            "coding_state": {
+                "generated_files": [
+                    {"path": f.get("path", ""), "language": f.get("language", ""), "key_decisions": f.get("key_decisions", [])}
+                    for f in coding["generated_files"]
+                ],
+                "review": coding.get("review", {}),
+            },
+            "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 3:")), {"input": 0, "output": 0}),
+        }
+
     writing = _get_v(state, 'writing_state', {})
     if writing and writing.get("cove_draft_claims"):
         return {
@@ -507,6 +532,23 @@ def _ser_4(state: PipelineState) -> dict:
         return {
             "delphi_state": {"round2_estimates": delphi["round2_estimates"]},
             "tokens": state.phase_tokens.get("Phase 4: Round 2 Estimates", {"input": 0, "output": 0}),
+        }
+
+    coding = _get_v(state, 'coding_state', {})
+    if coding and coding.get("tests"):
+        return {
+            "coding_state": {
+                "tests": {
+                    "test_files": [
+                        {"path": tf.get("path", ""), "covers": tf.get("covers", [])}
+                        for tf in coding["tests"].get("test_files", [])
+                    ],
+                    "coverage_estimate": coding["tests"].get("coverage_estimate", ""),
+                    "missing_coverage": coding["tests"].get("missing_coverage", []),
+                },
+                "review": coding.get("review", {}),
+            },
+            "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 4:")), {"input": 0, "output": 0}),
         }
 
     # Writing flow — SoT synthesis (check before pre_mortem/critic since article persists)
@@ -685,6 +727,23 @@ def _ser_5(state: PipelineState) -> dict:
             result.setdefault("delphi_state", {})["dissent_report"] = delphi["dissent_report"]
         result["tokens"] = state.phase_tokens.get("Phase 5: Convergence", {"input": 0, "output": 0})
         return result
+
+    coding = _get_v(state, 'coding_state', {})
+    if coding and coding.get("final_files"):
+        return {
+            "coding_state": {
+                "final_files": [
+                    {"path": f.get("path", ""), "changed": f.get("changed", False)}
+                    for f in coding["final_files"]
+                ],
+                "readme": coding.get("readme", ""),
+                "fixes_applied": coding.get("fixes_applied", []),
+                "known_limitations": coding.get("known_limitations", []),
+                "language": coding.get("language", ""),
+                "framework": coding.get("framework", ""),
+            },
+            "tokens": state.phase_tokens.get("Phase 5: Final Assembly", {"input": 0, "output": 0}),
+        }
 
     # ── Default (Synthesis) ──
     # Check final_solution first so the Synthesis phase shows the clean synthesized

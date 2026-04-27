@@ -105,6 +105,8 @@ def article_cove_revise_prompt(state, claims_json: str, answers_json: str) -> st
 ARTICLE_PRE_MORTEM_SYSTEM = (
     "You are a strategic risk analyst. Imagine the article was rejected by journal reviewers. "
     "Work backwards to identify the root causes of failure. Be brutally honest. "
+    "All string values must be plain text — no markdown, no formatting, no line breaks inside strings. "
+    "Keep 'failure_narrative' to ONE sentence (max 30 words). "
     + JSON_ONLY_FOOTER
 )
 
@@ -115,20 +117,16 @@ def article_pre_mortem_prompt(state, article: str, claims_json: str) -> str:
         f'Article Draft:\n{article}\n\n'
         f'Claims:\n{claims_json}\n\n'
         f'Imagine this article was submitted to a top-tier journal and was REJECTED. '
-        f'Work backwards: what went wrong?\n'
-        f'1. What are the weakest sections?\n'
-        f'2. Which claims would reviewers challenge?\n'
-        f'3. What counterarguments are missing?\n'
-        f'4. What overgeneralizations exist?\n'
-        f'5. What would make a hostile reviewer say "this is unpublishable"?\n\n'
-        f'Output JSON: {{'
-        f'"failure_narrative": "...", '
-        f'"root_causes": ["..."], '
-        f'"weak_sections": ["..."], '
-        f'"challenged_claims": ["..."], '
-        f'"missing_counterarguments": ["..."], '
-        f'"overgeneralizations": ["..."], '
-        f'"early_warnings": ["..."]'
+        f'Work backwards: what went wrong?\n\n'
+        f'Return ONLY this JSON object (no markdown fences, no extra text):\n'
+        f'{{\n'
+        f'  "failure_narrative": "<ONE sentence, max 30 words, plain text, no quotes inside>",\n'
+        f'  "root_causes": ["<short phrase>", "..."],\n'
+        f'  "weak_sections": ["<section name>", "..."],\n'
+        f'  "challenged_claims": ["<short phrase>", "..."],\n'
+        f'  "missing_counterarguments": ["<short phrase>", "..."],\n'
+        f'  "overgeneralizations": ["<short phrase>", "..."],\n'
+        f'  "early_warnings": ["<short phrase>", "..."]\n'
         f'}}'
     )
 

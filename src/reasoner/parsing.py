@@ -58,11 +58,20 @@ def extract_json(text: str) -> dict[str, Any]:
         text = text[:MAX_INPUT_LENGTH]
     
     text = strip_perplexity_citations(text.strip())
-    
+
     # Guard against empty LLM responses (content filters, API errors, etc.)
     if not text:
         logger.warning("extract_json received empty response; returning empty dict as fallback")
         return {}
+
+    # Strip leading/trailing markdown fence markers so downstream parsers
+    # see clean JSON even when the LLM ignored the "Output ONLY valid JSON" instruction.
+    if text.startswith("```json"):
+        text = text[7:].lstrip()
+    elif text.startswith("```"):
+        text = text[3:].lstrip()
+    if text.rstrip().endswith("```"):
+        text = text.rstrip()[:-3].rstrip()
 
     # Try multiple approaches to extract JSON from code fences
     # Approach 1: Match ```json ... ``` or ``` ... ``` anywhere
@@ -141,6 +150,13 @@ def extract_json(text: str) -> dict[str, Any]:
                             try:
                                 return safe_json_loads(cleaned, max_depth=100)
                             except (json.JSONDecodeError, JSONDepthExceededError):
+                                # Try repairing unescaped quotes inside strings
+                                quote_repaired = _repair_json_quotes(candidate)
+                                if quote_repaired:
+                                    try:
+                                        return safe_json_loads(quote_repaired, max_depth=100)
+                                    except (json.JSONDecodeError, JSONDepthExceededError):
+                                        pass
                                 break  # found boundary but still invalid; try repair
 
         # Last resort: truncated JSON repair — close any open brackets/strings
@@ -159,10 +175,215 @@ def extract_json(text: str) -> dict[str, Any]:
             else:
                 break
 
+    # Ultimate fallback: tolerant dict extraction for LLM outputs with
+    # unescaped quotes inside values.  We reconstruct the dict by scanning
+    # for keys and extracting values with a quote-aware state machine.
+    reconstructed = _extract_json_dict_fallback(text)
+    if reconstructed:
+        return reconstructed
+
     raise ParseError(
         f"Could not extract valid JSON from response. "
         f"First 200 chars: {text[:200]!r}"
     )
+
+
+def _extract_json_dict_fallback(text: str) -> dict[str, Any] | None:
+    """
+    Tolerant fallback that extracts key-value pairs from malformed JSON
+    objects (e.g., with unescaped quotes inside values).
+    Returns a dict if anything was extracted, else None.
+    """
+    result: dict[str, Any] = {}
+    # Find all quoted keys followed by a colon
+    for key_match in re.finditer(r'"([^"]+)"\s*:\s*', text):
+        key = key_match.group(1)
+        start = key_match.end()
+        if start >= len(text):
+            continue
+
+        if text[start] == '"':
+            # String value — scan for closing quote that is followed by , or }
+            val, _ = _extract_json_string_value(text, start)
+            if val is not None:
+                result[key] = val
+        elif text[start] == '[':
+            # Array value — balance brackets
+            arr = _extract_json_array_value(text, start)
+            if arr is not None:
+                result[key] = arr
+        elif text[start] == '{':
+            # Nested object — too complex for fallback, skip
+            continue
+        else:
+            # Bare value (number, bool, null) — read until delimiter
+            end = start
+            while end < len(text) and text[end] not in ',}':
+                end += 1
+            bare = text[start:end].strip()
+            if bare == "true":
+                result[key] = True
+            elif bare == "false":
+                result[key] = False
+            elif bare == "null":
+                result[key] = None
+            else:
+                try:
+                    result[key] = int(bare)
+                except ValueError:
+                    try:
+                        result[key] = float(bare)
+                    except ValueError:
+                        result[key] = bare
+    return result if result else None
+
+
+def _extract_json_string_value(text: str, start: int) -> tuple[str | None, int]:
+    """
+    Extract a JSON string value starting at *start* (which must be a quote).
+    Tolerates unescaped quotes inside the value by only accepting a closing
+    quote when it is followed by a structural delimiter (, } or ]).
+
+    Returns (value, end_index) where end_index is the position AFTER the
+    closing quote.  Returns (None, start) if no valid closing quote is found.
+    """
+    if start >= len(text) or text[start] != '"':
+        return None, start
+    in_str = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_str:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_str = not in_str
+            if not in_str:
+                # Potential closing quote — check what follows
+                j = i + 1
+                while j < len(text) and text[j].isspace():
+                    j += 1
+                if j < len(text) and text[j] in ",}]":
+                    return text[start + 1:i].replace('\\"', '"'), j
+    return None, start
+
+
+def _extract_json_array_value(text: str, start: int) -> list[Any] | None:
+    """
+    Extract a JSON array starting at *start* (which must be '[').
+    Tolerates unescaped quotes inside string items.
+    """
+    if start >= len(text) or text[start] != '[':
+        return None
+    depth = 0
+    in_str = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_str:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_str = not in_str
+            continue
+        if not in_str:
+            if ch == "[":
+                depth += 1
+            elif ch == "]":
+                depth -= 1
+                if depth == 0:
+                    arr_text = text[start:i + 1]
+                    return _parse_json_array_items(arr_text)
+    return None
+
+
+def _parse_json_array_items(arr_text: str) -> list[Any]:
+    """Parse items from a JSON array string (assumes well-formed brackets)."""
+    items: list[str] = []
+    i = 1  # skip [
+    while i < len(arr_text) - 1:
+        while i < len(arr_text) and arr_text[i].isspace():
+            i += 1
+        if i >= len(arr_text):
+            break
+        if arr_text[i] == '"':
+            item, end = _extract_json_string_value(arr_text, i)
+            if item is not None:
+                items.append(item)
+                i = end
+            else:
+                break
+        else:
+            # Skip non-string items
+            i += 1
+        while i < len(arr_text) and arr_text[i].isspace():
+            i += 1
+        if i < len(arr_text) and arr_text[i] == ",":
+            i += 1
+    return [it for it in items if it]
+
+
+def _is_structural_quote(text: str, i: int) -> bool:
+    """Return True if the quote at *i* is a JSON structural delimiter."""
+    # Check preceding non-whitespace character
+    j = i - 1
+    while j >= 0 and text[j].isspace():
+        j -= 1
+    if j >= 0 and text[j] in "{[,:":
+        return True
+    # Check following non-whitespace character
+    k = i + 1
+    while k < len(text) and text[k].isspace():
+        k += 1
+    if k < len(text) and text[k] in "}],:":
+        return True
+    return False
+
+
+def _repair_json_quotes(text: str) -> str | None:
+    """
+    Repair unescaped double quotes inside JSON string values.
+
+    Identifies every unescaped quote that is NOT a JSON structural delimiter
+    and escapes them all in one pass, then tries to parse again.
+    """
+    try:
+        json.loads(text)
+        return text
+    except json.JSONDecodeError:
+        pass
+
+    # Build a new string where every non-structural unescaped quote is escaped.
+    result = []
+    i = 0
+    while i < len(text):
+        if text[i] == '"':
+            # Count preceding backslashes
+            backslashes = 0
+            j = i - 1
+            while j >= 0 and text[j] == '\\':
+                backslashes += 1
+                j -= 1
+            if backslashes % 2 == 0 and not _is_structural_quote(text, i):
+                result.append('\\"')
+            else:
+                result.append('"')
+        else:
+            result.append(text[i])
+        i += 1
+
+    repaired = "".join(result)
+    try:
+        json.loads(repaired)
+        return repaired
+    except json.JSONDecodeError:
+        return None
 
 
 def _repair_truncated_json(text: str) -> str | None:
@@ -197,21 +418,25 @@ def _repair_truncated_json(text: str) -> str | None:
 
     suffix = ""
     if in_str:
-        # AGGRESSIVE REPAIR: If truncated mid-string, truncate back to the last structural boundary
-        # to avoid partial values (like truncated URLs) breaking the structure.
-        last_boundary = max(text.rfind(","), text.rfind("["), text.rfind("{"))
+        # AGGRESSIVE REPAIR: If truncated mid-string, truncate back to the last
+        # structural boundary that lies OUTSIDE of a string. We scan backwards
+        # while tracking string state so commas/brackets inside strings don't
+        # trick us into cutting the string in half.
+        last_boundary = _last_structural_boundary(text)
         if last_boundary != -1:
-            # If the boundary was an opening bracket or brace, keep it so we can close it as empty
+            # If the boundary was an opening bracket or brace, keep it so we
+            # can close it as empty.
             if text[last_boundary] in "[{":
                 text = text[:last_boundary + 1]
             else:
                 text = text[:last_boundary]
-            
             # Re-calculate stack for the modified text
             stack = []
             for ch in text:
-                if ch in "{[": stack.append("}" if ch == "{" else "]")
-                elif ch in "}]" and stack: stack.pop()
+                if ch in "{[":
+                    stack.append("}" if ch == "{" else "]")
+                elif ch in "}]" and stack:
+                    stack.pop()
         else:
             suffix += '"'  # fallback: just close it
 
@@ -220,9 +445,35 @@ def _repair_truncated_json(text: str) -> str | None:
     tail = re.sub(r',\s*$', "", tail)  # drop trailing comma
     # Drop incomplete key-value pairs (handles both after-comma and first-in-object cases)
     tail = re.sub(r'([,{])\s*"[^"]*"\s*:\s*$', r'\1', tail)
-    
+
     suffix = "".join(reversed(stack))
     return tail + suffix
+
+
+def _last_structural_boundary(text: str) -> int:
+    """
+    Scan backwards through *text* and return the index of the last comma,
+    opening brace, or opening bracket that is OUTSIDE of a JSON string.
+    Returns -1 if no such boundary exists.
+    """
+    in_str, escape = False, False
+    # We need to scan forwards to know string state at each position,
+    # then look backwards for the last boundary outside a string.
+    # Simpler: scan forwards, recording the last valid boundary position.
+    last_boundary = -1
+    for i, ch in enumerate(text):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_str:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_str = not in_str
+            continue
+        if not in_str and ch in ",[{":
+            last_boundary = i
+    return last_boundary
 
 
 def extract_solution_prose(text: str) -> str | None:

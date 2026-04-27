@@ -65,6 +65,7 @@ from reasoner.application.mixins.cognitive_mixin import CognitiveMixin
 from reasoner.application.mixins.recovery_mixin import RecoveryMixin
 from reasoner.application.mixins.writing_mixin import WritingMixin
 from reasoner.application.mixins.article_pipeline import ArticlePipelineMixin
+from reasoner.application.mixins.coding_pipeline import CodingMixin
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,7 @@ class ARAPipeline(
     RecoveryMixin,
     WritingMixin,
     ArticlePipelineMixin,
+    CodingMixin,
 ):
     """
     Dynamic ARA v2.1 Pipeline Orchestrator.
@@ -153,6 +155,11 @@ class ARAPipeline(
         "article_assemble": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
         "article_sot_skeleton": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
         "article_sot_solve": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
+        "coding_spec": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["decomposition"]),
+        "coding_generate": PhaseConfig(role="constructive", temperature=PHASE_TEMPERATURES["perspective"]),
+        "coding_review": PhaseConfig(role="destructive", temperature=PHASE_TEMPERATURES["scoring"]),
+        "coding_tests": PhaseConfig(role="verifier", temperature=PHASE_TEMPERATURES["verifier"]),
+        "coding_assemble": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
         "prompt_enhancement": PhaseConfig(role="prompt_enhancement", temperature=PHASE_TEMPERATURES["primary"]),
         "expert_1": PhaseConfig(role="expert_1", temperature=PHASE_TEMPERATURES["generator"]),
         "expert_2": PhaseConfig(role="expert_2", temperature=PHASE_TEMPERATURES["generator"]),
@@ -397,6 +404,7 @@ class ARAPipeline(
         if "sot" in preset: return "sot"
         if "tot" in preset: return "tot"
         if "pot" in preset: return "pot"
+        if "coding" in preset or "code-gen" in preset: return "coding"
         if "writing" in preset or "article" in preset or "essay" in preset: return "writing"
         if "cross-language" in preset or "cross_language" in preset: return "cross_language"
         return "multi_perspective" # Default

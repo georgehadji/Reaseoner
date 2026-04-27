@@ -319,6 +319,8 @@ class PipelineState:
     self_discover_state: dict[str, Any] = field(default_factory=dict)
     # Writing Method: Structured article writing with research-backed outline, draft, fact-check
     writing_state: dict[str, Any] = field(default_factory=dict)
+    # Coding Method: Production-grade code generation with spec, generate, review, tests, assembly
+    coding_state: dict[str, Any] = field(default_factory=dict)
     # Cross-Language Method: Translation metadata (source lang, original problem, translated synthesis)
     cross_language_state: dict[str, Any] = field(default_factory=dict)
     # PhaseSubAgent outputs (for transparency / resume / debugging)
@@ -1002,6 +1004,7 @@ class PipelineState:
         data.setdefault('tot_state', {})
         data.setdefault('pot_state', {})
         data.setdefault('self_discover_state', {})
+        data.setdefault('coding_state', {})
         data.setdefault('reflexion_memory', [])
         data.setdefault('synthesis_subagent_outputs', [])
         data.setdefault('critique_subagent_outputs', [])

@@ -166,7 +166,7 @@ function ImageGenerationIndicator({ prompt }: { prompt?: string }) {
             />
           </div>
           <div className="flex items-center justify-between gap-3 font-systemUi text-caption text-mds-color-dark-gray">
-            <span>{progress < 0.3 ? 'Expanding prompt & testing providers...' : progress < 0.7 ? 'Coalescing visual structures...' : 'Finalizing grain and atmosphere...'}</span>
+            <span>{progress < 0.3 ? 'Sampling models...' : progress < 0.7 ? 'Diffusing...' : 'Rendering...'}</span>
             <span className="font-medium text-mds-color-dark-gray">Working…</span>
           </div>
           {prompt ? (

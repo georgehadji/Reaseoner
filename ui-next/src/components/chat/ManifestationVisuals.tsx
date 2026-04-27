@@ -1,165 +1,110 @@
 'use client';
 
 import React from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface ManifestationVisualsProps {
   progress: number; // 0 to 1
 }
 
-// Module-level random positions — generated once at load time to avoid React 19 purity violations
-const BLOB_POSITIONS = Array.from({ length: 5 }, () => ({
-  x1: Math.random() * 200 - 100,
-  x2: Math.random() * 200 - 100,
-  y1: Math.random() * 200 - 100,
-  y2: Math.random() * 200 - 100,
-}));
-
 export function ManifestationVisuals({ progress }: ManifestationVisualsProps) {
-  // Determine state based on progress
-  const isDissolved = progress < 0.3;
-  const isCoalescing = progress >= 0.3 && progress < 0.7;
-  const isStabilizing = progress >= 0.7;
-
   return (
-    <div className="relative flex h-64 w-full items-center justify-center overflow-hidden rounded-xl bg-black/5 selection:bg-none">
-      <AnimatePresence mode="wait">
-        {/* Stage 1: Dissolved (0-30%) */}
-        {isDissolved && (
-          <motion.div
-            key="dissolved"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, filter: 'blur(20px)' }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            {/* Grain/Mist Overlay */}
-            <div className="absolute inset-0 opacity-20 [mask-image:radial-gradient(circle,white,transparent_70%)]">
-              {/* Noise texture simulated with CSS for zero external deps */}
-              <div
-                className="h-full w-full opacity-50"
-                style={{
-                  backgroundImage: `url('data:image/svg+xml,%3Csvg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"%3E%3Cfilter id="noiseFilter"%3E%3CfeTurbulence type="fractalNoise" baseFrequency="0.65" numOctaves="3" stitchTiles="stitch"/%3E%3C/filter%3E%3Crect width="100%25" height="100%25" filter="url(%23noiseFilter)"/%3E%3C/svg%3E')`,
-                }}
-              />
-            </div>
+    <div
+      className="relative h-52 w-full overflow-hidden rounded-lg"
+      style={{
+        background: 'var(--surface-3)',
+        border: '1px solid var(--border-strong)',
+      }}
+    >
+      {/* Dot grid */}
+      <div
+        className="absolute inset-0"
+        style={{
+          backgroundImage:
+            'radial-gradient(circle, rgba(0,201,177,0.12) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+          opacity: 0.6,
+        }}
+      />
 
-            {/* Fast moving light blobs */}
-            {BLOB_POSITIONS.map((pos, i) => (
-              <motion.div
-                key={i}
-                className="absolute h-32 w-32 rounded-full bg-gradient-to-r from-sky-400/30 to-amber-300/30 blur-3xl"
-                animate={{
-                  x: [pos.x1, pos.x2],
-                  y: [pos.y1, pos.y2],
-                  scale: [1, 1.5, 0.8],
-                  opacity: [0.3, 0.6, 0.3],
-                }}
-                transition={{
-                  duration: 2 + i,
-                  repeat: Infinity,
-                  repeatType: 'reverse',
-                }}
-              />
-            ))}
-            <div className="text-xs font-medium uppercase tracking-[0.4em] text-sky-400/60 mix-blend-color-dodge">
-              Gathering Ether...
-            </div>
-          </motion.div>
-        )}
+      {/* Progress fill — rises from bottom */}
+      <motion.div
+        className="absolute bottom-0 left-0 right-0"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(0,201,177,0.07) 0%, transparent 100%)',
+        }}
+        animate={{ height: `${progress * 100}%` }}
+        transition={{ duration: 0.4, ease: 'linear' }}
+      />
 
-        {/* Stage 2: Coalescing (30-70%) */}
-        {isCoalescing && (
-          <motion.div
-            key="coalescing"
-            initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }}
-            animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-            exit={{ opacity: 0 }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            {/* Ripple Effects */}
-            {[...Array(3)].map((_, i) => (
-              <motion.div
-                key={i}
-                className="absolute rounded-full border border-white/30"
-                animate={{
-                  width: ['0%', '150%'],
-                  height: ['0%', '150%'],
-                  opacity: [0.5, 0],
-                }}
-                transition={{
-                  duration: 3,
-                  repeat: Infinity,
-                  delay: i * 1,
-                  ease: 'easeOut',
-                }}
-              />
-            ))}
+      {/* Scan line */}
+      <motion.div
+        className="absolute left-0 right-0 h-px"
+        style={{
+          background:
+            'linear-gradient(90deg, transparent 0%, rgba(0,201,177,0.6) 20%, var(--accent) 50%, rgba(0,201,177,0.6) 80%, transparent 100%)',
+          boxShadow: '0 0 8px 1px rgba(0,201,177,0.3)',
+        }}
+        animate={{ top: ['0%', '100%'] }}
+        transition={{ duration: 2.8, repeat: Infinity, ease: 'linear' }}
+      />
 
-            {/* Placeholder Silhouette */}
+      {/* Corner markers */}
+      {[
+        { top: 10, left: 10, rotate: 0 },
+        { top: 10, right: 10, rotate: 90 },
+        { bottom: 10, right: 10, rotate: 180 },
+        { bottom: 10, left: 10, rotate: 270 },
+      ].map((pos, i) => (
+        <div
+          key={i}
+          className="absolute h-4 w-4"
+          style={{
+            ...pos,
+            opacity: 0.35,
+          }}
+        >
+          <div
+            className="absolute top-0 left-0 h-px w-3"
+            style={{ background: 'var(--accent)' }}
+          />
+          <div
+            className="absolute top-0 left-0 h-3 w-px"
+            style={{ background: 'var(--accent)' }}
+          />
+        </div>
+      ))}
+
+      {/* Center — pulsing dot with rings */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative flex items-center justify-center">
+          {/* Rings */}
+          {[0, 0.6, 1.2].map((delay, i) => (
             <motion.div
-              className="relative z-10 h-40 w-40 rounded-[32px] bg-gradient-to-br from-white/10 to-white/5 shadow-2xl backdrop-blur-sm"
-              animate={{
-                boxShadow: [
-                  '0 0 20px rgba(56, 189, 248, 0.1)',
-                  '0 0 40px rgba(245, 158, 11, 0.15)',
-                  '0 0 20px rgba(56, 189, 248, 0.1)',
-                ],
+              key={i}
+              className="absolute rounded-full"
+              style={{ border: '1px solid rgba(0,201,177,0.35)' }}
+              initial={{ width: 12, height: 12, opacity: 0.5 }}
+              animate={{ width: 56, height: 56, opacity: 0 }}
+              transition={{
+                duration: 2.4,
+                repeat: Infinity,
+                delay,
+                ease: 'easeOut',
               }}
-              transition={{ duration: 4, repeat: Infinity }}
-            >
-              <div className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-[32px]">
-                <div className="h-full w-full bg-[linear-gradient(45deg,transparent_25%,rgba(255,255,255,0.05)_50%,transparent_75%)] bg-[length:250%_250%] animate-pulse" />
-                <Sparkles className="h-10 w-10 text-white/20" />
-              </div>
-            </motion.div>
+            />
+          ))}
 
-            <div className="absolute bottom-6 text-[10px] font-semibold uppercase tracking-[0.25em] text-amber-500/60">
-              Coalescing Structure
-            </div>
-          </motion.div>
-        )}
-
-        {/* Stage 3: Stabilizing (70-100%) */}
-        {isStabilizing && (
+          {/* Core dot */}
           <motion.div
-            key="stabilizing"
-            initial={{ opacity: 0, scale: 1.1 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="absolute inset-0 flex items-center justify-center"
-          >
-            {/* Sharpening effect frame */}
-            <motion.div
-              className="relative h-48 w-48 rounded-[28px] border border-white/40 bg-white/20 p-1 shadow-[0_0_50px_rgba(255,255,255,0.2)] backdrop-blur-md"
-              animate={{
-                scale: [1, 1.01, 1],
-              }}
-              transition={{ duration: 0.5, repeat: Infinity }}
-            >
-              <div className="h-full w-full rounded-xl bg-gradient-to-tr from-sky-100/20 to-amber-50/20" />
-
-              {/* The "Pop" - flash of light at near-completion */}
-              {progress > 0.95 && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0 }}
-                  animate={{ opacity: [0, 1, 0], scale: [0, 1.5, 2] }}
-                  transition={{ duration: 0.6 }}
-                  className="absolute inset-0 rounded-full bg-white blur-2xl"
-                />
-              )}
-            </motion.div>
-
-            <motion.div
-              className="absolute bottom-10 flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-sky-400"
-              animate={{ opacity: [0.4, 0.8, 0.4] }}
-              transition={{ duration: 1.5, repeat: Infinity }}
-            >
-              Stabilizing Frequency
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            className="relative z-10 h-2 w-2 rounded-full"
+            style={{ background: 'var(--accent)' }}
+            animate={{ opacity: [0.6, 1, 0.6] }}
+            transition={{ duration: 1.8, repeat: Infinity }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

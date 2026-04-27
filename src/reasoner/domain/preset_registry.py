@@ -19,18 +19,18 @@ _PRESET_CONFIGS: list[dict] = [
     {
         "id": "multi-perspective-budget",
         "name": "Multi-Perspective (Budget)",
-        "description": "Standard 6-phase pipeline using cheapest cross-lab models. DeepSeek (reasoning) + Qwen (cross-lab scoring). Pennies per run.",
+        "description": "Standard 6-phase pipeline with 3-lab Phase 2 diversity. Google (constructive) + Mistral Small (destructive) + Zhipu GLM (systemic) + Ministral-3B (minimalist). Qwen scores independently. Pennies per run.",
         "primary_id": "gemini-flash-lite",
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
             "decomposition": "gemini-flash-lite",
             "constructive": "gemini-flash-lite",
-            "destructive": "mistral-large-3",
-            "systemic": "gemini-flash-lite",
-            "minimalist": "gemini-flash-lite",
-            "scoring": "gemini-flash-lite",
-            "stress_testing": "gemini-flash-lite",
+            "destructive": "mistral-small",
+            "systemic": "glm-4.7-flash",
+            "minimalist": "ministral-3b",
+            "scoring": "qwen3.5-flash",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -46,8 +46,10 @@ _PRESET_CONFIGS: list[dict] = [
             "synthesis": "glm-4-air"
         },
         "notes": [
-            "DeepSeek + Qwen + GLM: 3 different labs in Phase 2 = genuine diversity",
-            "qwen3-turbo at ~$0.03/M is the cheapest capable model in registry",
+            "Phase 2: Google + Mistral + Zhipu = 3 labs; Ministral-3B (minimalist) stays Mistral lab",
+            "Scoring: Qwen 3.5 Flash (Alibaba) — independent lab, prevents same-lab scorer bias",
+            "Stress testing: Mistral Small — stronger adversarial reasoning than Gemini Flash Lite",
+            "Ministral-3B for minimalist: smallest Mistral model enforces conciseness by design",
             "Full run estimated at <$0.02 total",
             "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
         ],
@@ -108,9 +110,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "gemini-flash-lite"
         },
         "fallback_routing": {
@@ -186,9 +188,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
-            "scoring": "mistral-large-3",
-            "stress_testing": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
+            "scoring": "mistral-small",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -266,9 +268,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -342,9 +344,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -418,9 +420,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -494,9 +496,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -570,9 +572,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -646,9 +648,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -722,9 +724,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -798,9 +800,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max",
             "expert_1": "gemini-flash-lite",
             "expert_2": "qwen3-max",
@@ -880,11 +882,11 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "gpt-4o-mini",
             "decomposition": "gemini-flash-lite",
             "cove_draft": "gemini-flash-lite",
-            "cove_verify": "qwen3-max",
+            "cove_verify": "deepseek-v3",
             "cove_answer": "glm-4-air",
             "cove_revise": "gemini-flash-lite",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -959,7 +961,7 @@ _PRESET_CONFIGS: list[dict] = [
             "sot_solve": "qwen3-max",
             "sot_assemble": "glm-4-air",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -1029,10 +1031,10 @@ _PRESET_CONFIGS: list[dict] = [
             "decomposition": "gemini-flash-lite",
             "tot_decompose": "gemini-flash-lite",
             "tot_generate": "qwen3-max",
-            "tot_evaluate": "glm-4-air",
+            "tot_evaluate": "deepseek-v3",
             "tot_backtrack": "gemini-flash-lite",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -1103,11 +1105,11 @@ _PRESET_CONFIGS: list[dict] = [
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
             "decomposition": "gemini-flash-lite",
-            "pot_generate": "gemini-flash-lite",
+            "pot_generate": "deepseek-v3",
             "pot_execute": "qwen3-max",
             "pot_interpret": "glm-4-air",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -1177,9 +1179,9 @@ _PRESET_CONFIGS: list[dict] = [
             "decomposition": "gemini-flash-lite",
             "sd_select": "gemini-flash-lite",
             "sd_adapt": "qwen3-max",
-            "sd_implement": "glm-4-air",
+            "sd_implement": "deepseek-v3",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
         "fallback_routing": {
@@ -1252,9 +1254,9 @@ _PRESET_CONFIGS: list[dict] = [
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
             "systemic": "glm-4-air",
-            "minimalist": "gemini-flash-lite",
+            "minimalist": "ministral-3b",
             "scoring": "glm-4-air",
-            "stress_testing": "gemini-flash-lite",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max",
             "subagent_synthesis_analysis": "gemini-flash-lite",
             "subagent_synthesis_writer": "qwen3-max",
@@ -1365,8 +1367,8 @@ _PRESET_CONFIGS: list[dict] = [
         "primary_id": "gemini-flash-lite",
         "routing": {
             "article_decompose": "gemini-flash-lite",
-            "article_claim_extract": "mistral-large-3",
-            "article_cove_verify": "deepseek-r1t2-chimera",
+            "article_claim_extract": "mistral-small",
+            "article_cove_verify": "deepseek-v3",
             "article_cove_answer": "gemini-flash-lite",
             "article_cove_revise": "gemini-flash-lite",
             "article_verifier": "gemini-flash-lite",
@@ -1392,12 +1394,12 @@ _PRESET_CONFIGS: list[dict] = [
             "article_assemble": "deepseek-v3",
         },
         "notes": [
-            "DeepSeek V3: decomposition, CoVE answer/revise, SoT skeleton — fast structured output",
-            "DeepSeek R1: CoVE verify, adversarial verifier, pre-mortem, critic — reasoning model",
-            "Mistral Large 3: claim extraction — high precision on factual text",
-            "Kimi K2.6: SoT section writing, synthesis, assembly — 1T MoE, 256K context, agentic writing at $2.10/M",
+            "DeepSeek V3: CoVE verification — chain-of-thought training aligns naturally with fact-checking",
+            "Mistral Small: claim extraction — precise factual text extraction at $0.10/M vs $2.00/M for Large",
+            "Kimi K2.6: SoT section writing, synthesis, assembly — 1T MoE, 256K context, best OSS writing model",
+            "Gemini Flash Lite: reliable JSON and instruction-following for structural article phases",
             "GLM-4-Air: universal fallback — cheapest capable model if primary fails",
-            "Gemini Flash Lite: reliable JSON and instruction-following for article generation phases."
+            "Estimated <$0.05 per article"
         ],
     },
     {
@@ -1444,6 +1446,70 @@ _PRESET_CONFIGS: list[dict] = [
             "Critical bottleneck (CoVE verify + verifier): Claude's constitutional AI for contradiction detection",
         ],
     },
+    # ── Coding (Production Code Generation) ─────────────────────────
+    {
+        "id": "coding-budget",
+        "name": "Coding / Code Generation (Budget)",
+        "description": "5-phase production code generation: spec → parallel file generation → adversarial security review → test generation → final assembly. DeepSeek V3 generates (HumanEval 82.6%), Qwen3-Max reviews adversarially, Kimi K2.6 assembles. Cross-lab diversity enforced.",
+        "primary_id": "gemini-flash-lite",
+        "routing": {
+            "coding_spec": "gemini-flash-lite",
+            "coding_generate": "deepseek-v3",
+            "coding_review": "qwen3-max",
+            "coding_tests": "deepseek-v3",
+            "coding_assemble": "kimi-k2-6",
+            "synthesis": "kimi-k2-6",
+        },
+        "fallback_routing": {
+            "coding_spec": "glm-4-air",
+            "coding_generate": "qwen3-max",
+            "coding_review": "deepseek-v3",
+            "coding_tests": "qwen3-max",
+            "coding_assemble": "deepseek-v3",
+            "synthesis": "deepseek-v3",
+        },
+        "notes": [
+            "DeepSeek V3: code generation + tests — HumanEval 82.6%, MBPP 84.2%, strong chain-of-thought",
+            "Qwen3-Max: adversarial security review — different lab prevents same-model blind spots",
+            "Kimi K2.6: spec analysis + final assembly — 1T MoE, SWE-bench 77.8%, 256K context",
+            "Gemini Flash Lite: structural spec decomposition — reliable JSON, low cost",
+            "3-lab diversity: Google (spec) + DeepSeek (generate) + Alibaba/Zhipu (review/assemble)",
+            "Estimated <$0.05 per run",
+        ],
+    },
+    {
+        "id": "coding-premium",
+        "name": "Coding / Code Generation (Premium)",
+        "description": "Elite 5-phase code generation. Claude Sonnet specs (Anthropic RLHF + constitutional AI), Kimi K2.6 generates (SWE-bench 80.2%), DeepSeek R1T2 reviews adversarially, Claude Sonnet writes tests (best TDD reasoning), GPT-5 assembles final delivery (strongest integration pass). 4-lab cross-ecosystem. Estimated $0.20–$0.35 per run.",
+        "primary_id": "claude-sonnet",
+        "required_tier": "pro",
+        "routing": {
+            "coding_spec": "claude-sonnet",
+            "coding_generate": "kimi-k2-6",
+            "coding_review": "deepseek-r1t2-chimera",
+            "coding_tests": "claude-sonnet",
+            "coding_assemble": "gpt-5",
+            "synthesis": "gpt-5",
+        },
+        "fallback_routing": {
+            "coding_spec": "gemini-pro",
+            "coding_generate": "claude-sonnet",
+            "coding_review": "qwen3.6-plus",
+            "coding_tests": "deepseek-r1t2-chimera",
+            "coding_assemble": "claude-sonnet",
+            "synthesis": "claude-sonnet",
+        },
+        "required_tier": "pro",
+        "notes": [
+            "Claude Sonnet: spec + tests — Anthropic RLHF produces safe architecture + thorough TDD coverage",
+            "Kimi K2.6: code generation — 1T MoE, SWE-bench 80.2%, 256K context, best OSS coder",
+            "DeepSeek R1T2 Chimera: adversarial review — adversarial RL training catches subtle security flaws",
+            "GPT-5: final assembly — strongest cross-file integration, catches import/type inconsistencies",
+            "4-lab cross-ecosystem: Anthropic + Moonshot + DeepSeek + OpenAI",
+            "Fallback: Gemini Pro (Google) + Claude Sonnet — maintains cross-lab independence on failure",
+            "Estimated $0.20–$0.35 per run",
+        ],
+    },
     # ── Cross-Language ───────────────────────────────────────────────
     {
         "id": "cross-language-budget",
@@ -1455,11 +1521,11 @@ _PRESET_CONFIGS: list[dict] = [
             "classification": "gpt-4o-mini",
             "decomposition": "gemini-flash-lite",
             "constructive": "gemini-flash-lite",
-            "destructive": "mistral-large-3",
-            "systemic": "gemini-flash-lite",
-            "minimalist": "gemini-flash-lite",
-            "scoring": "gemini-flash-lite",
-            "stress_testing": "gemini-flash-lite",
+            "destructive": "mistral-small",
+            "systemic": "glm-4.7-flash",
+            "minimalist": "ministral-3b",
+            "scoring": "qwen3.5-flash",
+            "stress_testing": "mistral-small",
             "synthesis": "qwen3-max",
         },
         "fallback_routing": {
@@ -1476,10 +1542,11 @@ _PRESET_CONFIGS: list[dict] = [
         },
         "required_env_vars": ["OPENROUTER_API_KEY", "DEEPL_API_KEY"],
         "notes": [
+            "Phase 2: Google + Mistral Small (destructive) + Zhipu GLM (systemic) = 3 labs",
+            "Scoring: Qwen 3.5 Flash (Alibaba) — independent lab scorer",
             "DeepL free tier: 500K chars/month — sufficient for most use cases",
             "DeepL paid tier: 50M chars/month with next-gen model support",
             "Translation preserves formatting and line breaks",
-            "Same cross-lab diversity as multi-perspective budget",
             "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
         ],
     },

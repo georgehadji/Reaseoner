@@ -143,7 +143,12 @@
       "Bash(pip uninstall *)",
       "Bash(taskkill /PID 32940 /F)",
       "Bash(awk '{print $5}')",
-      "Bash(xargs -I{} taskkill /PID {} /F)"
+      "Bash(xargs -I{} taskkill /PID {} /F)",
+      "PowerShell(Get-ChildItem \"E:\\\\Documents\\\\Vibe-Coding\\\\Reasoner\\\\.claude\" -Recurse | Select-Object FullName | Where-Object { $_.FullName -notmatch \"worktrees\" } | Select-Object -First 50)",
+      "Bash(ruff --version)",
+      "Bash(python -m ruff --version)",
+      "Bash(mkdir -p E:/Documents/Vibe-Coding/Reasoner/docs/CODEMAPS)",
+      "Bash(mkdir -p E:/Documents/Vibe-Coding/Reasoner/.reports)"
     ]
   },
   "enableAllProjectMcpServers": true,

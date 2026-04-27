@@ -401,9 +401,10 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             draft_data = extract_json(raw_draft)
             draft_claims = draft_data.get("claims", [])
         except Exception as exc:
-            self._log("ARTICLE", f"CoVE draft parse error: {exc}", state)
-            state.errors.append(f"Article CoVE draft: parse error: {exc}")
-            draft_claims = []
+            self._log("ARTICLE", f"CoVE draft parse error (fallback v2): {exc}", state)
+            draft_claims = self._extract_cove_array_fallback(raw_draft, "claims")
+            if not draft_claims:
+                state.errors.append(f"Article CoVE draft: parse error (fallback v2): {exc}")
 
         if not draft_claims:
             self._log("ARTICLE", "No draft claims generated", state)
@@ -425,8 +426,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             verification_questions = vq_data.get("verification_questions", [])
         except Exception as exc:
             self._log("ARTICLE", f"CoVE verify parse error: {exc}", state)
-            state.errors.append(f"Article CoVE verify: parse error: {exc}")
-            verification_questions = []
+            verification_questions = self._extract_cove_array_fallback(raw_vq, "verification_questions")
+            if not verification_questions:
+                state.errors.append(f"Article CoVE verify: parse error: {exc}")
 
         state.writing_state["cove_verification_questions"] = verification_questions
 
@@ -443,8 +445,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             verification_answers = va_data.get("answers", [])
         except Exception as exc:
             self._log("ARTICLE", f"CoVE answer parse error: {exc}", state)
-            state.errors.append(f"Article CoVE answer: parse error: {exc}")
-            verification_answers = []
+            verification_answers = self._extract_cove_array_fallback(raw_va, "answers")
+            if not verification_answers:
+                state.errors.append(f"Article CoVE answer: parse error: {exc}")
 
         state.writing_state["cove_verification_answers"] = verification_answers
 
@@ -463,10 +466,16 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             uncertainties = revise_data.get("remaining_uncertainties", [])
         except Exception as exc:
             self._log("ARTICLE", f"CoVE revise parse error: {exc}", state)
-            state.errors.append(f"Article CoVE revise: parse error: {exc}")
-            revised_claims = draft_claims
-            changes = []
-            uncertainties = []
+            revised_claims = self._extract_cove_array_fallback(raw_revise, "claims")
+            changes = self._extract_cove_array_fallback(raw_revise, "changes_made")
+            uncertainties = self._extract_cove_array_fallback(raw_revise, "remaining_uncertainties")
+            if not revised_claims:
+                state.errors.append(f"Article CoVE revise: parse error: {exc}")
+                revised_claims = draft_claims
+            if not changes:
+                changes = []
+            if not uncertainties:
+                uncertainties = []
 
         # Deduplicate revised claims
         seen_texts: set[str] = set()
@@ -844,12 +853,24 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             user_prompt=phases.article_pre_mortem_prompt(state, article, claims_json),
             state=state,
         )
+        # Defensive: strip markdown fences locally in case parsing.py is cached old
+        raw_clean = raw.strip()
+        if raw_clean.startswith("```json"):
+            raw_clean = raw_clean[7:].lstrip()
+        elif raw_clean.startswith("```"):
+            raw_clean = raw_clean[3:].lstrip()
+        if raw_clean.rstrip().endswith("```"):
+            raw_clean = raw_clean.rstrip()[:-3].rstrip()
+
         try:
-            data = extract_json(raw)
+            data = extract_json(raw_clean)
         except Exception as exc:
             self._log("ARTICLE", f"Pre-mortem parse error: {exc}", state)
-            state.errors.append(f"Article pre-mortem: parse error: {exc}")
-            data = {}
+            # Fallback: try to extract fields with regex so we don't lose everything
+            data = self._extract_pre_mortem_fallback(raw_clean)
+            # Only record a hard error if the fallback also comes up empty
+            if not data or not any(v for v in data.values() if v):
+                state.errors.append(f"Article pre-mortem: parse error: {exc}")
 
         state.writing_state["pre_mortem"] = {
             "failure_narrative": data.get("failure_narrative", ""),
@@ -1060,3 +1081,255 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         ))
 
         self._log("ARTICLE", f"Final assembly complete: {len(final_text)} chars", state)
+
+    # ── Fallback extraction helpers ──────────────────────────────────────────
+
+    def _extract_pre_mortem_fallback(self, text: str) -> dict[str, Any]:
+        """
+        Robust fallback for pre-mortem JSON extraction when the LLM
+        produces malformed JSON (fences, unescaped quotes, truncation).
+        Uses delimiter-aware scanning rather than naive regex so that
+        unescaped quotes inside values don't truncate extraction early.
+        """
+        data: dict[str, Any] = {}
+        _ALL_KEYS = [
+            "failure_narrative", "root_causes", "weak_sections",
+            "challenged_claims", "missing_counterarguments",
+            "overgeneralizations", "early_warnings",
+        ]
+
+        def _find_value_start(key: str) -> int | None:
+            m = re.search(rf'"{key}"\s*:\s*', text)
+            return m.end() if m else None
+
+        def _find_value_end(start: int, is_array: bool = False) -> int:
+            """Find the end of a value starting at *start*.
+            For arrays, balances []. For strings, scans until an unescaped
+            quote followed by structural punctuation (comma or brace).
+            """
+            if is_array:
+                if start >= len(text) or text[start] != "[":
+                    return len(text)
+                depth = 0
+                in_str = False
+                escape = False
+                for i in range(start, len(text)):
+                    ch = text[i]
+                    if escape:
+                        escape = False
+                        continue
+                    if ch == "\\" and in_str:
+                        escape = True
+                        continue
+                    if ch == '"' and not escape:
+                        in_str = not in_str
+                        continue
+                    if not in_str:
+                        if ch == "[":
+                            depth += 1
+                        elif ch == "]":
+                            depth -= 1
+                            if depth == 0:
+                                return i + 1
+                return len(text)
+            else:
+                # String value — must start with quote
+                if start >= len(text) or text[start] != '"':
+                    return len(text)
+                in_str = False
+                escape = False
+                for i in range(start, len(text)):
+                    ch = text[i]
+                    if escape:
+                        escape = False
+                        continue
+                    if ch == "\\" and in_str:
+                        escape = True
+                        continue
+                    if ch == '"' and not escape:
+                        in_str = not in_str
+                        if not in_str:
+                            # Closing quote found — confirm it's followed by
+                            # structural punctuation before accepting
+                            j = i + 1
+                            while j < len(text) and text[j].isspace():
+                                j += 1
+                            if j < len(text) and text[j] in ",}]":
+                                return i + 1
+                            # Otherwise keep scanning (it was an internal quote)
+                return len(text)
+
+        def _extract_str(key: str) -> str:
+            start = _find_value_start(key)
+            if start is None:
+                return ""
+            end = _find_value_end(start, is_array=False)
+            if end <= start + 1:
+                return ""
+            # Strip the surrounding quotes
+            val = text[start:end]
+            if val.startswith('"'):
+                val = val[1:]
+            # Find the last quote that was meant to close the value
+            # (scan backwards for a quote that is followed by structural punctuation)
+            for i in range(len(val) - 1, -1, -1):
+                if val[i] == '"':
+                    j = i + 1
+                    while j < len(val) and val[j].isspace():
+                        j += 1
+                    if j == len(val) or val[j] in ",}]":
+                        val = val[:i]
+                        break
+            return val.replace('\\"', '"').strip()
+
+        def _extract_list(key: str) -> list[str]:
+            start = _find_value_start(key)
+            if start is None:
+                return []
+            end = _find_value_end(start, is_array=True)
+            arr_text = text[start:end]
+            if not arr_text.startswith("["):
+                return []
+            # Extract individual string items.
+            # We scan for quoted segments, but we only treat a quote as a
+            # string terminator when it is followed by comma or ] (allowing
+            # whitespace).  This tolerates unescaped quotes inside values.
+            items: list[str] = []
+            i = 1  # skip [
+            while i < len(arr_text) - 1:
+                while i < len(arr_text) and arr_text[i].isspace():
+                    i += 1
+                if i >= len(arr_text) or arr_text[i] != '"':
+                    i += 1
+                    continue
+                item_start = i
+                in_str = False
+                escape = False
+                for j in range(i, len(arr_text)):
+                    ch = arr_text[j]
+                    if escape:
+                        escape = False
+                        continue
+                    if ch == "\\" and in_str:
+                        escape = True
+                        continue
+                    if ch == '"' and not escape:
+                        in_str = not in_str
+                        if not in_str:
+                            # Confirm this is a real terminator (followed by , or ])
+                            k = j + 1
+                            while k < len(arr_text) and arr_text[k].isspace():
+                                k += 1
+                            if k < len(arr_text) and arr_text[k] in ",]":
+                                items.append(arr_text[item_start + 1:j].replace('\\"', '"'))
+                                i = j + 1
+                                break
+                else:
+                    break
+                # Skip comma
+                while i < len(arr_text) and arr_text[i].isspace():
+                    i += 1
+                if i < len(arr_text) and arr_text[i] == ",":
+                    i += 1
+            return [it for it in items if it]
+
+        data["failure_narrative"] = _extract_str("failure_narrative")
+        data["root_causes"] = _extract_list("root_causes")
+        data["weak_sections"] = _extract_list("weak_sections")
+        data["challenged_claims"] = _extract_list("challenged_claims")
+        data["missing_counterarguments"] = _extract_list("missing_counterarguments")
+        data["overgeneralizations"] = _extract_list("overgeneralizations")
+        data["early_warnings"] = _extract_list("early_warnings")
+        return data
+
+    def _extract_cove_array_fallback(self, text: str, field: str) -> list[dict]:
+        """
+        Extract an array of objects for *field* from malformed CoVE JSON.
+        Tolerates fences, truncation, and unescaped quotes.
+        """
+        # Strip fences
+        clean = text.strip()
+        if clean.startswith("```json"):
+            clean = clean[7:].lstrip()
+        elif clean.startswith("```"):
+            clean = clean[3:].lstrip()
+        if clean.rstrip().endswith("```"):
+            clean = clean.rstrip()[:-3].rstrip()
+
+        # Find the field's array — tolerate missing closing ]
+        m = re.search(rf'"{field}"\s*:\s*\[(.*)', clean, re.DOTALL)
+        if not m:
+            return []
+        arr_text = m.group(1)
+
+        # Extract individual objects with a bracket balancer (tolerates truncation)
+        items: list[dict] = []
+        i = 0
+        while i < len(arr_text):
+            # Find next '{'
+            while i < len(arr_text) and arr_text[i] != '{':
+                i += 1
+            if i >= len(arr_text):
+                break
+            start = i
+            depth = 0
+            in_str = False
+            escape = False
+            for j in range(i, len(arr_text)):
+                ch = arr_text[j]
+                if escape:
+                    escape = False
+                    continue
+                if ch == "\\" and in_str:
+                    escape = True
+                    continue
+                if ch == '"' and not escape:
+                    in_str = not in_str
+                    continue
+                if not in_str:
+                    if ch == '{':
+                        depth += 1
+                    elif ch == '}':
+                        depth -= 1
+                        if depth == 0:
+                            obj_str = arr_text[start:j + 1]
+                            try:
+                                obj = json.loads(obj_str)
+                                if isinstance(obj, dict):
+                                    items.append(obj)
+                            except json.JSONDecodeError:
+                                obj_data = self._extract_kv_pairs_from_object(obj_str)
+                                if obj_data:
+                                    items.append(obj_data)
+                            i = j + 1
+                            break
+            else:
+                # Truncated object — try to extract what we can
+                obj_str = arr_text[start:]
+                obj_data = self._extract_kv_pairs_from_object(obj_str)
+                if obj_data:
+                    items.append(obj_data)
+                break
+        return items
+
+    def _extract_kv_pairs_from_object(self, obj_str: str) -> dict[str, Any] | None:
+        """Extract key-value pairs from a (possibly truncated) JSON object string."""
+        data: dict[str, Any] = {}
+        for kv in re.finditer(r'"([^"]+)"\s*:\s*"((?:[^"\\]|\\.)*)"', obj_str):
+            data[kv.group(1)] = kv.group(2).replace('\\"', '"')
+        # Also try bare values (numbers, booleans)
+        for kv in re.finditer(r'"([^"]+)"\s*:\s*(true|false|null|\d+(?:\.\d+)?)\s*(?:,|\}|$)', obj_str):
+            key = kv.group(1)
+            val = kv.group(2)
+            if val == "true":
+                data[key] = True
+            elif val == "false":
+                data[key] = False
+            elif val == "null":
+                data[key] = None
+            else:
+                try:
+                    data[key] = int(val)
+                except ValueError:
+                    data[key] = float(val)
+        return data if data else None

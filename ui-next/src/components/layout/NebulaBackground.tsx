@@ -15,6 +15,9 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uTime;
   uniform vec2 uResolution;
   uniform float uMotion;
+  uniform vec2 uMouse;
+  uniform float uClickTime;
+  uniform vec2 uClickPos;
   varying vec2 vUv;
 
   // Simplex 2D noise
@@ -62,6 +65,10 @@ const FRAGMENT_SHADER = /* glsl */ `
     vec2 uv = vUv;
     float t = uTime * 0.03 * uMotion;
 
+    // Mouse parallax: subtle shift opposite to cursor
+    vec2 mouseOffset = (uMouse - 0.5) * 0.12;
+    uv += mouseOffset;
+
     // Slow nebula drift
     vec2 p = uv * 2.5;
     p.x += t * 0.3;
@@ -70,6 +77,19 @@ const FRAGMENT_SHADER = /* glsl */ `
     float n1 = fbm(p + vec2(t * 0.2, 0.0));
     float n2 = fbm(p * 1.3 + vec2(0.0, t * 0.15) + 10.0);
     float n3 = fbm(p * 0.7 + vec2(t * 0.1, t * 0.25) + 20.0);
+
+    // Click ripple distortion
+    float clickAge = uTime - uClickTime;
+    float ripple = 0.0;
+    if (clickAge > 0.0 && clickAge < 3.0) {
+      float dist = length(vUv - uClickPos);
+      float wave = sin(dist * 30.0 - clickAge * 12.0);
+      float envelope = exp(-clickAge * 1.5) * smoothstep(0.0, 0.5, clickAge);
+      float radiusMask = smoothstep(0.0, 0.6, dist) * (1.0 - smoothstep(0.6, 1.0, dist));
+      ripple = wave * envelope * radiusMask * 0.15;
+    }
+    n1 += ripple;
+    n2 += ripple * 0.7;
 
     // Teal (#00C9B1) → deep navy base
     vec3 teal = vec3(0.0, 0.788, 0.694);
@@ -82,7 +102,7 @@ const FRAGMENT_SHADER = /* glsl */ `
     col = mix(col, amber * 0.20, smoothstep(0.0, 0.8, n3) * 0.15);
 
     // Subtle vignette
-    float vignette = 1.0 - smoothstep(0.4, 1.2, length(uv - 0.5) * 1.4);
+    float vignette = 1.0 - smoothstep(0.4, 1.2, length(vUv - 0.5) * 1.4);
     col *= 0.85 + vignette * 0.15;
 
     gl_FragColor = vec4(col, 1.0);
@@ -114,11 +134,18 @@ export function NebulaBackground() {
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    // Interaction state
+    const mouse = { x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 };
+    const click = { time: -100.0, x: 0.5, y: 0.5 };
+
     // Shader material
     const uniforms = {
       uTime: { value: 0.0 },
       uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
       uMotion: { value: motionScale },
+      uMouse: { value: new THREE.Vector2(0.5, 0.5) },
+      uClickTime: { value: -100.0 },
+      uClickPos: { value: new THREE.Vector2(0.5, 0.5) },
     };
 
     const material = new THREE.ShaderMaterial({
@@ -131,6 +158,42 @@ export function NebulaBackground() {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
+    // Event handlers
+    function onMouseMove(e: MouseEvent) {
+      mouse.targetX = e.clientX / window.innerWidth;
+      mouse.targetY = 1.0 - e.clientY / window.innerHeight; // flip Y for shader
+    }
+
+    function onClick(e: MouseEvent) {
+      click.time = uniforms.uTime.value;
+      click.x = e.clientX / window.innerWidth;
+      click.y = 1.0 - e.clientY / window.innerHeight;
+      uniforms.uClickTime.value = click.time;
+      uniforms.uClickPos.value.set(click.x, click.y);
+    }
+
+    function onTouchMove(e: TouchEvent) {
+      if (e.touches.length > 0) {
+        mouse.targetX = e.touches[0].clientX / window.innerWidth;
+        mouse.targetY = 1.0 - e.touches[0].clientY / window.innerHeight;
+      }
+    }
+
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length > 0) {
+        click.time = uniforms.uTime.value;
+        click.x = e.touches[0].clientX / window.innerWidth;
+        click.y = 1.0 - e.touches[0].clientY / window.innerHeight;
+        uniforms.uClickTime.value = click.time;
+        uniforms.uClickPos.value.set(click.x, click.y);
+      }
+    }
+
+    window.addEventListener('mousemove', onMouseMove, { passive: true });
+    window.addEventListener('click', onClick);
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+
     // Animation
     let rafId = 0;
     const startTime = performance.now();
@@ -138,13 +201,18 @@ export function NebulaBackground() {
     function animate() {
       rafId = requestAnimationFrame(animate);
       uniforms.uTime.value = (performance.now() - startTime) / 1000;
+
+      // Smooth mouse lerp (damping)
+      mouse.x += (mouse.targetX - mouse.x) * 0.04;
+      mouse.y += (mouse.targetY - mouse.y) * 0.04;
+      uniforms.uMouse.value.set(mouse.x, mouse.y);
+
       renderer.render(scene, camera);
     }
 
     if (motionScale > 0) {
       animate();
     } else {
-      // Static render for reduced motion
       renderer.render(scene, camera);
     }
 
@@ -162,6 +230,10 @@ export function NebulaBackground() {
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('click', onClick);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchstart', onTouchStart);
       geometry.dispose();
       material.dispose();
       renderer.dispose();
@@ -174,7 +246,7 @@ export function NebulaBackground() {
   return (
     <div
       ref={containerRef}
-      className="pointer-events-none fixed inset-0 z-0"
+      className="fixed inset-0 z-0"
       aria-hidden="true"
       style={{ opacity: 0.9 }}
     />

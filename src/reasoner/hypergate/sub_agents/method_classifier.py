@@ -1,11 +1,11 @@
 """
 MethodClassifierSubAgent — ONE JOB: classify which reasoning method best fits
-the problem, using an opaque letter taxonomy (B–Q).
+the problem, using an opaque letter taxonomy (B–T).
 
 The real method names are NEVER exposed to the LLM (security: prevents prompt
 injection that could manipulate routing by naming a method directly).
 
-Output schema: {category: str (B–Q), confidence: float, rationale: str}
+Output schema: {category: str (B–T), confidence: float, rationale: str}
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ _TAXONOMY: dict[str, tuple[str, str]] = {
     "Q": ("pipeline", "self_discover"),
     "R": ("pipeline", "writing"),
     "S": ("pipeline", "coding"),
+    "T": ("pipeline", "brainstorming"),
 }
 
 _SYSTEM = """\
@@ -62,6 +63,7 @@ Categories:
 - Q: requires dynamic selection and composition of reasoning modules tailored to the specific problem structure
 - R: requires structured long-form writing — article, essay, blog post, report with research, outline, draft, and fact-checking
 - S: requires generating production-quality software code, implementation, architecture, or technical solution
+- T: open-ended creative ideation — generate a DIVERSE pool of novel ideas, approaches, or solutions for a problem that has no single correct answer and benefits from unconventional, lateral, or cross-domain thinking (e.g. "generate ideas for X", "brainstorm ways to Y", "what are creative approaches to Z")
 
 DISAMBIGUATION RULES (apply these when choosing between similar categories):
 - B vs J: Choose B if the question has a definite answer and one side must WIN (e.g. "should we X or Y?"). Choose J if both sides of a tension are genuinely valid and need to be MERGED into a higher insight (e.g. "how do we balance X with Y?").
@@ -70,9 +72,10 @@ DISAMBIGUATION RULES (apply these when choosing between similar categories):
 - N vs O: Choose N when sub-tasks are fully INDEPENDENT and can run simultaneously (like parallel workstreams). Choose O when decisions are SEQUENTIAL — you must make decision A before knowing which option B is even available.
 - M vs C: Choose M when the primary need is verifying specific factual claims in an existing draft. Choose C when the primary need is generating and testing novel hypotheses.
 - S vs P: Choose S for writing software (functions, classes, systems, APIs). Choose P only when the problem is fundamentally mathematical/computational and the code IS the reasoning (e.g. "calculate X", "prove Y programmatically").
+- T vs E: Choose T when the explicit goal is to GENERATE a diverse pool of ideas/options (quantity + novelty), not to analyse one problem from multiple angles. Key signals: "brainstorm", "generate ideas", "come up with options", "think of ways to", "what are creative approaches". Choose E for analytical problems that need multiple perspectives on a single question.
 
 Output ONLY valid JSON with exactly three keys: \
-'category' (one letter B–S), \
+'category' (one letter B–T), \
 'confidence' (float 0.0–1.0), \
 'rationale' (one short sentence). \
 No markdown, no extra text.\

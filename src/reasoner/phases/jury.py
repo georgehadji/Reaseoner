@@ -6,13 +6,48 @@ from reasoner.phases._shared import get_language_instruction, _wrap_user_input
 JURY_GENERATOR_SYSTEM = "You are an analytical assistant. Produce your best possible solution. Output ONLY valid JSON."
 
 def jury_generator_prompt(state: PipelineState, generator_id: str) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\nDecomposition:\n{json.dumps(state.decomposition, indent=2)}\n\nYou are {generator_id}. Generate a solution.\n\nOutput JSON: {{"generator_id": "{generator_id}", "solution": "<your solution>", "key_claims": [...]}}'
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Problem: {_wrap_user_input(state.problem)}\n'
+        f'Decomposition:\n{json.dumps(state.decomposition, indent=2)}\n\n'
+        f'You are {generator_id}. Generate a complete, well-reasoned solution.\n\n'
+        f'Output JSON: {{"generator_id": "{generator_id}", '
+        f'"solution": "<full solution text>", '
+        f'"approach_summary": "<1-2 sentence summary of your approach>", '
+        f'"confidence": <0.0-1.0 self-assessed confidence>, '
+        f'"key_claims": ["<verifiable claim 1>", "<verifiable claim 2>"]}}'
+    )
 
 JURY_CRITIC_SYSTEM = "You are an analytical assistant. Score each candidate against the provided guidelines. Output ONLY valid JSON."
 
 def jury_critic_prompt(state: PipelineState) -> str:
     candidates_summary = [{"generator_id": c.generator_id, "approach": c.approach_summary} for c in state.generation_candidates]
-    return f'{get_language_instruction(state)}\n\nJury Guidelines:\n{json.dumps(state.jury_guidelines)}\n\nCandidates:\n{json.dumps(candidates_summary, indent=2)}\n\nScore each candidate on factuality, reasoning, completeness, helpfulness.\n\nCRITICAL SCORING: A new critical scoring dimension is CONFIDENCE vs ACCURACY. It is better to state \'UNKNOWN\' or express low confidence than to guess confidently and be wrong. If a candidate makes a claim with high confidence that is factually incorrect or unsubstantiated, apply a significant **negative penalty** (0.0-10.0) to its score. Reward honest uncertainty.\n\nOutput JSON: {{"critic_id": "...", "candidate_scores": {{...}}, "confidence_vs_accuracy_penalty": <0.0-10.0>}}}}'
+    gen_ids = [c.generator_id for c in state.generation_candidates]
+    ranking_example = json.dumps(gen_ids)
+    return (
+        f'{get_language_instruction(state)}\n\n'
+        f'Jury Guidelines:\n{json.dumps(state.jury_guidelines)}\n\n'
+        f'Candidates:\n{json.dumps(candidates_summary, indent=2)}\n\n'
+        f'Score each candidate on factuality, reasoning, completeness, helpfulness (0-10 each).\n\n'
+        f'CONFIDENCE vs ACCURACY: Reward honest uncertainty. If a candidate states confident claims '
+        f'that are factually wrong or unsubstantiated, apply a confidence_vs_accuracy_penalty (0.0-10.0) '
+        f'inside that candidate\'s score entry.\n\n'
+        f'Output JSON:\n'
+        f'{{"critic_id": "<critic_id>", '
+        f'"critic_model": "<model name>", '
+        f'"candidate_scores": {{'
+        f'"<generator_id>": {{'
+        f'"factuality": <0-10>, '
+        f'"reasoning": <0-10>, '
+        f'"completeness": <0-10>, '
+        f'"helpfulness": <0-10>, '
+        f'"confidence_vs_accuracy_penalty": <0.0-10.0>, '
+        f'"bias_flags": [], '
+        f'"steel_man": "<strongest counter-argument>"'
+        f'}}}}, '
+        f'"ranking": {ranking_example}, '
+        f'"dissenting_note": "<any notable disagreement or caveat>"}}'
+    )
 
 JURY_VERIFIER_SYSTEM = "You are an analytical assistant. Verify these claims. Output ONLY valid JSON."
 

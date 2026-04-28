@@ -489,13 +489,18 @@ function ChatFeedComponent({
                 <div className="w-full">
                   {visiblePhases.map((phase, idx) => {
                     return (
-                      <PhaseRenderer
+                      <div
                         key={`${msg.id}-${phase.phase}-${idx}`}
-                        phase={phase}
-                        onComplete={() => handlePhaseComplete(msg.id, idx)}
-                        forceOpen={forceOpen}
-                        errorPhases={errorPhases}
-                      />
+                        className="animate-phase-reveal"
+                        style={{ animationDelay: `${idx * 60}ms` }}
+                      >
+                        <PhaseRenderer
+                          phase={phase}
+                          onComplete={() => handlePhaseComplete(msg.id, idx)}
+                          forceOpen={forceOpen}
+                          errorPhases={errorPhases}
+                        />
+                      </div>
                     );
                   })}
                 </div>
@@ -513,7 +518,8 @@ function ChatFeedComponent({
                   messageId={msg.id}
                   onFeedback={onFeedback}
                 />
-                {msg.id === messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1)?.id && (
+                {msg.id === messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1)?.id &&
+                  !messages.some((m) => m.isStreaming) && (
                   <ContinueButton onContinue={onContinueGenerating} />
                 )}
               </>
@@ -522,24 +528,29 @@ function ChatFeedComponent({
         );
       })}
 
-      {selectedImage ? (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-          onClick={() => setSelectedImage(null)}
-        >
+      <div
+        className={cn(
+          'fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-300',
+          selectedImage ? 'bg-black/80 opacity-100' : 'bg-black/0 opacity-0 pointer-events-none',
+        )}
+        onClick={() => setSelectedImage(null)}
+      >
           <div
-            className="relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[8px] border border-mds-color-mid-gray/[0.1] bg-mds-color-dark-charcoal shadow-micro-shadow"
+            className={cn(
+              'relative flex max-h-full w-full max-w-6xl flex-col overflow-hidden rounded-[8px] border border-mds-color-mid-gray/[0.1] bg-mds-color-dark-charcoal shadow-micro-shadow transition-all duration-300',
+              selectedImage ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-4 opacity-0 scale-95',
+            )}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between gap-3 border-b border-mds-color-cool-gray/[0.4] px-4 py-3">
               <div className="min-w-0">
                 <div className="font-systemUi text-caption uppercase tracking-[0.18em] text-mds-color-dark-gray">Generated Image</div>
-                <div className="truncate font-systemUi text-sm-body text-mds-color-near-white">LLM model used: {selectedImage.model || 'unknown'}</div>
+                <div className="truncate font-systemUi text-sm-body text-mds-color-near-white">LLM model used: {selectedImage?.model || 'unknown'}</div>
               </div>
               <div className="flex items-center gap-2">
                 <a
-                  href={selectedImage.data}
-                  download={getDownloadName(selectedImage.model)}
+                  href={selectedImage?.data}
+                  download={getDownloadName(selectedImage?.model)}
                   className="inline-flex items-center gap-2 rounded-full border border-mds-color-cool-gray/[0.4] px-3 py-1.5 font-systemUi text-sm-body font-medium text-mds-color-near-white transition-colors hover:bg-mds-color-charcoal"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -557,24 +568,26 @@ function ChatFeedComponent({
             </div>
             <div className="flex items-center justify-center bg-black/20 p-4">
               <img
-                src={selectedImage.data}
-                alt={selectedImage.alt}
+                src={selectedImage?.data}
+                alt={selectedImage?.alt}
                 className="max-h-[78vh] w-auto max-w-full object-contain"
               />
             </div>
           </div>
         </div>
-      ) : null}
 
-      {showNewContentIndicator && (
-        <button
-          type="button"
-          onClick={onScrollToBottom}
-          className="fixed bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full border border-mds-color-cool-gray/[0.4] bg-mds-color-dark-charcoal px-4 py-2 font-systemUi text-sm-body font-medium text-mds-color-near-white shadow-micro-shadow transition-colors hover:bg-mds-color-charcoal"
-        >
-          New content below ↓
-        </button>
-      )}
+      <button
+        type="button"
+        onClick={onScrollToBottom}
+        className={cn(
+          'fixed bottom-24 left-1/2 z-30 -translate-x-1/2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-sm font-medium text-[var(--text)] shadow-[var(--shadow)] transition-all duration-300 hover:bg-[var(--surface-2)]',
+          showNewContentIndicator
+            ? 'translate-y-0 opacity-100'
+            : 'translate-y-4 opacity-0 pointer-events-none',
+        )}
+      >
+        New content below ↓
+      </button>
     </div>
   );
 }

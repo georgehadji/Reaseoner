@@ -302,7 +302,7 @@ PHASE_TIMEOUTS: dict[str, float] = {
     "Deep Research": 120.0,
     "Critique & Pruning": 90.0,
     "Stress Testing": 90.0,
-    "Synthesis": 120.0,
+    "Synthesis": 240.0,
     # Writing flow — composite SoT phase bundles skeleton + parallel writes + assembly
     "Synthesize (SoT)": 180.0,
     # Writing flow — web retrieval can be slow; parallel searches still need room

@@ -319,45 +319,64 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             state.errors.append(f"Article retrieve: {e}")
             return
 
-        all_sources: list[dict] = []
-        seen_urls: set[str] = set()
+        import asyncio as _asyncio
 
-        for sq in subquestions:
+        lang = (getattr(state, "detected_language", None) or "en").lower()
+
+        def _build_variants(sq) -> list[tuple[str, str]]:
+            """Return (query_text, query_id) pairs for a subquestion."""
             q_text = sq.get("question", "") if isinstance(sq, dict) else sq.question
-            self._log("ARTICLE", f"Searching: {q_text[:60]}...", state)
-            query_variants = [q_text]
-            lang = (getattr(state, "detected_language", None) or "en").lower()
+            q_id = sq.get("id", "Q0") if isinstance(sq, dict) else sq.id
+            variants = [q_text]
             if lang.startswith("en"):
                 if len(q_text.split()) >= 4:
-                    query_variants.append(f"{q_text} evidence analysis")
+                    variants.append(f"{q_text} evidence analysis")
                 if "overview" not in q_text.lower():
-                    query_variants.append(f"{q_text} overview")
+                    variants.append(f"{q_text} overview")
+            return [(v, q_id) for v in variants]
+
+        all_queries: list[tuple[str, str]] = []
+        for sq in subquestions:
+            all_queries.extend(_build_variants(sq))
+
+        async def _search_one(query_text: str, query_id: str) -> list[dict]:
             try:
-                for query_text in query_variants:
-                    results = await client.search(
-                        query_text,
-                        num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY,
-                        domain=self.domain,
-                    )
-                    for res in results:
-                        url = res.get("url", "")
-                        if url and url not in seen_urls:
-                            seen_urls.add(url)
-                            all_sources.append({
-                                "title": res.get("title", ""),
-                                "url": url,
-                                "date": res.get("published", ""),
-                                "authority_score": res.get("score", res.get("freshness_score", 0.0)),
-                                "excerpt": res.get("content", "")[:800],
-                                "source_type": res.get("source_type", "website"),
-                                "query_id": sq.get("id", "Q0") if isinstance(sq, dict) else sq.id,
-                                "query_text": query_text,
-                            })
-                    if len(all_sources) >= ARTICLE_MAX_SOURCE_COUNT:
-                        break
+                results = await client.search(
+                    query_text,
+                    num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY,
+                    domain=self.domain,
+                )
+                return [
+                    {
+                        "title": res.get("title", ""),
+                        "url": res.get("url", ""),
+                        "date": res.get("published", ""),
+                        "authority_score": res.get("score", res.get("freshness_score", 0.0)),
+                        "excerpt": res.get("content", "")[:800],
+                        "source_type": res.get("source_type", "website"),
+                        "query_id": query_id,
+                        "query_text": query_text,
+                    }
+                    for res in results
+                    if res.get("url")
+                ]
             except Exception as exc:
-                self._log("ARTICLE", f"Search failed for '{q_text}': {exc}", state)
-                continue
+                self._log("ARTICLE", f"Search failed for '{query_text[:60]}': {exc}", state)
+                return []
+
+        self._log("ARTICLE", f"Running {len(all_queries)} queries in parallel...", state)
+        batch_results = await _asyncio.gather(*[_search_one(qt, qid) for qt, qid in all_queries])
+
+        all_sources: list[dict] = []
+        seen_urls: set[str] = set()
+        for batch in batch_results:
+            for item in batch:
+                url = item.get("url", "")
+                if url and url not in seen_urls:
+                    seen_urls.add(url)
+                    all_sources.append(item)
+                if len(all_sources) >= ARTICLE_MAX_SOURCE_COUNT:
+                    break
             if len(all_sources) >= ARTICLE_MAX_SOURCE_COUNT:
                 break
 

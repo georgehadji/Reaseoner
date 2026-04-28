@@ -11,20 +11,20 @@ from reasoner.api.serializers import (
     _ser_4,
     _ser_5,
 )
-from reasoner.pipeline import ARAPipeline
+from reasoner.pipeline import ReasonerPipeline
 
 from .pipeline_flow import PhaseStep, PipelineFlow
 
 __all__ = ["PhaseStep", "PipelineFlow", "build_default_flow_registry"]
 
 
-def build_default_flow_registry(pipeline: ARAPipeline) -> PipelineFlow:
+def build_default_flow_registry(pipeline: ReasonerPipeline) -> PipelineFlow:
     """
-    Build a PipelineFlow backed by an *ARAPipeline* instance.
+    Build a PipelineFlow backed by a *ReasonerPipeline* instance.
 
     Each step binds to the corresponding ``_phase_*`` / ``_run_*`` method
     on the pipeline.  This is the single source of truth for method-specific
-    phase ordering used by both ``ARAPipeline.run()`` and the API stream.
+    phase ordering used by both ``ReasonerPipeline.run()`` and the API stream.
     """
     flow = PipelineFlow()
 
@@ -167,6 +167,13 @@ def build_default_flow_registry(pipeline: ARAPipeline) -> PipelineFlow:
         PhaseStep(4.5,  "Journal Review",        pipeline._phase_article_critic,          _ser_4),
         PhaseStep(5,    "Final Assembly",        pipeline._phase_article_assemble,        _ser_5),
         PhaseStep(5.5,  "Humanize",              pipeline._phase_article_humanize,        _ser_5),
+    ])
+
+    # ── Brainstorming (Verbalized Sampling) ───────────────────────────────────
+    flow.register("brainstorming", [
+        PhaseStep(2, "VS Idea Generation", pipeline._phase_brainstorm_generate, _ser_2),
+        PhaseStep(3, "Cluster & Score",    pipeline._phase_brainstorm_cluster,  _ser_3, critical=True),
+        PhaseStep(4, "Deep Development",   pipeline._phase_brainstorm_develop,  _ser_4),
     ])
 
     # ── Cross-Language (Translate → Multi-Perspective → Back-Translate) ─

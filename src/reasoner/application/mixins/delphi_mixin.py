@@ -1,4 +1,4 @@
-"""Delphi method mixin for ARAPipeline."""
+"""Delphi method mixin for ReasonerPipeline."""
 
 from __future__ import annotations
 

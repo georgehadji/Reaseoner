@@ -242,7 +242,11 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "deepseek-r1",
             "scoring": "qwen3-plus",
             "stress_testing": "qwen3-plus",
-            "synthesis": "glm-5.1"
+            "synthesis": "glm-5.1",
+            "expert_1": "qwen3-max",
+            "expert_2": "deepseek-v3",
+            "expert_3": "qwen3-plus",
+            "expert_4": "deepseek-v3",
         },
         "required_tier": "pro",
         "notes": [
@@ -817,7 +821,11 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "deepseek-v3",
             "scoring": "qwen3-plus",
             "stress_testing": "qwen3-plus",
-            "synthesis": "glm-4-air"
+            "synthesis": "glm-4-air",
+            "expert_1": "deepseek-v3",
+            "expert_2": "glm-4-air",
+            "expert_3": "qwen3-plus",
+            "expert_4": "deepseek-v3",
         },
         "notes": [
             "4 cheap models in round-robin = genuine diversity",
@@ -858,7 +866,11 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "deepseek-r1",
             "scoring": "qwen3-plus",
             "stress_testing": "qwen3-plus",
-            "synthesis": "gpt-5"
+            "synthesis": "gpt-5",
+            "expert_1": "qwen3-max",
+            "expert_2": "deepseek-v3",
+            "expert_3": "qwen3-plus",
+            "expert_4": "deepseek-v3",
         },
         "required_tier": "pro",
         "notes": [
@@ -1629,6 +1641,85 @@ _PRESET_CONFIGS: list[dict] = [
         ],
     },
     # ── Image Generation ─────────────────────────────────────────────
+    # ── Brainstorming / Verbalized Sampling ────────────────────────────────────
+    {
+        "id": "brainstorming-budget",
+        "name": "Brainstorming (Budget)",
+        "description": (
+            "Verbalized Sampling idea generator. Qwen3-Max runs 3 VS rounds × 5 ideas = 15 raw ideas. "
+            "Gemini Flash Lite clusters and scores. DeepSeek-V3 develops the top 3. "
+            "Designed for creative and open-ended problems. ~$0.03/run."
+        ),
+        "primary_id": "gemini-flash-lite",
+        "routing": {
+            "prompt_enhancement":  "gemini-flash-lite",
+            "classification":      "gpt-4o-mini",
+            "decomposition":       "gemini-flash-lite",
+            "brainstorm_generate": "qwen3-max",
+            "brainstorm_cluster":  "gemini-flash-lite",
+            "brainstorm_develop":  "deepseek-v3",
+            "synthesis":           "qwen3-max",
+        },
+        "fallback_routing": {
+            "prompt_enhancement":  "glm-4-air",
+            "classification":      "glm-4-air",
+            "decomposition":       "glm-4-air",
+            "brainstorm_generate": "deepseek-v3",
+            "brainstorm_cluster":  "glm-4-air",
+            "brainstorm_develop":  "qwen3-plus",
+            "synthesis":           "glm-4-air",
+        },
+        "notes": [
+            "VS-Standard variant: single-turn k=5 per round, 3 rounds = 15 raw ideas",
+            "Qwen3-Max: strong semantic diversity for idea generation",
+            "DeepSeek-V3: concrete implementation reasoning for development phase",
+            "Full run estimated at ~$0.03",
+        ],
+        "brainstorming_config": {
+            "rounds": 3, "k": 5, "threshold": 0.10, "n_tail": 2,
+            "max_develop": 3, "use_cot": False,
+        },
+    },
+    {
+        "id": "brainstorming-premium",
+        "name": "Brainstorming (Premium)",
+        "description": (
+            "VS-CoT + VS-Multi: Claude Sonnet runs 5 VS-CoT rounds × 5 ideas = 25 raw ideas "
+            "with chain-of-thought reasoning before each generation. "
+            "Gemini Pro clusters. Kimi k2 develops the top 5 most innovative ideas. ~$0.25/run."
+        ),
+        "primary_id": "claude-sonnet",
+        "required_tier": "pro",
+        "routing": {
+            "prompt_enhancement":  "claude-sonnet",
+            "classification":      "gpt-4o-mini",
+            "decomposition":       "claude-sonnet",
+            "brainstorm_generate": "claude-sonnet",
+            "brainstorm_cluster":  "gemini-pro",
+            "brainstorm_develop":  "kimi-k2-6",
+            "synthesis":           "claude-sonnet",
+        },
+        "fallback_routing": {
+            "prompt_enhancement":  "gemini-pro",
+            "classification":      "gemini-pro",
+            "decomposition":       "gemini-pro",
+            "brainstorm_generate": "gemini-pro",
+            "brainstorm_cluster":  "qwen3-max",
+            "brainstorm_develop":  "deepseek-v3",
+            "synthesis":           "gemini-pro",
+        },
+        "notes": [
+            "VS-CoT + VS-Multi: chain-of-thought prefix + multi-turn diversity",
+            "Claude Sonnet: best emergent probability introspection capability",
+            "Kimi k2 for development: strong at structured long-form concrete reasoning",
+            "5 rounds × 5 ideas = 25 raw ideas before clustering",
+            "Full run estimated at ~$0.25",
+        ],
+        "brainstorming_config": {
+            "rounds": 5, "k": 5, "threshold": 0.05, "n_tail": 3,
+            "max_develop": 5, "use_cot": True,
+        },
+    },
     {
         "id": IMAGE_GEN_BUDGET_PRESET,
         "name": "Image Generation (Budget)",
@@ -1671,6 +1762,7 @@ PRESETS: dict[str, PipelinePreset] = {
         required_env_vars=cfg.get("required_env_vars", ["OPENROUTER_API_KEY"]),
         fallback_routing=cfg.get("fallback_routing", {}),
         required_tier=SubscriptionTier(cfg.get("required_tier", "free")),
+        brainstorming_config=cfg.get("brainstorming_config", {}),
     )
     for cfg in _PRESET_CONFIGS
 }

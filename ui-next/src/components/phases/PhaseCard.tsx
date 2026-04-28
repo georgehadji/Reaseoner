@@ -29,6 +29,7 @@ interface PhaseCardProps {
   duration?: number;
   compact?: boolean;
   status?: 'idle' | 'active' | 'completed' | 'error';
+  quality?: { score: number; passed: boolean } | null;
 }
 
 function formatModelLabel(model: string) {
@@ -54,6 +55,7 @@ export const PhaseCard = memo(function PhaseCard({
   duration,
   compact = false,
   status = 'idle',
+  quality,
 }: PhaseCardProps) {
   const [userOpen, setUserOpen] = useState(defaultOpen);
   const open = forceOpen !== null ? forceOpen : userOpen;
@@ -78,7 +80,7 @@ export const PhaseCard = memo(function PhaseCard({
         type="button"
         onClick={() => setUserOpen((v) => !v)}
         className={cn(
-          'flex w-full items-center justify-between text-left hover:bg-[var(--surface-2)]',
+          'flex min-h-[40px] w-full items-center justify-between text-left hover:bg-[var(--surface-2)] transition-colors',
           compact && !open ? 'px-3 py-2' : 'px-4 py-3'
         )}
       >
@@ -88,9 +90,9 @@ export const PhaseCard = memo(function PhaseCard({
               <span
                 className={cn(
                   'h-2 w-2 shrink-0 rounded-full',
-                  status === 'error' ? 'bg-red-500' :
+                  status === 'error' ? 'bg-[#606060]' :
                   status === 'active' ? 'bg-[var(--accent)] animate-pulse' :
-                  status === 'completed' ? 'bg-green-500' :
+                  status === 'completed' ? 'bg-[#808080]' :
                   'bg-[var(--border-strong)]'
                 )}
               />
@@ -108,6 +110,20 @@ export const PhaseCard = memo(function PhaseCard({
                   Phase {index + 1}
                 </span>
                 <span className="text-sm font-medium text-[var(--text)]">{name}</span>
+                {quality && (
+                  <Tooltip text={`Quality score: ${quality.score.toFixed(1)}/10`}>
+                    <span
+                      className={cn(
+                        'inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium',
+                        quality.passed
+                          ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                      )}
+                    >
+                      {quality.passed ? '✓' : '⚠'} {Math.round(quality.score)}/10
+                    </span>
+                  </Tooltip>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-[var(--text-subtle)]">
                 <span className="inline-flex items-center gap-1 rounded-full border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1">

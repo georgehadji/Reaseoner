@@ -1,6 +1,6 @@
 # Author: Georgios-Chrysovalantis Chatzivantsidis
 """
-ARA Pipeline - Dynamic Pipeline Orchestrator
+Reasoner Pipeline - Dynamic Pipeline Orchestrator
 This file has been refactored to support multiple, method-specific reasoning flows
 for improved performance and token-cost efficiency.
 """
@@ -67,6 +67,7 @@ from reasoner.application.mixins.recovery_mixin import RecoveryMixin
 from reasoner.application.mixins.writing_mixin import WritingMixin
 from reasoner.application.mixins.article_pipeline import ArticlePipelineMixin
 from reasoner.application.mixins.coding_pipeline import CodingMixin
+from reasoner.application.mixins.brainstorming_mixin import BrainstormingMixin
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +103,7 @@ token_cache = get_token_cache(
     cache_dir="cache/tokens",
 ) if TOKEN_OPTIMIZATION["caching"] else None
 
-class ARAPipeline(
+class ReasonerPipeline(
     SearchMixin,
     PerspectiveMixin,
     DebateMixin,
@@ -115,9 +116,10 @@ class ARAPipeline(
     WritingMixin,
     ArticlePipelineMixin,
     CodingMixin,
+    BrainstormingMixin,
 ):
     """
-    Dynamic ARA v2.1 Pipeline Orchestrator.
+    Dynamic Reasoner v2.1 Pipeline Orchestrator.
     Routes execution to method-specific pipelines based on the selected preset.
     """
     _PHASE_CONFIGS: dict[str, PhaseConfig] = {
@@ -275,6 +277,11 @@ class ARAPipeline(
         **kwargs
     ) -> tuple[str, dict[str, Any]]:
         """Delegate to LLMExecutor — caching, cost tracking, and routing live there."""
+        hints = getattr(state, "quality_hints", {})
+        if hints:
+            hint = hints.get(role) or hints.get(phase_key or "") or ""
+            if hint:
+                user_prompt = f"{user_prompt}\n\n[Quality Note: {hint}]"
         return await self._executor.execute(role, system_prompt, user_prompt, state, phase_key, **kwargs)
 
     def _get_method_from_preset(self) -> str:
@@ -298,6 +305,7 @@ class ARAPipeline(
         if "coding" in preset or "code-gen" in preset: return "coding"
         if "writing" in preset or "article" in preset or "essay" in preset: return "writing"
         if "cross-language" in preset or "cross_language" in preset: return "cross_language"
+        if "brainstorming" in preset or "brainstorm" in preset: return "brainstorming"
         return "multi_perspective" # Default
 
     async def run(self, problem: str) -> PipelineState:
@@ -822,3 +830,4 @@ class ARAPipeline(
         except Exception as e:
             self._log("CROSS-LANG", f"Translation out failed: {e} — leaving synthesis in English.", state)
             state.errors.append(f"Cross-language translation-out error: {e}")
+

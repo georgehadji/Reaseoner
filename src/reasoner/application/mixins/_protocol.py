@@ -1,4 +1,4 @@
-"""Protocol defining the interface expected by all ARAPipeline mixins."""
+"""Protocol defining the interface expected by all ReasonerPipeline mixins."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ from reasoner.models import GenerationCandidate, PipelineState, SolutionCandidat
 class PipelineMixinProtocol(Protocol):
     """
     Protocol that documents the attributes and methods mixins expect from
-    ``ARAPipeline``.  Inheriting from this protocol is optional at runtime
-    (it is *not* enforced by ``ARAPipeline`` itself), but it serves two
+    ``ReasonerPipeline``.  Inheriting from this protocol is optional at runtime
+    (it is *not* enforced by ``ReasonerPipeline`` itself), but it serves two
     purposes:
 
     1. **Documentation** — makes the mixin → pipeline contract explicit.
@@ -21,7 +21,7 @@ class PipelineMixinProtocol(Protocol):
        access attributes declared here.
 
     .. note::
-       ``ARAPipeline`` does **not** formally implement this protocol (it does
+       ``ReasonerPipeline`` does **not** formally implement this protocol (it does
        not need the ``Protocol`` base class).  Mixins may inherit from it for
        IDE auto-completion and static analysis.
     """

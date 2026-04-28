@@ -1,4 +1,4 @@
-"""Recovery path mixin for ARAPipeline."""
+"""Recovery path mixin for ReasonerPipeline."""
 
 from __future__ import annotations
 

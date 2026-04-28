@@ -187,6 +187,20 @@ def _ser_2(state: PipelineState) -> dict:
             "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 2:")), {"input": 0, "output": 0}),
         }
 
+    # ── Brainstorming Phase 2: raw VS idea pool ───────────────────────────────
+    bs = _get_v(state, 'brainstorming_state', {})
+    if bs and bs.get("raw_ideas"):
+        return {
+            "brainstorming_state": {
+                "raw_ideas": bs["raw_ideas"],
+                "raw_idea_count": bs.get("raw_idea_count", 0),
+            },
+            "tokens": next(
+                (v for k, v in state.phase_tokens.items() if k.startswith("Phase 2:")),
+                {"input": 0, "output": 0},
+            ),
+        }
+
     coding = _get_v(state, 'coding_state', {})
     if coding and coding.get("spec"):
         return {
@@ -200,6 +214,24 @@ def _ser_2(state: PipelineState) -> dict:
         }
 
     writing = _get_v(state, 'writing_state', {})
+    if writing and writing.get("retrieved_sources"):
+        # "Retrieve Sources" phase completed — show sources, not subquestions
+        return {
+            "writing_state": {
+                "retrieved_sources": [
+                    {
+                        "title": s.get("title", ""),
+                        "url": s.get("url", ""),
+                        "date": s.get("date", ""),
+                        "excerpt": s.get("excerpt", "")[:300],
+                        "authority_score": s.get("authority_score", 0.0),
+                        "source_type": s.get("source_type", "website"),
+                    }
+                    for s in writing["retrieved_sources"][:20]
+                ],
+            },
+            "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 2.5:")), {"input": 0, "output": 0}),
+        }
     if writing and writing.get("subquestions"):
         return {
             "writing_state": {
@@ -361,6 +393,21 @@ def _ser_3(state: PipelineState) -> dict:
         return {
             "delphi_state": {"aggregated": delphi["aggregated"]},
             "tokens": state.phase_tokens.get("Phase 3: Aggregation", {"input": 0, "output": 0}),
+        }
+
+    # ── Brainstorming Phase 3: clusters + scoring ─────────────────────────────
+    bs = _get_v(state, 'brainstorming_state', {})
+    if bs and bs.get("clusters"):
+        return {
+            "brainstorming_state": {
+                "clusters": bs["clusters"],
+                "top_ideas": bs.get("top_ideas", []),
+                "deduplicated_count": bs.get("deduplicated_count", 0),
+            },
+            "tokens": next(
+                (v for k, v in state.phase_tokens.items() if k.startswith("Phase 3:")),
+                {"input": 0, "output": 0},
+            ),
         }
 
     coding = _get_v(state, 'coding_state', {})
@@ -532,6 +579,20 @@ def _ser_4(state: PipelineState) -> dict:
         return {
             "delphi_state": {"round2_estimates": delphi["round2_estimates"]},
             "tokens": state.phase_tokens.get("Phase 4: Round 2 Estimates", {"input": 0, "output": 0}),
+        }
+
+    # ── Brainstorming Phase 4: full developments ──────────────────────────────
+    bs = _get_v(state, 'brainstorming_state', {})
+    if bs and bs.get("developments"):
+        return {
+            "brainstorming_state": {
+                "developments": bs["developments"],
+                "top_ideas": bs.get("top_ideas", []),
+            },
+            "tokens": next(
+                (v for k, v in state.phase_tokens.items() if k.startswith("Phase 4:")),
+                {"input": 0, "output": 0},
+            ),
         }
 
     coding = _get_v(state, 'coding_state', {})

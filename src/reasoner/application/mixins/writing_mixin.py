@@ -1,4 +1,4 @@
-"""Writing phase mixin for ARAPipeline — structured article writing with research-backed phases."""
+"""Writing phase mixin for ReasonerPipeline — structured article writing with research-backed phases."""
 
 from __future__ import annotations
 

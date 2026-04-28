@@ -1,4 +1,4 @@
-"""Research phase mixin for ARAPipeline."""
+"""Research phase mixin for ReasonerPipeline."""
 
 from __future__ import annotations
 

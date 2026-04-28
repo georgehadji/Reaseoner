@@ -1,4 +1,4 @@
-"""Application mixins for ARAPipeline."""
+"""Application mixins for ReasonerPipeline."""
 
 from reasoner.application.mixins.search_mixin import SearchMixin
 from reasoner.application.mixins.perspective_mixin import PerspectiveMixin

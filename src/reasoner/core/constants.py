@@ -116,6 +116,61 @@ def get_token_budget(role: str) -> int:
 
 
 # ═════════════════════════════════════════════════════════════════════
+# PHASE QUALITY MONITOR — RETRY BUDGETS
+# ═════════════════════════════════════════════════════════════════════
+
+PHASE_RETRY_BUDGETS: dict[str, int] = {
+    "Synthesis":             2,
+    "Final Assembly":        2,
+    "Decompose Topic":       2,
+    "Extract Claims (CoVE)": 1,
+    "Perspectives":          1,
+    "Critique & Pruning":    1,
+    "Stress Testing":        1,
+    "Decomposition":         1,
+    "default":               1,
+}
+
+
+def get_phase_retry_budget(phase_name: str) -> int:
+    """Return the maximum number of retries allowed for a given phase."""
+    return PHASE_RETRY_BUDGETS.get(phase_name, PHASE_RETRY_BUDGETS["default"])
+
+
+# ═════════════════════════════════════════════════════════════════════
+# PHASE QUALITY MONITOR — JUDGE MODELS & THRESHOLDS
+# ═════════════════════════════════════════════════════════════════════
+
+QUALITY_JUDGE_MODELS: dict[str, str] = {
+    "budget":  "gemini-flash-lite",
+    "premium": "google/gemini-2.0-flash-001",
+    "default": "gemini-flash-lite",
+}
+
+QUALITY_JUDGE_THRESHOLDS: dict[str, float] = {
+    "budget":  6.0,
+    "premium": 7.0,
+    "default": 6.0,
+}
+
+
+def get_quality_judge_model(preset_name: str) -> str:
+    """Return the LLM model to use for quality judging based on preset tier."""
+    if "premium" in preset_name:
+        return QUALITY_JUDGE_MODELS["premium"]
+    if "budget" in preset_name:
+        return QUALITY_JUDGE_MODELS["budget"]
+    return QUALITY_JUDGE_MODELS["default"]
+
+
+def get_quality_judge_threshold(preset_name: str) -> float:
+    """Return the minimum score required to pass quality evaluation."""
+    if "premium" in preset_name:
+        return QUALITY_JUDGE_THRESHOLDS["premium"]
+    return QUALITY_JUDGE_THRESHOLDS["default"]
+
+
+# ═════════════════════════════════════════════════════════════════════
 # BASE URLs
 # ═════════════════════════════════════════════════════════════════════
 
@@ -250,6 +305,14 @@ PHASE_TIMEOUTS: dict[str, float] = {
     "Synthesis": 120.0,
     # Writing flow — composite SoT phase bundles skeleton + parallel writes + assembly
     "Synthesize (SoT)": 180.0,
+    # Writing flow — web retrieval can be slow; parallel searches still need room
+    "Retrieve Sources": 240.0,
+    "Extract Claims (CoVE)": 120.0,
+    "Adversarial Verify": 120.0,
+    "Pre-Mortem": 90.0,
+    "Journal Review": 90.0,
+    "Final Assembly": 120.0,
+    "Humanize": 90.0,
     "default": 90.0,
 }
 

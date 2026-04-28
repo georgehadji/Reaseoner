@@ -29,3 +29,11 @@ from reasoner.phases.pot import *
 from reasoner.phases.self_discover import *
 from reasoner.phases.writing import *
 from reasoner.phases.coding import *
+from reasoner.phases.brainstorming import (  # noqa: F401
+    VS_GENERATION_SYSTEM,
+    VS_CLUSTER_SYSTEM,
+    VS_DEVELOP_SYSTEM,
+    vs_generation_prompt,
+    vs_cluster_prompt,
+    vs_develop_prompt,
+)

@@ -15,7 +15,8 @@ export type MethodId =
   | 'tot'
   | 'pot'
   | 'self-discover'
-  | 'writing';
+  | 'writing'
+  | 'brainstorming';
 
 export interface TokenCount {
   input: number;
@@ -24,7 +25,14 @@ export interface TokenCount {
 }
 
 export interface PhaseEvent {
-  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk' | 'widget' | 'recall_used';
+  type: 'start' | 'prompt_enhanced' | 'phase_start' | 'phase_complete' | 'phase_quality' | 'phase_retry' | 'phase_error' | 'error' | 'cancelled' | 'done' | 'agent_start' | 'agent_complete' | 'text_chunk' | 'widget' | 'recall_used';
+  /** phase_quality fields */
+  score?: number;
+  passed?: boolean;
+  reason?: string;
+  attempt?: number;
+  /** phase_retry fields */
+  max_attempts?: number;
   phase?: number;
   name?: string;
   data?: Record<string, unknown>;

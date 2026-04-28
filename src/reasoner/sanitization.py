@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Input Sanitization
+Reasoner Pipeline - Input Sanitization
 Comprehensive input validation and sanitization for security.
 """
 

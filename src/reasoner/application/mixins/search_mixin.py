@@ -1,4 +1,4 @@
-"""Search, vetting, and deep-read mixin for ARAPipeline.
+"""Search, vetting, and deep-read mixin for ReasonerPipeline.
 
 Extracted from pipeline.py to reduce the God Object and make search logic
 independently testable.  Requires `self._call_llm_cached` and `self._log`

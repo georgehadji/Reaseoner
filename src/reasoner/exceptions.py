@@ -1,12 +1,12 @@
 """
-ARA Pipeline - Exception Taxonomy
+Reasoner Pipeline - Exception Taxonomy
 Structured exception hierarchy for better error handling.
 
-This module provides a comprehensive exception hierarchy for the ARA Pipeline,
+This module provides a comprehensive exception hierarchy for the Reasoner Pipeline,
 enabling precise error handling and appropriate retry strategies.
 
 Exception Hierarchy:
-    ARAError (base)
+    ReasonerError (base)
     ├── ParseError
     │   ├── JSONExtractionError
     │   └── JSONValidationError
@@ -38,9 +38,9 @@ Usage:
 from __future__ import annotations
 
 
-class ARAError(Exception):
+class ReasonerError(Exception):
     """
-    Base exception for all ARA pipeline errors.
+    Base exception for all Reasoner pipeline errors.
     
     Attributes:
         message (str): Human-readable error message
@@ -54,11 +54,15 @@ class ARAError(Exception):
         self.details = details or {}
 
 
+# Backward-compatible alias (some modules still import ARAError)
+ARAError = ReasonerError
+
+
 # ─────────────────────────────────────────────────────────────────────
 # PARSE ERRORS
 # ─────────────────────────────────────────────────────────────────────
 
-class ParseError(ARAError):
+class ParseError(ReasonerError):
     """Raised when LLM response cannot be parsed into expected structure."""
     retryable = False
 
@@ -77,7 +81,7 @@ class JSONValidationError(ParseError):
 # PROVIDER ERRORS
 # ─────────────────────────────────────────────────────────────────────
 
-class ProviderError(ARAError):
+class ProviderError(ReasonerError):
     """Base exception for LLM provider errors."""
     pass
 
@@ -144,7 +148,7 @@ class ProviderUnavailableError(ProviderError):
 # PIPELINE ERRORS
 # ─────────────────────────────────────────────────────────────────────
 
-class PipelineError(ARAError):
+class PipelineError(ReasonerError):
     """Base exception for pipeline execution errors."""
     pass
 
@@ -163,7 +167,7 @@ class PhaseError(PipelineError):
         self.phase_name = phase_name
 
 
-class ConfigurationError(ARAError):
+class ConfigurationError(ReasonerError):
     """
     Invalid pipeline configuration.
     
@@ -194,7 +198,7 @@ def is_retryable(error: Exception) -> bool:
         >>> is_retryable(ValueError("Unknown error"))
         False
     """
-    if isinstance(error, ARAError):
+    if isinstance(error, ReasonerError):
         return error.retryable
 
     # OpenAI SDK / HTTP client errors with transient status codes

@@ -3,8 +3,7 @@
 import { useState, useRef, useCallback, useReducer, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
-import { NebulaBackground } from '@/components/layout/NebulaBackground';
-import type { MethodId } from '@/lib/method-colors';
+import { BlobBackground } from '@/components/layout/BlobBackground';
 
 import { usePipelineStream } from '@/hooks/usePipelineStream';
 import { useWebSocketPipeline } from '@/hooks/useWebSocketPipeline';
@@ -583,6 +582,41 @@ export default function ChatPage() {
             dispatchMessages({ type: 'UPDATE_MESSAGE', payload: { messageId: assistantId, updates: phaseCompleteUpdates } });
           }
           break;
+        case 'phase_quality':
+          if (typeof ev.phase === 'number' && phases.length > 0) {
+            const lastPhase = phases[phases.length - 1];
+            if (lastPhase && lastPhase.phase === ev.phase) {
+              const updatedPhase = {
+                ...lastPhase,
+                data: {
+                  ...(lastPhase.data as Record<string, unknown>),
+                  quality: { score: ev.score, passed: ev.passed },
+                },
+              };
+              phases = [...phases.slice(0, -1), updatedPhase];
+              dispatchMessages({
+                type: 'UPDATE_MESSAGE',
+                payload: {
+                  messageId: assistantId,
+                  updates: { phases: [...phases] },
+                },
+              });
+            }
+          }
+          break;
+        case 'phase_retry':
+          if (typeof ev.phase === 'number') {
+            dispatchMessages({
+              type: 'UPDATE_MESSAGE',
+              payload: {
+                messageId: assistantId,
+                updates: {
+                  currentPhaseName: `${ev.name} (retry ${ev.attempt}/${ev.max_attempts})`,
+                },
+              },
+            });
+          }
+          break;
         case 'phase_error':
           if (typeof ev.phase === 'number') {
             setErrorPhases((prev) => (prev.includes(ev.phase!) ? prev : [...prev, ev.phase!]));
@@ -943,14 +977,9 @@ export default function ChatPage() {
     }
   }
 
-  // Normalize auto-selected method for NebulaBackground accent color
-  const nebulaMethod = autoSelectedMethod
-    ? (autoSelectedMethod.replace(/_/g, '-').toLowerCase() as MethodId)
-    : null;
-
   return (
     <div className="flex h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] overflow-hidden">
-      <NebulaBackground method={nebulaMethod} />
+      <BlobBackground active={running} />
       <Sidebar
         conversations={history}
         onLoad={handleLoad}
@@ -970,10 +999,10 @@ export default function ChatPage() {
               <div
                 className={`h-2 w-2 rounded-full ${
                   serverOnline === true
-                    ? 'bg-green-500'
+                    ? 'bg-[#22C55E]'
                     : serverOnline === false
-                    ? 'bg-red-500'
-                    : 'bg-yellow-500'
+                    ? 'bg-[#606060]'
+                    : 'bg-[#A0A0A0]'
                 }`}
               />
             </Tooltip>
@@ -983,9 +1012,9 @@ export default function ChatPage() {
                   <div
                     className={`h-2 w-2 rounded-full ${
                       wsStatus === 'connected'
-                        ? 'bg-blue-500'
+                        ? 'bg-[#22C55E]'
                         : wsStatus === 'reconnecting'
-                        ? 'bg-amber-500 animate-pulse'
+                        ? 'bg-[#A0A0A0] animate-pulse'
                         : 'bg-gray-400'
                     }`}
                     aria-label={`WebSocket ${wsStatus}`}
@@ -1037,7 +1066,16 @@ export default function ChatPage() {
           />
         )}
 
-        <div ref={scrollContainerRef} className="relative flex-1 overflow-y-auto">
+        <div
+          ref={scrollContainerRef}
+          className="relative flex-1 overflow-y-auto scroll-smooth"
+          style={{
+            contain: 'layout paint',
+            overscrollBehavior: 'contain',
+            scrollbarWidth: 'thin',
+            scrollbarColor: 'rgba(59,130,246,0.15) transparent',
+          }}
+        >
           {hasMessages ? (
             <>
               <ChatErrorBoundary fallback={<div className="p-4 text-red-500">Display error. Please refresh.</div>}>

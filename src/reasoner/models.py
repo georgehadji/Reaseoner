@@ -1,6 +1,6 @@
 """
-ARA Pipeline - Core Data Models
-Adaptive Reasoning Architecture v2.0
+Reasoner Pipeline - Core Data Models
+Reasoner v2.0
 """
 
 from __future__ import annotations
@@ -276,6 +276,12 @@ class PipelineState:
     phase_results: list["PhaseResult"] = field(default_factory=list)
     # Which preset was used — drives method-specific rendering
     preset_name: str | None = None
+    # Active reasoning method (overrides preset inference; set by article detection or HyperGate)
+    method: str | None = None
+    # Quality monitor: per-phase feedback injected into next retry prompt
+    quality_hints: dict[str, str] = field(default_factory=dict)
+    # Quality monitor: ordered history of {phase, attempt, score, passed} per evaluation
+    quality_history: list[dict] = field(default_factory=list)
     # Context quality assessment for synthesis circuit breaker
     context_quality: str = "unknown"  # "good" | "partial" | "contaminated" | "missing"
     # ORCHESTRATED method fields (populated only when preset is orchestrated)
@@ -321,6 +327,8 @@ class PipelineState:
     writing_state: dict[str, Any] = field(default_factory=dict)
     # Coding Method: Production-grade code generation with spec, generate, review, tests, assembly
     coding_state: dict[str, Any] = field(default_factory=dict)
+    # Brainstorming Method: Verbalized Sampling idea generation → clustering → deep development
+    brainstorming_state: dict[str, Any] = field(default_factory=dict)
     # Cross-Language Method: Translation metadata (source lang, original problem, translated synthesis)
     cross_language_state: dict[str, Any] = field(default_factory=dict)
     # PhaseSubAgent outputs (for transparency / resume / debugging)
@@ -993,6 +1001,9 @@ class PipelineState:
             data['meta_evaluation'] = MetaEvaluation(**data['meta_evaluation'])
 
         # New method state dicts — safe defaults for older state files
+        data.setdefault('method', None)
+        data.setdefault('quality_hints', {})
+        data.setdefault('quality_history', [])
         data.setdefault('jury_weighted_ranking', [])
         data.setdefault('pre_mortem_state', {})
         data.setdefault('bayesian_state', {})
@@ -1005,6 +1016,7 @@ class PipelineState:
         data.setdefault('pot_state', {})
         data.setdefault('self_discover_state', {})
         data.setdefault('coding_state', {})
+        data.setdefault('brainstorming_state', {})
         data.setdefault('reflexion_memory', [])
         data.setdefault('synthesis_subagent_outputs', [])
         data.setdefault('critique_subagent_outputs', [])

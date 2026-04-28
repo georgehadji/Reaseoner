@@ -66,6 +66,16 @@ function getDuration(data: unknown): number | undefined {
   return typeof duration === 'number' ? duration : undefined;
 }
 
+function getQuality(data: unknown): { score: number; passed: boolean } | null {
+  if (!data || typeof data !== 'object') return null;
+  const d = data as Record<string, unknown>;
+  const q = d.quality;
+  if (!q || typeof q !== 'object') return null;
+  const qr = q as Record<string, unknown>;
+  if (typeof qr.score !== 'number') return null;
+  return { score: qr.score, passed: Boolean(qr.passed) };
+}
+
 function getSynthesisSections(data: unknown): {
   criticalInsights: string[];
   actionBlueprint: Array<string | { step?: string; action?: string }>;
@@ -108,6 +118,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
   const models = getModels(data);
   const subagents = getSubagents(data);
   const duration = getDuration(data);
+  const quality = getQuality(data);
   const synthesisHighlights = getSynthesisHighlights(data);
   const synthesisSections = getSynthesisSections(data);
   const vettedContext = getVettedContext(data);
@@ -130,7 +141,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
     ('task_type' in data || 'rationale' in data)
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         <ClassificationCard data={data} />
         {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
@@ -147,7 +158,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
     scoresArray.length > 0
   ) {
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         <CritiqueCard data={data} />
         {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
@@ -162,7 +173,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       </PhaseCard>
@@ -177,11 +188,106 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       </PhaseCard>
     );
+  }
+
+  // Brainstorming state (VS idea generation → clustering → deep development)
+  const brainstormingState = data && typeof data === 'object'
+    ? (data as Record<string, unknown>).brainstorming_state as Record<string, unknown> | undefined
+    : undefined;
+  if (brainstormingState) {
+    const rawIdeas = Array.isArray(brainstormingState.raw_ideas) ? brainstormingState.raw_ideas as Record<string, unknown>[] : [];
+    const clusters = Array.isArray(brainstormingState.clusters) ? brainstormingState.clusters as Record<string, unknown>[] : [];
+    const developments = Array.isArray(brainstormingState.developments) ? brainstormingState.developments as Record<string, unknown>[] : [];
+
+    if (rawIdeas.length > 0 || clusters.length > 0 || developments.length > 0) {
+      const tierColor: Record<string, string> = {
+        conventional: 'text-slate-400',
+        lateral: 'text-amber-400',
+        disruptive: 'text-violet-400',
+      };
+
+      return (
+        <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
+          {/* Phase 2: Raw VS ideas */}
+          {rawIdeas.length > 0 && clusters.length === 0 && (
+            <div className="space-y-2">
+              <p className={`text-xs font-medium uppercase tracking-wide opacity-60 ${phaseTextClass}`}>
+                {rawIdeas.length} ideas generated
+              </p>
+              {rawIdeas.map((idea, i) => {
+                const tier = String(idea.creativity_tier ?? 'conventional');
+                const prob = typeof idea.probability === 'number' ? idea.probability : null;
+                return (
+                  <div key={i} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-sm font-semibold ${phaseTextClass}`}>{String(idea.title ?? '')}</span>
+                      <span className={`text-xs font-medium ${tierColor[tier] ?? 'text-slate-400'}`}>{tier}</span>
+                      {prob !== null && (
+                        <span className="ml-auto text-xs opacity-50">p={prob.toFixed(2)}</span>
+                      )}
+                    </div>
+                    <p className={`text-xs opacity-70 ${phaseTextClass}`}>{String(idea.core_insight ?? idea.description ?? '')}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* Phase 3: Clusters */}
+          {clusters.length > 0 && developments.length === 0 && (
+            <div className="space-y-3">
+              {clusters.map((cluster, ci) => {
+                const clusterIdeas = Array.isArray(cluster.ideas) ? cluster.ideas as Record<string, unknown>[] : [];
+                const keptIdeas = clusterIdeas.filter(i => i.keep !== false);
+                return (
+                  <div key={ci} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                    <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${phaseTextClass}`}>{String(cluster.theme ?? `Theme ${ci + 1}`)}</p>
+                    {keptIdeas.map((idea, ii) => (
+                      <div key={ii} className="flex items-center gap-2 py-1 border-t border-white/5">
+                        <span className={`text-xs flex-1 ${phaseTextClass}`}>{String(idea.title ?? '')}</span>
+                        <span className="text-xs opacity-50">N:{idea.novelty ?? '—'} F:{idea.feasibility ?? '—'} I:{idea.impact ?? '—'}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {/* Phase 4: Developments */}
+          {developments.length > 0 && (
+            <div className="space-y-4">
+              {developments.map((dev, di) => {
+                const steps = Array.isArray(dev.steps) ? dev.steps as string[] : [];
+                const risks = Array.isArray(dev.risks) ? dev.risks as string[] : [];
+                return (
+                  <div key={di} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 space-y-2">
+                    <p className={`text-sm font-semibold ${phaseTextClass}`}>{String(dev.title ?? '')}</p>
+                    {dev.use_case && <p className={`text-xs opacity-80 ${phaseTextClass}`}>{String(dev.use_case)}</p>}
+                    {steps.length > 0 && (
+                      <ol className={`text-xs space-y-1 list-decimal list-inside opacity-80 ${phaseTextClass}`}>
+                        {steps.map((s, si) => <li key={si}>{s}</li>)}
+                      </ol>
+                    )}
+                    {risks.length > 0 && (
+                      <div>
+                        <p className={`text-xs font-medium opacity-60 ${phaseTextClass}`}>Risks</p>
+                        <ul className={`text-xs list-disc list-inside opacity-70 ${phaseTextClass}`}>
+                          {risks.map((r, ri) => <li key={ri}>{r}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </PhaseCard>
+      );
+    }
   }
 
   // Writing state (outline, draft, fact-check, final article)
@@ -195,7 +301,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data);
     return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       </PhaseCard>
@@ -285,7 +391,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
     omitSections: isSynthesisPhase(name) ? ['critical_insights', 'action_blueprint', 'open_questions', 'sources'] : undefined,
   });
   return (
-      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'}>
+      <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
       {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
       {isSynth ? (
         <SynthesisRenderer text={md} className={phaseTextClass} />

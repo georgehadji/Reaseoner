@@ -1,4 +1,4 @@
-"""Perspective, critique, and stress-test mixin for ARAPipeline."""
+"""Perspective, critique, and stress-test mixin for ReasonerPipeline."""
 
 from __future__ import annotations
 

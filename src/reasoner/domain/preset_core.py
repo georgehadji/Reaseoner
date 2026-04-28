@@ -86,6 +86,10 @@ _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     "coding_review",
     "coding_tests",
     "coding_assemble",
+    # Brainstorming / Verbalized Sampling roles
+    "brainstorm_generate",
+    "brainstorm_cluster",
+    "brainstorm_develop",
 })
 
 
@@ -117,6 +121,8 @@ def get_method_from_preset(preset: str) -> str:
         return "self_discover"
     if "cove" in preset:
         return "cove"
+    if "brainstorming" in preset:
+        return "brainstorming"
     if "writing" in preset:
         return "writing"
     if "sot" in preset:
@@ -167,6 +173,7 @@ _METHOD_TO_SLUG: dict[str, str] = {
     "pot": "pot",
     "self_discover": "self-discover",
     "writing": "writing",
+    "brainstorming": "brainstorming",
 }
 
 
@@ -204,6 +211,9 @@ class PipelinePreset:
     # Roles absent here fall back to primary automatically (if they use a non-primary model).
     fallback_routing: dict[str, str] = field(default_factory=dict)
     required_tier: SubscriptionTier = SubscriptionTier.FREE # New field: minimum tier required to use this preset
+    # Method-specific runtime config injected into state before phase execution.
+    # Currently used by the brainstorming method (VS rounds, k, threshold, etc.).
+    brainstorming_config: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate routing keys and model IDs at construction time."""

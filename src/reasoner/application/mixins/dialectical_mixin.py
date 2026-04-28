@@ -1,4 +1,4 @@
-"""Dialectical reasoning mixin for ARAPipeline."""
+"""Dialectical reasoning mixin for ReasonerPipeline."""
 
 from __future__ import annotations
 

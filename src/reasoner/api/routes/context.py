@@ -15,7 +15,7 @@ from reasoner.api.dependencies import (
 from reasoner.api.schemas import ContextAnalysisRequest
 from reasoner.domain.saas import User
 from reasoner.models import PipelineState
-from reasoner.pipeline import ARAPipeline
+from reasoner.pipeline import ReasonerPipeline
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -60,7 +60,7 @@ async def run_with_context(
         _, router = _preset_service.build_router(req.preset)
 
         # Create pipeline
-        pipeline = ARAPipeline(
+        pipeline = ReasonerPipeline(
             router=router,
             top_k=req.top_k,
             parallel_perspectives=True,

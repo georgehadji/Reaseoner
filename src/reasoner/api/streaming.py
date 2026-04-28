@@ -15,12 +15,14 @@ from reasoner.core.constants import (
     TIMEOUTS,
     TRUNCATION,
     VALIDATION_TEST_MAX_TOKENS,
+    get_phase_retry_budget,
     get_phase_timeout,
 )
+from reasoner.quality import PhaseMonitor, reset_phase_state
 from reasoner.hypergate import HyperGateAgent
 from reasoner.llm import ProviderRouter, _REGISTRY
 from reasoner.models import PipelineState, TaskType
-from reasoner.pipeline import ARAPipeline
+from reasoner.pipeline import ReasonerPipeline
 from reasoner.application.services.preset_service import PresetService
 from reasoner.application.services.search_service import SearchService
 from reasoner.exceptions import classify_error, is_retryable
@@ -441,7 +443,7 @@ async def run_stream(
                 )
                 auto_selected_method = decision.method
 
-        pipeline = ARAPipeline(
+        pipeline = ReasonerPipeline(
             router=router,
             top_k=req.top_k,
             parallel_perspectives=(not req.sequential) if "multi-perspective" not in effective_preset_name else True,
@@ -458,6 +460,24 @@ async def run_stream(
         state = initial_state or PipelineState(problem=req.problem, preset_name=effective_preset_name)
         if recalled_chunks:
             state.memory_context = recalled_chunks
+
+        # --- BRAINSTORMING CONFIG: inject VS runtime parameters from preset metadata
+        # before any phase runs so _phase_brainstorm_generate can read them.
+        from reasoner.domain.preset_registry import PRESETS as _PRESETS
+        _bs_preset = _PRESETS.get(effective_preset_name)
+        if _bs_preset and _bs_preset.brainstorming_config:
+            state.brainstorming_state["config"] = _bs_preset.brainstorming_config
+            logger.debug(f"Injected brainstorming config: {_bs_preset.brainstorming_config}")
+
+        # --- ARTICLE DETECTION: must happen BEFORE the start event so the frontend
+        # receives auto_selected_method="writing" and renders the correct phase list.
+        from reasoner.application.mixins.article_pipeline import is_article_request
+        if is_article_request(state.problem):
+            state.task_type = TaskType.TECHNICAL
+            state.decomposition = ["article workflow"]
+            state.method = "writing"
+            auto_selected_method = "writing"
+            logger.info("Article request detected in stream — routing to writing method")
 
         logger.info(f"Pipeline start with routing: {router.describe()}")
         start_payload: dict = {"type": "start", "preset": effective_preset_name}
@@ -488,14 +508,6 @@ async def run_stream(
                 logger.warning("Prompt enhancement failed, using original: %s", exc)
                 state.enhanced_problem = state.problem
 
-        # --- ARTICLE DETECTION: mirror pipeline.run() logic for streaming path ---
-        from reasoner.application.mixins.article_pipeline import is_article_request
-        if is_article_request(state.problem):
-            state.task_type = TaskType.TECHNICAL
-            state.decomposition = ["article workflow"]
-            state.method = "writing"
-            logger.info("Article request detected in stream — routing to writing method")
-
         async def _run_context_vetting(state: PipelineState):
             await pipeline._phase_context_vetting(state, source_type=req.source_type)
 
@@ -508,14 +520,19 @@ async def run_stream(
             phases.append((1, "Decomposition", pipeline._phase_1_decompose, _ser_1))
             phases.append((1.25, "Context Vetting", _run_context_vetting, _ser_1))
         else:
-            # Writing method: skip generic decomposition; article pipeline has its own.
-            # Insert no-op phases to preserve phase numbering for downstream logic.
-            phases.append((1, "Decomposition", lambda s: None, _ser_1))
-            phases.append((1.25, "Context Vetting", lambda s: None, _ser_1))
+            # Writing method: skip generic decomposition — article pipeline owns its own.
+            # Use a sentinel so the phase loop emits nothing for these slots.
+            async def _noop(s: PipelineState) -> None:  # noqa: E306
+                pass
+            _noop._is_silent_noop = True  # type: ignore[attr-defined]
+            phases.append((1, "Decomposition", _noop, _ser_1))
+            phases.append((1.25, "Context Vetting", _noop, _ser_1))
         phases.append((1.5, "Deep Read", pipeline._phase_deep_read, _ser_1_5))
 
         flow = build_default_flow_registry(pipeline)
-        method = pipeline._get_method_from_preset()
+        # Prefer state.method (set by article detection or HyperGate before this point)
+        # over preset-name inference, which can't see runtime routing overrides.
+        method = state.method or pipeline._get_method_from_preset()
         for step in flow.get_sequence(method):
             phases.append((step.num, step.name, step.fn, step.serializer))
 
@@ -611,11 +628,65 @@ async def run_stream(
                 raise exc
             return False
 
+        async def _run_phase_with_keepalive(
+            coro_fn, state: PipelineState, timeout_seconds: float = 90.0,
+            keepalive_interval: float = 15.0,
+        ):
+            """Async generator: runs a phase and yields SSE keepalive comments every
+            keepalive_interval seconds so the browser/proxy never sees an idle connection."""
+            phase_task = asyncio.ensure_future(coro_fn(state))
+            cancel_watch = asyncio.ensure_future(cancel_event.wait())
+            deadline = time.monotonic() + timeout_seconds
+            try:
+                while True:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        if not phase_task.done():
+                            phase_task.cancel()
+                            try:
+                                await phase_task
+                            except (asyncio.CancelledError, Exception):
+                                pass
+                        raise asyncio.TimeoutError(
+                            f"Phase timed out after {timeout_seconds}s"
+                        )
+                    wait = min(keepalive_interval, remaining)
+                    done, _ = await asyncio.wait({phase_task, cancel_watch}, timeout=wait)
+                    if cancel_watch in done:
+                        if not phase_task.done():
+                            phase_task.cancel()
+                            try:
+                                await phase_task
+                            except (asyncio.CancelledError, Exception):
+                                pass
+                        return
+                    if phase_task in done:
+                        exc = phase_task.exception()
+                        if exc:
+                            raise exc
+                        return
+                    # Phase still running — send a keepalive SSE comment
+                    yield ": keepalive\n\n"
+            finally:
+                for t in (phase_task, cancel_watch):
+                    if not t.done():
+                        t.cancel()
+                        try:
+                            await t
+                        except (asyncio.CancelledError, Exception):
+                            pass
+
+        phase_monitor = PhaseMonitor(router, preset_name=req.preset)
         run_start = time.monotonic()
         for num, name, fn, serializer in phases:
             if cancel_event.is_set():
                 yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
                 return
+
+            # Silent no-ops (e.g. writing pipeline skips generic decomposition/vetting)
+            if getattr(fn, "_is_silent_noop", False):
+                await fn(state)
+                continue
 
             phase_key = f"Phase {num}: {name}"
             state._current_phase_key = phase_key
@@ -625,82 +696,137 @@ async def run_stream(
                 start_payload["models"] = phase_start_models
             await _broadcast_ws(run_id, start_payload)
             yield _event(start_payload)
+
+            max_retries = get_phase_retry_budget(name)
+            quality_result = None
+            phase_errored = False
+            phase_fatal = False
             phase_start = time.monotonic()
-            try:
-                phase_timeout = get_phase_timeout(name)
-                cancelled = await _run_phase_cancellable(fn, state, timeout_seconds=phase_timeout)
-                if cancelled:
-                    yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
-                    return
-            except asyncio.TimeoutError as exc:
-                logger.error("Phase %s (%s) timed out after %ss", num, name, phase_timeout)
-                err_msg = f"Phase timeout: {name} exceeded {phase_timeout}s"
-                state.errors.append(err_msg)
-                err_payload = {
-                    "type": "error",
-                    "error_type": "timeout",
-                    "message": err_msg,
-                    "retryable": True,
-                    "retry_after": 5,
-                    "phase": num,
-                    "phase_name": name,
-                }
-                await _broadcast_ws(run_id, err_payload)
-                yield _event(err_payload)
-                await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
-                yield _event({"type": "phase_error", "phase": num, "error": err_msg})
-                fail_evt = make_event(
-                    EventType.PHASE_FAILED,
-                    aggregate_id=run_id,
-                    version=event_version,
-                    phase_name=name,
-                    error=err_msg,
-                )
-                await _persist_event(fail_evt)
-                event_version += 1
-                if name in CRITICAL_PHASES:
-                    break
-                continue
-            except Exception as exc:
-                logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
-                err_type = classify_error(exc)
-                # Provide a clearer message for auth/config errors so users know
-                # it's an API key issue, not a Reasoner login issue.
-                if err_type == "auth":
-                    err_msg = (
-                        "OpenRouter API key is missing or invalid. "
-                        "Please set OPENROUTER_API_KEY in your .env or ui-next/.env.local file."
+
+            for retry_attempt in range(max_retries + 1):
+                try:
+                    phase_timeout = get_phase_timeout(name)
+                    async for _ka in _run_phase_with_keepalive(fn, state, timeout_seconds=phase_timeout):
+                        yield _ka
+                    if cancel_event.is_set():
+                        yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
+                        return
+                except asyncio.TimeoutError:
+                    logger.error("Phase %s (%s) timed out after %ss", num, name, phase_timeout)
+                    err_msg = f"Phase timeout: {name} exceeded {phase_timeout}s"
+                    state.errors.append(err_msg)
+                    err_payload = {
+                        "type": "error",
+                        "error_type": "timeout",
+                        "message": err_msg,
+                        "retryable": True,
+                        "retry_after": 5,
+                        "phase": num,
+                        "phase_name": name,
+                    }
+                    await _broadcast_ws(run_id, err_payload)
+                    yield _event(err_payload)
+                    await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
+                    yield _event({"type": "phase_error", "phase": num, "error": err_msg})
+                    fail_evt = make_event(
+                        EventType.PHASE_FAILED,
+                        aggregate_id=run_id,
+                        version=event_version,
+                        phase_name=name,
+                        error=err_msg,
                     )
-                else:
-                    err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
-                state.errors.append(err_msg)
-                err_payload = {
-                    "type": "error",
-                    "error_type": err_type,
-                    "message": err_msg,
-                    "retryable": is_retryable(exc),
-                    "retry_after": getattr(exc, 'retry_after', None),
-                    "phase": num,
-                    "phase_name": name,
-                }
-                await _broadcast_ws(run_id, err_payload)
-                yield _event(err_payload)
-                # Keep emitting legacy phase_error for backwards compatibility
-                await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
-                yield _event({"type": "phase_error", "phase": num, "error": err_msg})
-                fail_evt = make_event(
-                    EventType.PHASE_FAILED,
-                    aggregate_id=run_id,
-                    version=event_version,
-                    phase_name=name,
-                    error=err_msg,
-                )
-                await _persist_event(fail_evt)
-                event_version += 1
-                # Auth errors are fatal — no point burning tokens on every phase.
-                if err_type == "auth" or name in CRITICAL_PHASES:
+                    await _persist_event(fail_evt)
+                    event_version += 1
+                    phase_errored = True
+                    phase_fatal = name in CRITICAL_PHASES
                     break
+                except Exception as exc:
+                    logger.error("Phase %s (%s) failed: %s", num, name, exc, exc_info=True)
+                    err_type = classify_error(exc)
+                    if err_type == "auth":
+                        err_msg = (
+                            "OpenRouter API key is missing or invalid. "
+                            "Please set OPENROUTER_API_KEY in your .env or ui-next/.env.local file."
+                        )
+                    else:
+                        err_msg = f"{type(exc).__name__}: {str(exc)[:120]}"
+                    state.errors.append(err_msg)
+                    err_payload = {
+                        "type": "error",
+                        "error_type": err_type,
+                        "message": err_msg,
+                        "retryable": is_retryable(exc),
+                        "retry_after": getattr(exc, 'retry_after', None),
+                        "phase": num,
+                        "phase_name": name,
+                    }
+                    await _broadcast_ws(run_id, err_payload)
+                    yield _event(err_payload)
+                    await _broadcast_ws(run_id, {"type": "phase_error", "phase": num, "error": err_msg})
+                    yield _event({"type": "phase_error", "phase": num, "error": err_msg})
+                    fail_evt = make_event(
+                        EventType.PHASE_FAILED,
+                        aggregate_id=run_id,
+                        version=event_version,
+                        phase_name=name,
+                        error=err_msg,
+                    )
+                    await _persist_event(fail_evt)
+                    event_version += 1
+                    phase_errored = True
+                    phase_fatal = err_type == "auth" or name in CRITICAL_PHASES
+                    break
+
+                # Phase executed successfully — run quality check
+                quality_result = await phase_monitor.evaluate(name, state, attempt=retry_attempt + 1)
+                quality_payload = {
+                    "type": "phase_quality",
+                    "phase": num,
+                    "name": name,
+                    "score": quality_result.score,
+                    "passed": quality_result.passed,
+                    "reason": quality_result.reason,
+                    "attempt": retry_attempt + 1,
+                }
+                yield _event(quality_payload)
+                await _broadcast_ws(run_id, quality_payload)
+
+                # Record quality score in state history for downstream context
+                state.quality_history.append({
+                    "phase": name,
+                    "attempt": retry_attempt + 1,
+                    "score": quality_result.score,
+                    "passed": quality_result.passed,
+                })
+
+                if quality_result.passed or retry_attempt >= max_retries:
+                    break
+
+                # Quality failed and budget remains — inject hints and emit retry event
+                if quality_result.suggestions:
+                    state.quality_hints[name] = " ".join(quality_result.suggestions)
+
+                retry_payload = {
+                    "type": "phase_retry",
+                    "phase": num,
+                    "name": name,
+                    "attempt": retry_attempt + 1,
+                    "max_attempts": max_retries + 1,
+                    "reason": quality_result.reason,
+                }
+                yield _event(retry_payload)
+                await _broadcast_ws(run_id, retry_payload)
+
+                reset_phase_state(name, state)
+
+            # Clear quality hints for this phase regardless of outcome
+            state.quality_hints.pop(name, None)
+
+            if phase_fatal:
+                break
+            if phase_errored:
                 continue
+
             duration = time.monotonic() - phase_start
             while state.pending_events:
                 ev = state.pending_events.pop(0)
@@ -737,6 +863,11 @@ async def run_stream(
                         }
                         for s in subagent_outputs
                     ]
+                if quality_result:
+                    data["quality"] = {
+                        "score": quality_result.score,
+                        "passed": quality_result.passed,
+                    }
             phase_complete_payload = {
                 "type": "phase_complete",
                 "phase": num,
@@ -865,7 +996,7 @@ async def run_stream(
 async def run_followup_stream(
     req: FollowupRequest, user_id: str | None = None
 ) -> AsyncGenerator[str, None]:
-    """Run the full ARA pipeline for a follow-up question with conversation context."""
+    """Run the full Reasoner pipeline for a follow-up question with conversation context."""
     from reasoner.presets import FOLLOWUP_AGENT_MODELS
 
     tier = get_preset_price_tier(req.preset)

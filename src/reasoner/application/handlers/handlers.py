@@ -75,11 +75,11 @@ class RunPipelineCommandHandler:
         await self.event_bus.publish(start_event)
         
         # Execute pipeline phases
-        from reasoner.pipeline import ARAPipeline
+        from reasoner.pipeline import ReasonerPipeline
         from reasoner.llm import ProviderRouter
         
         router = ProviderRouter(primary=self.llm_router)
-        pipeline = ARAPipeline(
+        pipeline = ReasonerPipeline(
             router=router,
             preset_name=command.preset,
             top_k=command.top_k,

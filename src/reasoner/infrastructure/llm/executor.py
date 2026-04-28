@@ -1,5 +1,5 @@
 """
-LLM Executor — infrastructure concern extracted from ARAPipeline.
+LLM Executor — infrastructure concern extracted from ReasonerPipeline.
 
 Responsible for:
   - Temperature resolution from phase_configs
@@ -29,7 +29,7 @@ class LLMExecutor:
     Stateless (per-call) infrastructure adapter that wraps ProviderRouter with
     token-aware caching and cost tracking.
 
-    Extracted from ARAPipeline._call_llm_cached to isolate LLM execution
+    Extracted from ReasonerPipeline._call_llm_cached to isolate LLM execution
     concerns from phase-sequencing concerns.
     """
 

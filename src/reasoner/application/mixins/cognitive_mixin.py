@@ -1,4 +1,4 @@
-"""Cognitive architecture mixin for ARAPipeline."""
+"""Cognitive architecture mixin for ReasonerPipeline."""
 
 from __future__ import annotations
 

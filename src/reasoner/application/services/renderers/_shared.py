@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Output Renderer
+Reasoner Pipeline - Output Renderer
 Rich terminal display and JSON export, with method-specific layouts.
 
 Methods:

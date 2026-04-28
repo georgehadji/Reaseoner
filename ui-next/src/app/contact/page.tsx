@@ -20,7 +20,7 @@ export default function ContactPage() {
       <h1 className="text-4xl font-bold mb-8">Contact Support</h1>
       
       {submitted ? (
-        <div className="rounded-lg bg-green-500/10 p-6 text-center text-green-600 border border-green-500/20">
+        <div className="rounded-lg bg-[#808080]/10 p-6 text-center text-[#A0A0A0] border border-[#808080]/20">
           <h2 className="text-xl font-semibold mb-2">Message Sent</h2>
           <p>Thank you for reaching out. Our support team will get back to you within 24 hours.</p>
           <button onClick={() => setSubmitted(false)} className="mt-4 text-[var(--accent)] hover:underline">

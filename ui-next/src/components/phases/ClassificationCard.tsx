@@ -17,12 +17,12 @@ export function ClassificationCard({ data }: ClassificationCardProps) {
   const tokens = d.tokens as { input?: number; output?: number } | undefined;
 
   const badgeColor: Record<string, string> = {
-    analytical: 'bg-blue-500/10 text-blue-600',
-    strategic: 'bg-teal-500/10 text-teal-600',
-    creative: 'bg-pink-500/10 text-pink-600',
-    technical: 'bg-emerald-500/10 text-emerald-600',
-    hybrid: 'bg-amber-500/10 text-amber-600',
-    predictive: 'bg-indigo-500/10 text-indigo-600',
+    analytical: 'bg-[#808080]/10 text-[#A0A0A0]',
+    strategic: 'bg-[#808080]/10 text-[#A0A0A0]',
+    creative: 'bg-[#808080]/10 text-[#A0A0A0]',
+    technical: 'bg-[#808080]/10 text-[#A0A0A0]',
+    hybrid: 'bg-[#808080]/10 text-[#A0A0A0]',
+    predictive: 'bg-[#808080]/10 text-[#A0A0A0]',
   };
 
   return (

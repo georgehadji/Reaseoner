@@ -1,6 +1,6 @@
 
 """
-Observability Decorator for ARA Pipeline
+Observability Decorator for Reasoner Pipeline
 
 Provides automatic metric collection, structured logging, and tracing.
 """

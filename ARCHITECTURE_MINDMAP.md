@@ -1,4 +1,4 @@
-# Architecture Mindmap — Reasoner (ARA Pipeline v2.2)
+# Architecture Mindmap — Reasoner (Reasoner Pipeline v2.2)
 
 > **Version:** 2.2 (Python package 2.1.0)
 > **Last Updated:** 2026-04-23
@@ -8,7 +8,7 @@
 
 ## 0. Executive Summary
 
-**Reasoner** (Adaptive Reasoning Architecture) is a production-grade, event-sourced, multi-method AI reasoning orchestrator. It decomposes complex problems into structured multi-phase pipelines, leverages 90+ LLM models from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling.
+**Reasoner** (Reasoner) is a production-grade, event-sourced, multi-method AI reasoning orchestrator. It decomposes complex problems into structured multi-phase pipelines, leverages 90+ LLM models from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling.
 
 | Attribute | Value |
 |-----------|-------|
@@ -92,7 +92,7 @@ Reasoner/
 | `src/reasoner/application/services/billing_service.py` | Application | Service for subscription lifecycle orchestration |
 | `src/reasoner/application/services/quota_service.py` | Application | Service for enforcing multi-tier query limits |
 | `src/reasoner/application/services/audit_service.py` | Application | Service for asynchronous query auditing |
-| `src/reasoner/application/flows/__init__.py` | Application | `build_default_flow_registry()` — binds 17 methods to `ARAPipeline` |
+| `src/reasoner/application/flows/__init__.py` | Application | `build_default_flow_registry()` — binds 17 methods to `ReasonerPipeline` |
 | `src/reasoner/application/event_bus/bus.py` | Application | In-memory `EventBus` with typed subscribers |
 | `src/reasoner/application/handlers/handlers.py` | Application | CQRS handlers: `RunPipelineCommandHandler`, `ResumePipelineCommandHandler`, etc. |
 | `src/reasoner/application/mixins/search_mixin.py` | Application | Context vetting, deep read, evidence validation |
@@ -149,7 +149,7 @@ Reasoner/
 
 | File | Classification | Purpose |
 |------|---------------|---------|
-| `src/reasoner/pipeline.py` | Core Logic | `ARAPipeline` — main orchestrator (902 lines + 11 mixins) |
+| `src/reasoner/pipeline.py` | Core Logic | `ReasonerPipeline` — main orchestrator (902 lines + 11 mixins) |
 | `src/reasoner/models.py` | Core Logic | `PipelineState` (~60 fields), `CostTrackingState`, `ConversationState` |
 | `src/reasoner/phases/_shared.py` | Core Logic | Shared prompt builders, follow-up context construction |
 | `src/reasoner/phases/_universal.py` | Core Logic | Universal phase prompts (classification, decomposition, synthesis) |
@@ -211,7 +211,7 @@ Reasoner/
 | `src/reasoner/scraper.py` | Utilities | Web content extraction |
 | `src/reasoner/parsing.py` | Utilities | JSON extraction, repair, structured parsing |
 | `src/reasoner/renderer.py` | Utilities | CLI-oriented rendering |
-| `src/reasoner/ara_persuasion_defense.py` | Utilities | Adversarial persuasion defense |
+| `src/reasoner/reasoner_persuasion_defense.py` | Utilities | Adversarial persuasion defense |
 | `src/reasoner/server_check.py` | Utilities | Server and environment diagnostics |
 
 ### 1.3 Frontend File Inventory & Classification
@@ -362,7 +362,7 @@ The backend follows a **Hexagonal (Ports & Adapters) DDD architecture** with fou
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key insight:** The practical architecture is a **modular monolith** with streaming API interfaces. While the hexagonal layers are conceptually clean, the main execution path (`run_stream()` in `api/streaming.py`) instantiates `ARAPipeline` directly rather than routing through the CQRS `RunPipelineCommandHandler`. The CQRS layer is present but partially bypassed in the hot path.
+**Key insight:** The practical architecture is a **modular monolith** with streaming API interfaces. While the hexagonal layers are conceptually clean, the main execution path (`run_stream()` in `api/streaming.py`) instantiates `ReasonerPipeline` directly rather than routing through the CQRS `RunPipelineCommandHandler`. The CQRS layer is present but partially bypassed in the hot path.
 
 #### 2A.2 Module Hierarchy
 
@@ -370,7 +370,7 @@ The backend follows a **Hexagonal (Ports & Adapters) DDD architecture** with fou
 src/reasoner/
 ├── __init__.py                    # Package init, __version__ = "2.1.0"
 ├── main.py                        # CLI entry point
-├── pipeline.py                    # ARAPipeline (orchestrator, 902 lines + 11 mixins)
+├── pipeline.py                    # ReasonerPipeline (orchestrator, 902 lines + 11 mixins)
 ├── models.py                      # PipelineState (~60 fields)
 │
 ├── core/                          # Domain core abstractions
@@ -562,7 +562,7 @@ Specialized Subsystems:
 **Reality Check:** There are several violations of this rule:
 - `domain/preset_core.py` imports from `infrastructure.llm.registry` (`_REGISTRY`)
 - `application/flows/__init__.py` imports from `api.serializers`
-- `api/streaming.py` directly instantiates `ARAPipeline` rather than using CQRS handlers
+- `api/streaming.py` directly instantiates `ReasonerPipeline` rather than using CQRS handlers
 - Mixins are tightly coupled to `PipelineState` internals
 
 ---
@@ -625,7 +625,7 @@ Specialized Subsystems:
      │                  │                      │
      ▼                  ▼                      ▼
 ┌────────────┐  ┌──────────────┐    ┌─────────────────────────┐
-│_stream_    │  │_stream_web_  │    │  ARAPipeline.run()      │
+│_stream_    │  │_stream_web_  │    │  ReasonerPipeline.run()      │
 │direct_     │  │search_results│    │  (pipeline.py)          │
 │answer()    │  │()            │    │                         │
 │            │  │              │    │  Phase 0: Classification│
@@ -669,7 +669,7 @@ src/reasoner/main.py
        │
        ├──► --list-presets → print all presets + key status
        ├──► --list-models → print all model IDs grouped by ecosystem
-       └──► --problem → build RunConfig → instantiate ARAPipeline → run()
+       └──► --problem → build RunConfig → instantiate ReasonerPipeline → run()
                 │
                 ├──► --resume state.json → load PipelineState → continue
                 └──► Normal flow → same phases as API path (no streaming)
@@ -678,7 +678,7 @@ src/reasoner/main.py
 #### 2B.3 Pipeline Internal Control Flow
 
 ```text
-ARAPipeline.run(state, config)
+ReasonerPipeline.run(state, config)
     │
     ├──► _phase_0_classify(state)
     │      └──► Call LLM (classification model)
@@ -767,7 +767,7 @@ PipelineState
 #### 2B.5 Streaming Event Flow (SSE)
 
 ```text
-ARAPipeline.run()
+ReasonerPipeline.run()
     │
     ├──► Emit phase_start events → state.pending_events
     ├──► Emit phase_complete events → state.pending_events
@@ -776,7 +776,7 @@ ARAPipeline.run()
 
 api/streaming.py
     │
-    ├──► Receives generator from ARAPipeline.run()
+    ├──► Receives generator from ReasonerPipeline.run()
     ├──► Formats events via serializers.py (_ser_0 through _ser_5)
     ├──► Yields SSE data: lines with "data: {json}\n\n"
     └──► On completion: sends "data: [DONE]\n\n"
@@ -855,7 +855,7 @@ ui-next/src/hooks/usePipelineStream.ts
 | **LLMProvider Port** | Abstracts all LLM providers behind a common interface | `infrastructure/llm/ports.py` — `LLMProvider` Protocol, `BaseLLMProvider` ABC |
 | **ProviderRouter** | Routes phases to models with fallback chains | `infrastructure/llm/router.py` |
 | **EventBus** | Decouples event producers from consumers | `application/event_bus/bus.py` |
-| **Mixin Pattern** | Composes method-specific behaviors into ARAPipeline | `application/mixins/*.py` |
+| **Mixin Pattern** | Composes method-specific behaviors into ReasonerPipeline | `application/mixins/*.py` |
 | **Subagent Base** | Abstract base for intra-phase focused reasoning | `subagents/` — `PhaseSubAgent` |
 | **HyperGate** | Pre-routing decision engine | `hypergate/hyperagent.py` |
 | **Neuro Cache** | Tiered long-term memory | `neuro/cache.py` — L1 (hot), L2 (warm), L3 (cold) |
@@ -929,7 +929,7 @@ api/__init__.py
 ├──► api/streaming.py
 │    ├──► application/services/preset_service.py
 │    ├──► hypergate/hyperagent.py
-│    ├──► pipeline.py (ARAPipeline)
+│    ├──► pipeline.py (ReasonerPipeline)
 │    ├──► api/serializers.py
 │    └──► neuro/server.py
 ├──► api/middleware.py
@@ -940,7 +940,7 @@ api/__init__.py
 ├──► api/run_state.py
 └──► neuro/server.py (mounted router)
 
-pipeline.py (ARAPipeline)
+pipeline.py (ReasonerPipeline)
 ├──► core/constants.py
 ├──► core/settings.py
 ├──► core/protocol.py
@@ -1207,12 +1207,12 @@ Persisted Conversations (survives page reload)
 | Event | Triggered By | Handled By | Purpose |
 |-------|-------------|------------|---------|
 | `PipelineStarted` | `RunPipelineCommandHandler` | EventStore.append, WebSocketManager.broadcast | Marks run start |
-| `PhaseStarted` | `ARAPipeline._phase_*` | EventStore.append, SSE stream | UI phase timeline update |
-| `PhaseCompleted` | `ARAPipeline._phase_*` | EventStore.append, SSE stream | UI phase completion |
+| `PhaseStarted` | `ReasonerPipeline._phase_*` | EventStore.append, SSE stream | UI phase timeline update |
+| `PhaseCompleted` | `ReasonerPipeline._phase_*` | EventStore.append, SSE stream | UI phase completion |
 | `AgentStarted` | `PhaseSubAgent.run` | EventStore.append, SSE stream | UI subagent visibility |
 | `AgentCompleted` | `PhaseSubAgent.run` | EventStore.append, SSE stream | UI subagent completion |
-| `PipelineCompleted` | `ARAPipeline.run` (end) | EventStore.append, History.save, Neuro.learn | Final persistence |
-| `PipelineFailed` | `ARAPipeline.run` (exception) | EventStore.append, ErrorHandler | Error logging |
+| `PipelineCompleted` | `ReasonerPipeline.run` (end) | EventStore.append, History.save, Neuro.learn | Final persistence |
+| `PipelineFailed` | `ReasonerPipeline.run` (exception) | EventStore.append, ErrorHandler | Error logging |
 | `WidgetExecuted` | `ExecuteWidgetCommandHandler` | EventStore.append | Widget lifecycle |
 
 #### 3.4.2 EventBus Subscription Map
@@ -1265,7 +1265,7 @@ pipeline.py
 
 application/handlers/handlers.py
     └──► def handle():
-            from reasoner.pipeline import ARAPipeline
+            from reasoner.pipeline import ReasonerPipeline
             # Deferred to avoid circular import
 ```
 
@@ -1281,13 +1281,13 @@ application/handlers/handlers.py
 |-----------|------|-----|--------|
 | **Domain → Infrastructure** | `domain/preset_core.py` | `infrastructure/llm/registry.py` (`_REGISTRY`) | Preset validation depends on concrete registry. If registry format changes, domain breaks. |
 | **Application → API** | `application/flows/__init__.py` | `api.serializers.py` | Flow registry imports serializers. Serializers should be API-layer only. |
-| **Streaming → Pipeline internals** | `api/streaming.py` | `pipeline.py` (direct instantiation) | Streaming logic knows about `ARAPipeline` directly rather than using CQRS handlers. |
+| **Streaming → Pipeline internals** | `api/streaming.py` | `pipeline.py` (direct instantiation) | Streaming logic knows about `ReasonerPipeline` directly rather than using CQRS handlers. |
 | **Snapshot → Aggregate internals** | `infrastructure/persistence/snapshots.py` | `aggregate._state_data` | Direct access to protected state breaks encapsulation. |
 
 #### 3.6.2 Mixin Coupling
 
 ```text
-ARAPipeline inherits from 11 mixins:
+ReasonerPipeline inherits from 11 mixins:
     SearchMixin, ArticlePipelineMixin, PerspectiveMixin,
     DebateMixin, JuryMixin, ResearchMixin, DialecticalMixin,
     DelphiMixin, CognitiveMixin, RecoveryMixin, WritingMixin
@@ -1352,7 +1352,7 @@ Violating it causes silent data loss between phases.
 #### 3.7.2 PhaseStep Naming Convention
 
 ```text
-Implicit contract: ARAPipeline phase methods MUST be named:
+Implicit contract: ReasonerPipeline phase methods MUST be named:
     "_phase_<N>_<name>"  (e.g., "_phase_0_classify")
 
 The flow registry binds method names to PhaseStep objects.
@@ -1416,13 +1416,13 @@ parsing.extract_solution_block() depends on this exact format.
 
 | Risk | Location | Severity | Mitigation |
 |------|----------|----------|------------|
-| **God Object** | `pipeline.py` — `ARAPipeline` (902 lines + 11 mixins) | High | Extract flow execution engine from phase implementations |
+| **God Object** | `pipeline.py` — `ReasonerPipeline` (902 lines + 11 mixins) | High | Extract flow execution engine from phase implementations |
 | **Deferred Imports** | `pipeline.py`, `handlers.py` | Medium | Move flow resolution to factory injected at init |
 | **Domain → Infra Leak** | `domain/preset_core.py` → `llm/registry.py` | Medium | Inject provider catalog port instead |
 | **Application → API Leak** | `application/flows/__init__.py` → `api.serializers.py` | Medium | Pass serializer callables as configuration |
 | **Mixin State Coupling** | All mixins → `PipelineState` internals | Medium | Introduce state accessor interface/ports |
 | **Streaming Direct Access** | `api/streaming.py` → `pipeline._phase_*` | Medium | Create formal `PipelineRunner` interface |
-| **CQRS Bypass** | `run_stream()` instantiates `ARAPipeline` directly | High | Route through `RunPipelineCommandHandler` |
+| **CQRS Bypass** | `run_stream()` instantiates `ReasonerPipeline` directly | High | Route through `RunPipelineCommandHandler` |
 | **Dual BaseLLMProvider** | `infrastructure/llm/base.py` + `ports.py` | Medium | Deprecate legacy, migrate all to ports |
 | **Windows Platform Patch** | `infrastructure/llm/utils.py` | Low | Monitor OpenAI SDK updates |
 | **Perplexity Silent Fallback** | `openai_compat.py` retry on 400 | Low | Add structured output validation post-call |
@@ -1447,7 +1447,7 @@ parsing.extract_solution_block() depends on this exact format.
 | **Domain-Driven Design (DDD)** | [CONFIRMED] | Explicit `domain/` package with `preset_core.py`, `preset_registry.py`; `core/` contains domain events and aggregates; ubiquitous language in filenames | Model complex reasoning domain with explicit boundaries and entities |
 | **CQRS (Command Query Responsibility Segregation)** | [CONFIRMED] | `application/handlers/handlers.py` has `RunPipelineCommandHandler`, `GetPipelineStatusQueryHandler`, `ResumePipelineCommandHandler` | Separate write and read paths; optimize each independently |
 | **Event Sourcing** | [CONFIRMED] | `core/events/domain_events.py`, `core/aggregates/pipeline.py`, `infrastructure/persistence/event_store.py`; `PipelineAggregate` derives state from event sequence | Audit trail, temporal queries, reconstruct state at any point |
-| **Mixin Composition** | [CONFIRMED] | `ARAPipeline` inherits from 11 mixins in `application/mixins/` | Compose method-specific behaviors without deep inheritance hierarchies |
+| **Mixin Composition** | [CONFIRMED] | `ReasonerPipeline` inherits from 11 mixins in `application/mixins/` | Compose method-specific behaviors without deep inheritance hierarchies |
 | **Provider Router with Fallbacks** | [CONFIRMED] | `infrastructure/llm/router.py` — explicit fallback tables per role; `ProviderRouter.call()` with fallback chain | Resilience through cross-lab diversity; automatic recovery on provider failure |
 | **Circuit Breaker** | [CONFIRMED] | `circuit_breaker.py`; used in `ProviderRouter` and `core/rerank.py` | Prevent cascade failures; fail fast when external service is unhealthy |
 | **Token Bucket Rate Limiter** | [CONFIRMED] | `rate_limiter.py`; applied in `api/__init__.py` middleware | Protect against abuse; enforce per-client quotas |
@@ -1471,7 +1471,7 @@ parsing.extract_solution_block() depends on this exact format.
 | **Modular Monolith** | [CONFIRMED] | Single Python package (`src/reasoner/`) with internal module boundaries; single FastAPI process; single Next.js frontend | Simpler deployment than microservices; modules communicate in-process; risk of tight coupling if boundaries erode |
 | **Event-Driven (partial)** | [CONFIRMED] | EventBus, DomainEvents, SSE streaming; but main path bypasses event bus for direct pipeline calls | Good for audit trails and side effects; adds complexity; current implementation is partially bypassed |
 | **Streaming-First API** | [CONFIRMED] | SSE endpoints for `/api/run`, `/api/run-followup`; WebSocket for real-time progress | Low latency UX; harder to cache and retry; requires careful connection management |
-| **Pipeline-Orchestration** | [CONFIRMED] | `ARAPipeline` with explicit phase sequences; method-specific flows via `build_default_flow_registry` | Clear reasoning steps; extensible for new methods; central orchestrator becomes a bottleneck |
+| **Pipeline-Orchestration** | [CONFIRMED] | `ReasonerPipeline` with explicit phase sequences; method-specific flows via `build_default_flow_registry` | Clear reasoning steps; extensible for new methods; central orchestrator becomes a bottleneck |
 | **Self-Healing System** | [CONFIRMED] | `healing/` with introspection engine, test generation, CI/CD feedback loops | Proactive quality maintenance; risk of false positives and noise |
 
 ### 4.3 Trade-offs and Constraints
@@ -1479,7 +1479,7 @@ parsing.extract_solution_block() depends on this exact format.
 | Trade-off | Decision | Rationale | Cost |
 |-----------|----------|-----------|------|
 | **Event Sourcing vs. Simplicity** | Event sourcing implemented but main path bypasses it | CQRS handlers exist for future extraction; current hot path optimizes for latency | Audit trail is incomplete for direct pipeline runs; snapshot logic adds I/O overhead |
-| **Mixin vs. Service Composition** | Mixins chosen over injected services | Mixins provide easy access to shared state; reduces boilerplate | ARAPipeline becomes a god object (902 lines + 11 mixins); test isolation is harder |
+| **Mixin vs. Service Composition** | Mixins chosen over injected services | Mixins provide easy access to shared state; reduces boilerplate | ReasonerPipeline becomes a god object (902 lines + 11 mixins); test isolation is harder |
 | **SQLite vs. PostgreSQL** | SQLite default, PostgreSQL optional | Zero-config local development; SQLite is sufficient for single-node deployments | SQLite `ThreadPoolExecutor` may bottleneck under high concurrency; no replication |
 | **OpenRouter vs. Direct APIs** | OpenRouter primary, direct adapters secondary | Single API key for 350+ models; simplified routing | Higher latency (proxy hop); vendor lock-in risk; cost markup |
 | **SSE vs. WebSocket** | SSE for pipeline, WebSocket for progress | SSE works over HTTP (firewall-friendly); automatic reconnection | Bidirectional communication requires separate endpoint; cannot push from server without client request |
@@ -1497,7 +1497,7 @@ parsing.extract_solution_block() depends on this exact format.
 
 | Bottleneck | Location | Trigger | Impact | Mitigation |
 |------------|----------|---------|--------|------------|
-| **ARAPipeline single-threaded execution** | `pipeline.py` — `run()` is synchronous generator | Any pipeline request | One pipeline per process thread; concurrent requests block each other | Run multiple uvicorn workers; extract to async task queue |
+| **ReasonerPipeline single-threaded execution** | `pipeline.py` — `run()` is synchronous generator | Any pipeline request | One pipeline per process thread; concurrent requests block each other | Run multiple uvicorn workers; extract to async task queue |
 | **SQLite EventStore ThreadPoolExecutor** | `infrastructure/persistence/event_store.py` | High-concurrency API usage | Single-threaded writes to SQLite serialize all event appends | Switch to PostgreSQL; use WAL mode SQLite; connection pooling |
 | **Neuro L3 cold scan** | `neuro/cache.py` — `l3_scan()` | Recall with no L1/L2 hits | Scans ALL `*.json` files in memory directory; O(n) where n = memory entries | Implement indexing; pagination; background compaction |
 | **SearXNG search latency** | `core/search.py` — `DiscoveryClient` | Web search required | Self-hosted SearXNG may be slow/unavailable; timeout = 30s | Circuit breaker; Perplexity fallback; local caching |
@@ -1513,7 +1513,7 @@ parsing.extract_solution_block() depends on this exact format.
 | **OpenRouter API** | Primary LLM routing | Outage or rate limit | ALL non-local, non-direct API pipelines fail | Direct provider fallbacks (Anthropic, OpenAI, Google); Ollama local mode |
 | **SearXNG instance** | `core/search.py` | Container down or unreachable | Web search fails; research method degraded | Perplexity Sonar fallback; cached search results |
 | **SQLite database file** | `infrastructure/persistence/event_store.py` | Disk full, corruption, lock contention | Event sourcing stops; history queries fail | PostgreSQL replica; regular backups; WAL mode |
-| **ARAPipeline instance** | `pipeline.py` | Memory leak, exception, deadlock | All pipeline requests fail | Process-level health checks; auto-restart; stateless design |
+| **ReasonerPipeline instance** | `pipeline.py` | Memory leak, exception, deadlock | All pipeline requests fail | Process-level health checks; auto-restart; stateless design |
 | **Frontend build** | `ui-next/` | Build failure, TypeScript errors | UI unavailable | CI build gating; rollback strategy; CDN caching |
 | **Neuro embedding provider** | `neuro/providers.py` | Embedding API down | Memory recall degrades to keyword matching | Cached embeddings; local embedding model fallback |
 | **Rate limiter state** | `rate_limiter.py` — in-memory buckets | Process restart | Rate limit state resets; potential abuse window | Redis-backed rate limiting; persistent token buckets |
@@ -1537,7 +1537,7 @@ parsing.extract_solution_block() depends on this exact format.
 
 | Limitation | Current Ceiling | Bottleneck | Path to Scale |
 |------------|-----------------|------------|---------------|
-| **Concurrent pipeline runs** | ~1 per process (sync generator) | ARAPipeline.run() blocks thread | Extract to Celery/RQ task queue; async rewrite; horizontal scaling |
+| **Concurrent pipeline runs** | ~1 per process (sync generator) | ReasonerPipeline.run() blocks thread | Extract to Celery/RQ task queue; async rewrite; horizontal scaling |
 | **Event store throughput** | ~1000 events/sec (SQLite) | Single-threaded writes | PostgreSQL with connection pooling; sharding by aggregate_id |
 | **Memory recall latency** | ~500ms (L3 scan) | Linear file scan | Embedding index (FAISS/Annoy); Redis for hot cache; background indexing |
 | **LLM request concurrency** | Provider-dependent (OpenRouter: high) | External API rate limits | Request queuing; provider diversification; local model fallback |
@@ -1617,14 +1617,14 @@ parsing.extract_solution_block() depends on this exact format.
       - → `infrastructure/persistence/event_store.py` (append-only log)
       - → `pipeline.py` (actual execution — bypassed in hot path [CONFIRMED])
   - `application/flows/__init__.py` → method flow registry
-    - `build_default_flow_registry(pipeline)` → binds 17 methods to ARAPipeline
+    - `build_default_flow_registry(pipeline)` → binds 17 methods to ReasonerPipeline
     - `PipelineFlow` → container for ordered `PhaseStep`s
     - `PhaseStep` → callable + critical flag + metadata
     - cross-links:
       - → `application/mixins/*.py` (mixin methods bound as steps)
       - → `api/serializers.py` [LAYER VIOLATION]
       - → `phases/*.py` (prompt modules referenced by mixins)
-  - `application/mixins/` → 12 behavior mixins composed into ARAPipeline
+  - `application/mixins/` → 12 behavior mixins composed into ReasonerPipeline
     - `search_mixin.py` → context vetting, deep read, evidence validation
       - `vet_context()` → `smart_search()` → scrape → CoT detection → scoring
       - cross-links → `core/search.py` (DiscoveryClient)
@@ -1640,7 +1640,7 @@ parsing.extract_solution_block() depends on this exact format.
     - `recovery_mixin.py` → pipeline resume, error recovery, state migration
     - `writing_mixin.py` → creative writing with hallucination guards
     - cross-links:
-      - → `pipeline.py` (ARAPipeline inherits all mixins)
+      - → `pipeline.py` (ReasonerPipeline inherits all mixins)
       - → `models.py` (PipelineState — all mixins mutate same state object)
       - → `phases/*.py` (prompt templates)
   - `application/services/`
@@ -1766,7 +1766,7 @@ parsing.extract_solution_block() depends on this exact format.
 ### 6.3 Reasoning Runtime
 
 - **Pipeline Orchestrator**
-  - `pipeline.py` → `ARAPipeline` (main orchestrator, 902 lines)
+  - `pipeline.py` → `ReasonerPipeline` (main orchestrator, 902 lines)
     - Inherits from 11 mixins → composition over inheritance [CONFIRMED]
     - `_PHASE_CONFIGS` → phase configuration mapping
     - `run(state, config)` → main execution entry
@@ -2013,7 +2013,7 @@ Sanitization (sanitization.py)
 HyperGate Decision (hypergate/hyperagent.py)
   ├──► Direct Answer Path → _stream_direct_answer() → creative model chain
   ├──► Web Search Path → _stream_web_search_results() → DiscoveryClient
-  └──► Pipeline Path → ARAPipeline.run()
+  └──► Pipeline Path → ReasonerPipeline.run()
         │
         ├──► Phase 0: Classification (phases/_universal.py)
         ├──► Phase 1: Decomposition (phases/_universal.py)
@@ -2042,16 +2042,16 @@ Neuro Learn (follow-up only) + History Save + Tagged Memory
 ### 6.8 Key Dependency Arrows
 
 ```text
-ARAPipeline ──► PipelineState (mutates ~60 fields)
-ARAPipeline ──► ProviderRouter (LLM calls)
-ARAPipeline ──► TokenCache (response caching)
-ARAPipeline ──► 11 Mixins (composition)
+ReasonerPipeline ──► PipelineState (mutates ~60 fields)
+ReasonerPipeline ──► ProviderRouter (LLM calls)
+ReasonerPipeline ──► TokenCache (response caching)
+ReasonerPipeline ──► 11 Mixins (composition)
 
 Mixins ──► PipelineState (direct field access)
 Mixins ──► phases/*.py (prompt templates)
 Mixins ──► core/search.py (DiscoveryClient)
 
-api/streaming.py ──► ARAPipeline (direct instantiation)
+api/streaming.py ──► ReasonerPipeline (direct instantiation)
 api/streaming.py ──► PresetService (routing validation)
 api/streaming.py ──► HyperGateAgent (pre-routing)
 api/streaming.py ──► api/serializers.py (SSE formatting)
@@ -2102,8 +2102,8 @@ Frontend ──► IndexedDB (persistent storage)
 
 | Chain | Status | Evidence |
 |-------|--------|----------|
-| `api/streaming.py` → `ARAPipeline` → `application/flows` | [FUNCTIONAL] | Deferred import avoids cycle at runtime |
-| `application/handlers.py` → `ARAPipeline` | [FUNCTIONAL] | Deferred import avoids cycle at runtime |
+| `api/streaming.py` → `ReasonerPipeline` → `application/flows` | [FUNCTIONAL] | Deferred import avoids cycle at runtime |
+| `application/handlers.py` → `ReasonerPipeline` | [FUNCTIONAL] | Deferred import avoids cycle at runtime |
 | `domain/preset_core.py` → `infrastructure/llm/registry.py` | [FUNCTIONAL] | Violates hexagonal rule but works |
 | `application/flows/__init__.py` → `api/serializers.py` | [FUNCTIONAL] | Violates layer separation but works |
 | `ProviderRouter` → `build_provider()` → `_REGISTRY` | [FUNCTIONAL] | All model IDs resolve correctly |
@@ -2156,11 +2156,11 @@ Frontend ──► IndexedDB (persistent storage)
 
 | Item | Confidence | Reason |
 |------|-----------|--------|
-| Exact line count of `ARAPipeline` | [HIGH] | 902 lines confirmed via grep |
+| Exact line count of `ReasonerPipeline` | [HIGH] | 902 lines confirmed via grep |
 | Number of reasoning methods | [HIGH] | 17 methods in phases/ + writing; 19 registered in flows |
 | Model count in registry | [HIGH] | 90+ entries in `_MODEL_WHITELIST` |
 | Preset count | [HIGH] | 42 presets in `preset_registry.py` |
-| CQRS bypass in hot path | [HIGH] | `api/streaming.py` instantiates `ARAPipeline` directly; handlers exist but are secondary |
+| CQRS bypass in hot path | [HIGH] | `api/streaming.py` instantiates `ReasonerPipeline` directly; handlers exist but are secondary |
 | Event sourcing completeness | [MEDIUM] | Events are generated and stored, but main run path does not reconstruct from events |
 | `mempalace.yaml` purpose | [LOW] | File exists but is not referenced in any Python import; purpose unclear from content |
 | `ui-next/proxy.ts` usage | [MEDIUM] | File exists but may be dev-server proxy config; not imported in main app flow |

@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Circuit Breaker Pattern
+Reasoner Pipeline - Circuit Breaker Pattern
 Provides fault tolerance for LLM provider calls.
 
 ARCHITECTURAL NOTE:

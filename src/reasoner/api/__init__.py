@@ -144,7 +144,7 @@ async def lifespan(app: FastAPI):
 
 
 print("[DEBUG] api/__init__.py: Creating FastAPI app...")
-app = FastAPI(title="ARA v2.0", lifespan=lifespan)
+app = FastAPI(title="Reasoner v2.0", lifespan=lifespan)
 print("[DEBUG] api/__init__.py: FastAPI app created")
 
 # Add security middleware
@@ -456,7 +456,7 @@ async def run_followup_pipeline(
     csrf_checked = Depends(require_csrf),
 ):
     """
-    Run the ARA pipeline for a follow-up question with full conversation context.
+    Run the Reasoner pipeline for a follow-up question with full conversation context.
     """
     _require_auth_if_legacy_disabled(user)
     return StreamingResponse(
@@ -692,7 +692,7 @@ app.add_middleware(
 @app.get("/")
 async def root():
     return {
-        "message": "ARA v2.0 API",
+        "message": "Reasoner v2.0 API",
         "docs": "/docs",
         "health": "/api/health",
         "api": "/api/run",

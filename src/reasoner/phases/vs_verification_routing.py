@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from reasoner.ara_vs_constants import VS_ROUTING_HIGH_PROB, VS_ROUTING_MEDIUM_PROB
+from reasoner.reasoner_vs_constants import VS_ROUTING_HIGH_PROB, VS_ROUTING_MEDIUM_PROB
 from reasoner.vs_config import VSFeatureFlags
 
 

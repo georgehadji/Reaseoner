@@ -48,13 +48,13 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md p-8 space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
         <h1 className="text-2xl font-bold text-[var(--text)]">Reset Password</h1>
         {sent ? (
-          <div className="rounded-lg bg-green-500/10 p-4 text-green-600" role="status" aria-live="polite">
+          <div className="rounded-lg bg-[#808080]/10 p-4 text-[#A0A0A0]" role="status" aria-live="polite">
             Check your email for a reset link.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {error && (
-              <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-600" role="alert" aria-live="assertive">
+              <div className="rounded-lg bg-[#606060]/10 p-3 text-sm text-[#A0A0A0]" role="alert" aria-live="assertive">
                 {error}
               </div>
             )}

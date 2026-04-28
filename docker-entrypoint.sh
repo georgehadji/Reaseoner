@@ -24,6 +24,12 @@ MAX_REQUESTS_JITTER="${GUNICORN_MAX_REQUESTS_JITTER:-50}"
 KEEP_ALIVE="${GUNICORN_KEEP_ALIVE:-5}"
 GRACEFUL_TIMEOUT="${GUNICORN_GRACEFUL_TIMEOUT:-30}"
 
+# SSL Configuration (Phase 1: E2EE)
+SSL_ARGS=""
+if [ -n "$SSL_CERTFILE" ] && [ -n "$SSL_KEYFILE" ]; then
+    SSL_ARGS="--certfile=$SSL_CERTFILE --keyfile=$SSL_KEYFILE"
+fi
+
 exec gunicorn asgi:app \
     -k uvicorn.workers.UvicornWorker \
     --bind "0.0.0.0:8000" \
@@ -34,4 +40,5 @@ exec gunicorn asgi:app \
     --keep-alive "$KEEP_ALIVE" \
     --graceful-timeout "$GRACEFUL_TIMEOUT" \
     --access-logfile - \
+    $SSL_ARGS \
     "$@"

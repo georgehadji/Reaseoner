@@ -62,6 +62,7 @@ export function ManifestationVisuals({ progress }: ManifestationVisualsProps) {
           className="absolute h-4 w-4"
           style={{
             ...pos,
+            rotate: `${pos.rotate}deg`,
             opacity: 0.35,
           }}
         >

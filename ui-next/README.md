@@ -1,12 +1,12 @@
-# ARA UI — Next.js Frontend
+# Reasoner UI — Next.js Frontend
 
-Production-grade Next.js 14+ (App Router) frontend for the Adaptive Reasoning Architecture (ARA) pipeline.
+Production-grade Next.js 14+ (App Router) frontend for the Reasoner pipeline.
 
 ## Tech Stack
 
 - **Framework:** Next.js 16 (App Router)
 - **Language:** TypeScript (strict)
-- **Styling:** Tailwind CSS + ARA CSS variable design system
+- **Styling:** Tailwind CSS + Reasoner CSS variable design system
 - **State:** Zustand (client), SWR (server)
 - **Browser DB:** IndexedDB via `idb`
 - **Testing:** Vitest + React Testing Library + Playwright

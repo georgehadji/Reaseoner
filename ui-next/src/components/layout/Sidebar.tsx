@@ -50,8 +50,8 @@ function MemoryStatus() {
   }, []);
 
   const dotColor =
-    status === 'ok' ? 'bg-emerald-400' :
-    status === 'degraded' ? 'bg-amber-400' :
+    status === 'ok' ? 'bg-[#808080]' :
+    status === 'degraded' ? 'bg-[#A0A0A0]' :
     'bg-[var(--text-subtle)]';
 
   return (
@@ -129,7 +129,7 @@ export function Sidebar({
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-full flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-200 sm:static',
+          'fixed left-0 top-0 z-50 flex h-full flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width] duration-500 ease-[var(--ease-out-expo)] sm:static',
           collapsed ? 'w-0 overflow-hidden' : 'w-[264px]',
         )}
       >
@@ -202,7 +202,7 @@ export function Sidebar({
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                   placeholder="Search conversations…"
-                  className="h-9 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] pl-9 pr-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] transition-colors focus:border-[var(--border-strong)] focus:outline-none"
+                  className="h-9 w-full rounded-xl border border-[var(--border)] bg-[var(--surface-2)] pl-9 pr-3 text-sm text-[var(--text)] placeholder:text-[var(--text-muted)] transition-all duration-200 focus:border-[var(--border-strong)] focus:outline-none focus:shadow-[0_0_0_3px_rgba(59,130,246,0.10)]"
                 />
               </div>
 
@@ -213,7 +213,7 @@ export function Sidebar({
                     <button
                       type="button"
                       onClick={() => setActiveTag(null)}
-                      className="cursor-pointer rounded-full border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+                      className="cursor-pointer rounded-full border border-[var(--border)] px-3 h-10 flex items-center text-xs text-[var(--text-muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"
                     >
                       Clear ×
                     </button>
@@ -224,7 +224,7 @@ export function Sidebar({
                       type="button"
                       onClick={() => setActiveTag(tag === activeTag ? null : tag ?? null)}
                       className={cn(
-                        'cursor-pointer rounded-full px-2 py-0.5 text-[10px] font-medium transition-all',
+                        'cursor-pointer rounded-full px-3 h-10 flex items-center text-xs font-medium transition-all',
                         activeTag === tag
                           ? 'bg-[var(--accent)] text-white'
                           : 'border border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]',
@@ -263,7 +263,7 @@ export function Sidebar({
                             key={conv.id}
                             role="button"
                             tabIndex={0}
-                            className="group flex cursor-pointer items-start gap-2 rounded-xl px-2 py-2.5 transition-colors hover:bg-[var(--surface-2)]"
+                            className="group flex cursor-pointer items-start gap-2 rounded-xl px-2 py-2.5 transition-all duration-200 hover:bg-[var(--surface-2)] hover:translate-x-0.5"
                             onClick={() => onLoad(conv)}
                             onKeyDown={(e) => e.key === 'Enter' && onLoad(conv)}
                           >
@@ -293,20 +293,20 @@ export function Sidebar({
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onResume(conv.pipeline_id!); }}
-                                    className="cursor-pointer flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)]"
+                                    className="cursor-pointer flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)]"
                                     aria-label="Resume pipeline"
                                   >
-                                    <Play className="h-3 w-3" />
+                                    <Play className="h-4 w-4" />
                                   </button>
                                 </Tooltip>
                               )}
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
-                                className="cursor-pointer flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-red-400"
+                                className="cursor-pointer flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-red-400"
                                 aria-label="Delete"
                               >
-                                <Trash2 className="h-3 w-3" />
+                                <Trash2 className="h-4 w-4" />
                               </button>
                             </div>
                           </div>
@@ -326,7 +326,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onClear}
-            className="mt-1 w-full cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-[var(--text-subtle)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-muted)]"
+            className="mt-1 w-full min-h-[40px] cursor-pointer rounded-xl px-3 py-2 text-left text-xs text-[var(--text-subtle)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text-muted)]"
           >
             Clear cache
           </button>

@@ -25,8 +25,8 @@ Every VS integration point MUST:
 **Integration:** `src/reasoner/application/mixins/perspective_mixin.py` or `phases/multi_perspective.py`
 
 ```python
-from reasoner.ara_vs_constants import VS_K_PROBES, VS_TAIL_THRESHOLD_RADIOLOGY, VS_PROBE_MIN_SEMANTIC_DISTANCE, LOG_VS_PROBE_COUNT, LOG_VS_PROBE_DOMAIN
-from reasoner.ara_verbalized_sampling import VSMode, build_vs_prompt, parse_vs_response, sample_from_vs
+from reasoner.reasoner_vs_constants import VS_K_PROBES, VS_TAIL_THRESHOLD_RADIOLOGY, VS_PROBE_MIN_SEMANTIC_DISTANCE, LOG_VS_PROBE_COUNT, LOG_VS_PROBE_DOMAIN
+from reasoner.reasoner_verbalized_sampling import VSMode, build_vs_prompt, parse_vs_response, sample_from_vs
 from reasoner.vs_config import VSFeatureFlags
 
 DOMAIN_PROBE_TEMPLATES = {
@@ -589,7 +589,7 @@ async def log_vs_behavioral_audit(
 ```python
 # radiology_config.py
 from reasoner.vs_config import VSVerticalConfig, VSVerticalRegistry
-from reasoner.ara_vs_constants import VS_K_RADIOLOGY_GENERATION, VS_TAIL_THRESHOLD_RADIOLOGY
+from reasoner.reasoner_vs_constants import VS_K_RADIOLOGY_GENERATION, VS_TAIL_THRESHOLD_RADIOLOGY
 
 RADIOLOGY_CONFIG = VSVerticalConfig(
     domain="radiology",
@@ -651,7 +651,7 @@ def require_tier_for_vertical(vertical: str):
 - [ ] All VS stages have feature flag gates.
 - [ ] `VSFeatureFlags.all_disabled()` → output identical to pre-VS pipeline.
 - [ ] `TaintRecord.vs_metadata` on every pipeline output.
-- [ ] Zero magic numbers — all in `ara_vs_constants.py`.
+- [ ] Zero magic numbers — all in `reasoner_vs_constants.py`.
 - [ ] `asyncio.gather` for independent LLM/NLI calls.
 - [ ] pytest coverage ≥ 85% per new module.
 - [ ] All inter-stage interfaces are Pydantic BaseModel.

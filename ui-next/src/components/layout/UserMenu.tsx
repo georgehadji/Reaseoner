@@ -44,7 +44,7 @@ export function UserMenu() {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-1.5 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]"
+        className="flex h-10 items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-3)]"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="User menu"
@@ -69,7 +69,7 @@ export function UserMenu() {
               setOpen(false);
               router.push('/dashboard');
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+            className="flex h-10 w-full items-center gap-2 px-3 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
             role="menuitem"
           >
             <LayoutDashboard className="h-4 w-4 text-[var(--text-muted)]" />
@@ -81,7 +81,7 @@ export function UserMenu() {
               setOpen(false);
               router.push('/settings');
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+            className="flex h-10 w-full items-center gap-2 px-3 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
             role="menuitem"
           >
             <User className="h-4 w-4 text-[var(--text-muted)]" />
@@ -93,7 +93,7 @@ export function UserMenu() {
               setOpen(false);
               router.push('/pricing');
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+            className="flex h-10 w-full items-center gap-2 px-3 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
             role="menuitem"
           >
             <CreditCard className="h-4 w-4 text-[var(--text-muted)]" />
@@ -105,7 +105,7 @@ export function UserMenu() {
               setOpen(false);
               router.push('/about');
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
+            className="flex h-10 w-full items-center gap-2 px-3 text-sm text-[var(--text)] transition-colors hover:bg-[var(--surface-2)]"
             role="menuitem"
           >
             <Info className="h-4 w-4 text-[var(--text-muted)]" />
@@ -115,7 +115,7 @@ export function UserMenu() {
           <button
             type="button"
             onClick={handleSignOut}
-            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-500 transition-colors hover:bg-red-500/10"
+            className="flex h-10 w-full items-center gap-2 px-3 text-sm text-red-500 transition-colors hover:bg-red-500/10"
             role="menuitem"
           >
             <LogOut className="h-4 w-4" />

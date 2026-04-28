@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
-from reasoner.ara_vs_constants import (
+from reasoner.reasoner_vs_constants import (
     VS_K_GENERATION,
     VS_TAIL_THRESHOLD_RADIOLOGY,
 )

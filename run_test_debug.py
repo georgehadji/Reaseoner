@@ -21,7 +21,7 @@ async def test_cli_cleanup_on_exit():
     args.save_state = ""
 
     with patch("reasoner.main.build_router"), \
-         patch("reasoner.main.ARAPipeline") as mock_pipeline, \
+         patch("reasoner.main.ReasonerPipeline") as mock_pipeline, \
          patch("reasoner.scraper.close_scraper_client", new_callable=AsyncMock) as mock_close_scraper, \
          patch("reasoner.llm.OpenAICompatibleProvider.close_shared_pool", new_callable=AsyncMock) as mock_close_llm:
 

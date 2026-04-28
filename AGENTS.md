@@ -1,5 +1,5 @@
 <!-- From: E:\Documents\Vibe-Coding\Reasoner\AGENTS.md -->
-# AGENTS.md — Reasoner (ARA Pipeline v2.2)
+# AGENTS.md — Reasoner (Reasoner Pipeline v2.2)
 
 > This file is written for AI coding agents. It assumes you know nothing about this project.
 > Read this first before making any changes.
@@ -8,7 +8,7 @@
 
 ## 1. Project Overview
 
-**Reasoner** (also called ARA — Adaptive Reasoning Architecture) is a production-grade AI reasoning orchestrator written in Python with a Next.js frontend. It decomposes complex problems into structured multi-phase pipelines, leverages multiple LLMs from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling.
+**Reasoner** (also called Reasoner) is a production-grade AI reasoning orchestrator written in Python with a Next.js frontend. It decomposes complex problems into structured multi-phase pipelines, leverages multiple LLMs from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling.
 
 - **Version:** 2.1.0 (Python package), v2.2 (project)
 - **Python:** 3.12+
@@ -117,7 +117,7 @@ Reasoner/
 src/reasoner/
 ├── __init__.py                    # Package init; __version__ = "2.1.0"
 ├── main.py                        # CLI entry point with argparse
-├── pipeline.py                    # ARAPipeline orchestrator
+├── pipeline.py                    # ReasonerPipeline orchestrator
 ├── models.py                      # Core dataclasses: PipelineState, enums, etc.
 ├── core/                          # Domain core abstractions (zero I/O)
 │   ├── protocol.py                # PhaseConfig, PhaseResult, Phase Protocol
@@ -553,7 +553,7 @@ Copy `.env.example` to `.env` and fill in:
 ## 8. Security Considerations
 
 - **Input Sanitization:** All user inputs pass through `reasoner.sanitization.sanitize_for_prompt()` before reaching LLM prompts
-- **Prompt Injection Defense:** Layered filtering in sanitization module + adversarial persuasion defense (`ara_persuasion_defense.py`)
+- **Prompt Injection Defense:** Layered filtering in sanitization module + adversarial persuasion defense (`reasoner_persuasion_defense.py`)
 - **XSS Prevention:** Regex-based `<script>` stripping, HTML tag removal, NFKC normalization in `RunRequest.validate_problem()`
 - **Rate Limiting:** Token-bucket rate limiter per client IP (`rate_limiter.py`); Redis backend available for multi-worker deployments
 - **Authentication:** Token-based auth with scoped permissions (`auth.py`); Supabase JWT primary, local JWT fallback
@@ -585,7 +585,7 @@ Copy `.env.example` to `.env` and fill in:
 
 ## 10. Working with Neuro & Compression
 
-- **Recall (Bootstrap):** `neuro.server.create_neuro_router()` provides the `Recall` endpoint. Automatically called in `ARAPipeline.run` to fetch relevant context from long-term memory.
+- **Recall (Bootstrap):** `neuro.server.create_neuro_router()` provides the `Recall` endpoint. Automatically called in `ReasonerPipeline.run` to fetch relevant context from long-term memory.
 - **Learn (Ingest):** The `Learn` endpoint is called at the end of the pipeline to save the final synthesis. Tag entries with metadata (e.g., `preset`, `task_type`).
 - **Compression:** Use `neuro.compression.smart_compress(text, ext, level)` to reduce token usage. Modes:
   - `Aggressive` — structural analysis, keeps only signatures

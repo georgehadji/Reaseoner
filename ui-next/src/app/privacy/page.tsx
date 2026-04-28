@@ -1,30 +1,117 @@
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+import { ShieldCheck, Lock, EyeOff, Scale } from 'lucide-react';
 
 export default function PrivacyPage() {
+  const lastUpdated = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+
   return (
     <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
       <SiteHeader />
-      <main className="mx-auto max-w-3xl px-4 py-16 flex-1 w-full">
-      <h1 className="text-4xl font-bold mb-8">Privacy Policy</h1>
-      <div className="prose prose-invert max-w-none text-[var(--text-2)]">
-        <p className="mb-4">Last updated: {new Date().toLocaleDateString()}</p>
-        
-        <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">1. Information We Collect</h2>
-        <p className="mb-4">We collect information you provide directly to us, including your email address when you register, and the prompts and context you input into the Reasoner system.</p>
-        
-        <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">2. How We Use Your Information</h2>
-        <p className="mb-4">We use the information to provide, maintain, and improve our services, including our Neuro Memory feature which personalizes your AI experience based on past interactions.</p>
-        
-        <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">3. Data Sharing</h2>
-        <p className="mb-4">In order to process your requests, your prompts may be sent to third-party LLM providers (such as OpenAI, Anthropic, or Google) via secure APIs. We do not sell your personal data to third parties.</p>
+      <main className="mx-auto max-w-4xl px-6 py-20 flex-1 w-full">
+        <header className="mb-12 border-b border-[var(--border)] pb-12">
+          <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">Privacy Policy</h1>
+          <p className="text-[var(--text-muted)] text-lg">Last updated: {lastUpdated}</p>
+        </header>
 
-        <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">4. Data Security</h2>
-        <p className="mb-4">We implement appropriate technical and organizational measures to protect your personal data against unauthorized or unlawful processing.</p>
+        <div className="grid gap-12 lg:grid-cols-[1fr_280px]">
+          <div className="space-y-12 text-[var(--text-muted)] leading-relaxed">
+            {/* Mission Statement */}
+            <section className="bg-[var(--accent)]/5 border border-[var(--accent)]/10 rounded-2xl p-8 mb-12">
+              <h2 className="text-[var(--text)] font-bold text-xl mb-4 flex items-center gap-2">
+                <ShieldCheck className="h-6 w-6 text-[var(--accent)]" />
+                Our Privacy Commitment
+              </h2>
+              <p>
+                At Reasoner, privacy is not a feature—it is our foundation. We believe that your thoughts and critical 
+                reasoning processes should remain yours alone. Our architecture is designed to provide enterprise-grade 
+                security while ensuring we have zero access to train models on your proprietary data.
+              </p>
+            </section>
 
-        <h2 className="text-2xl font-semibold mt-8 mb-4 text-[var(--text)]">5. Your Rights</h2>
-        <p className="mb-4">You have the right to access, update, or delete your personal information at any time through your account settings or by contacting our support team.</p>
-      </div>
+            <section>
+              <h3 className="text-2xl font-bold mb-6 text-[var(--text)]">1. Data Sovereignty & Training</h3>
+              <p className="mb-4">
+                <strong>Zero-Training Guarantee:</strong> We never use your inputs, outputs, or uploaded files to train 
+                or fine-tune our internal models or any third-party models.
+              </p>
+              <p>
+                <strong>Ownership:</strong> You retain full ownership and intellectual property rights to all prompts, 
+                contexts, and reasoning outputs generated within your account.
+              </p>
+            </section>
+
+            <section>
+              <h3 className="text-2xl font-bold mb-6 text-[var(--text)]">2. Encryption & Security</h3>
+              <p className="mb-4">
+                <strong>Encryption at Rest:</strong> All sensitive data, including pipeline snapshots, history, and 
+                authentication metadata, is encrypted using industry-standard <strong>AES-256-GCM</strong> before storage.
+              </p>
+              <p>
+                <strong>Encryption in Transit:</strong> Every request is protected via <strong>TLS 1.3</strong>. 
+                Our internal architecture utilizes a <strong>Zero-Trust</strong> network where all inter-service 
+                communication is authenticated and encrypted via an internal PKI.
+              </p>
+            </section>
+
+            <section>
+              <h3 className="text-2xl font-bold mb-6 text-[var(--text)]">3. Information We Collect</h3>
+              <ul className="list-disc pl-6 space-y-3">
+                <li><strong>Account Information:</strong> Email address and billing details required to manage your subscription.</li>
+                <li><strong>Usage Data:</strong> We collect metadata (timestamp, model used, token count) to provide service reliability and billing accuracy.</li>
+                <li><strong>Reasoning Content:</strong> We store your reasoning pipelines to enable history and collaboration, unless <strong>Zero-Retention Mode</strong> is enabled.</li>
+              </ul>
+            </section>
+
+            <section>
+              <h3 className="text-2xl font-bold mb-6 text-[var(--text)]">4. Zero-Retention Mode</h3>
+              <p>
+                For high-stakes research, we offer a <strong>Zero-Retention Mode</strong>. When active, reasoning 
+                processes are executed in-memory and are never written to our persistent database. Once the 
+                session ends, the data is purged from volatile memory.
+              </p>
+            </section>
+
+            <section>
+              <h3 className="text-2xl font-bold mb-6 text-[var(--text)]">5. Third-Party LLM Providers</h3>
+              <p>
+                Reasoner routes requests to various providers (OpenAI, Anthropic, Google, etc.). We maintain 
+                Enterprise-grade agreements with these providers ensuring they do not train on data sent through 
+                our API endpoints.
+              </p>
+            </section>
+          </div>
+
+          {/* Quick Info Sidebar */}
+          <aside className="space-y-6">
+            <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 sticky top-24">
+              <h4 className="text-sm font-bold uppercase tracking-wider text-[var(--text-subtle)] mb-4">At a Glance</h4>
+              <div className="space-y-4">
+                <div className="flex items-start gap-3">
+                  <EyeOff className="h-5 w-5 text-[var(--accent)] shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-[var(--text)]">No Training</p>
+                    <p className="text-xs">Your data is never used for training.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Lock className="h-5 w-5 text-[var(--accent)] shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-[var(--text)]">AES-256-GCM</p>
+                    <p className="text-xs">Standardized encryption at rest.</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Scale className="h-5 w-5 text-[var(--accent)] shrink-0" />
+                  <div>
+                    <p className="text-sm font-bold text-[var(--text)]">GDPR/HIPAA</p>
+                    <p className="text-xs">Built for global compliance standards.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
       </main>
       <SiteFooter />
     </div>

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 1. Project Overview
 
-**Reasoner** (ARA — Adaptive Reasoning Architecture) is a production-grade AI reasoning orchestrator that decomposes complex problems into structured multi-phase pipelines, leverages 90+ LLM models from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling (`VERIFIED` / `HYPOTHESIS` / `UNKNOWN`).
+**Reasoner** (Adaptive Reasoning Architecture) is a production-grade AI reasoning orchestrator that decomposes complex problems into structured multi-phase pipelines, leverages 90+ LLM models from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling (`VERIFIED` / `HYPOTHESIS` / `UNKNOWN`).
 
 - **Version:** 2.2 (Python package 2.1.0)
 - **Python:** 3.12+ | **Frontend:** Next.js 16 / React 19 / TypeScript 5
@@ -20,7 +20,7 @@ Hexagonal DDD + CQRS + Event Sourcing + Mixin Composition. The `PipelineState` (
 
 **Dependency Rule:** Dependencies point inward — Domain has no outer dependencies, Application depends on Domain/Core but not Infrastructure, Infrastructure implements ports defined in Core.
 
-**Known violations:** `domain/preset_core.py` imports from `infrastructure.llm.registry`. `api/streaming.py` directly instantiates `ARAPipeline` rather than routing through CQRS handlers. `application/flows/__init__.py` imports from `api.serializers`.
+**Known violations:** `domain/preset_core.py` imports from `infrastructure.llm.registry`. `api/streaming.py` directly instantiates `ReasonerPipeline` rather than routing through CQRS handlers. `application/flows/__init__.py` imports from `api.serializers`.
 
 ---
 
@@ -64,7 +64,7 @@ src/reasoner/
 │   ├── auth_deps.py          # Auth dependencies with scoped permissions
 │   └── routes/               # Modular route handlers (pipelines, uploads, websocket, etc.)
 ├── application/              # CQRS commands, queries, event bus, flows, mixins
-│   ├── flows/                # build_default_flow_registry() — binds 17 methods to ARAPipeline
+│   ├── flows/                # build_default_flow_registry() — binds 17 methods to ReasonerPipeline
 │   ├── handlers/             # RunPipelineCommandHandler, ResumePipelineCommandHandler, etc.
 │   ├── mixins/               # 12 method-specific mixins (debate, jury, research, etc.)
 │   └── services/             # PresetService, SearchService, RendererService
@@ -87,7 +87,7 @@ src/reasoner/
 │   │   └── extraction/       # Vision LLM image description/OCR
 │   ├── persistence/          # EventStore (SQLite), snapshots, postgres_store
 │   └── websocket/            # WebSocket connection manager
-├── pipeline.py               # ARAPipeline orchestrator (902 lines + 11 mixins)
+├── pipeline.py               # ReasonerPipeline orchestrator (902 lines + 11 mixins)
 ├── models.py                 # PipelineState (~60 fields), CostTrackingState, ConversationState
 ├── phases/                   # 19 prompt modules (_shared, _universal, 17 methods)
 ├── hypergate/                # HyperGate pre-router: 5 parallel sub-agents + TieBreaker
@@ -105,7 +105,7 @@ src/reasoner/
     ├── parsing.py            # JSON extraction, repair, structured parsing
     ├── renderer.py           # CLI rendering
     ├── scraper.py            # Web content extraction
-    └── ara_persuasion_defense.py  # Adversarial persuasion defense
+    └── reasoner_persuasion_defense.py  # Adversarial persuasion defense
 
 ui-next/src/
 ├── app/                      # App Router (layout, page, providers, error, api routes)
@@ -283,7 +283,7 @@ All LLM responses parsed via `parsing.extract_json()`, never direct JSON parsing
 
 ## 6. Working with Neuro & Compression
 
-- **Recall:** `neuro.server.create_neuro_router()` provides the `/neuro/recall` endpoint. Automatically called in `ARAPipeline.run` to fetch relevant context from long-term memory.
+- **Recall:** `neuro.server.create_neuro_router()` provides the `/neuro/recall` endpoint. Automatically called in `ReasonerPipeline.run` to fetch relevant context from long-term memory.
 - **Learn:** `/neuro/learn` saves the final synthesis at pipeline end. Tag entries with metadata (preset, task_type).
 - **Compression:** `neuro.compression.smart_compress(text, ext, level)` reduces token usage.
   - `Aggressive` — structural analysis, keeps only signatures
@@ -328,3 +328,68 @@ All LLM responses parsed via `parsing.extract_json()`, never direct JSON parsing
 ---
 
 *For detailed product snapshot, reasoning methods, and preset tiers, see `AGENTS.md`. For complete architectural analysis (structural, behavioral, domain, infrastructure views), see `ARCHITECTURE_MINDMAP.md`.*
+# CLAUDE.md
+
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

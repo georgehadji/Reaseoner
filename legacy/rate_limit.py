@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Rate Limiting
+Reasoner Pipeline - Rate Limiting
 Token bucket rate limiter for API endpoints.
 """
 

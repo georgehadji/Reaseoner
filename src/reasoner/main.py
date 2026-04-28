@@ -1,6 +1,6 @@
 """
-ARA v2.0 Pipeline — Entry Point
-Adaptive Reasoning Architecture
+Reasoner v2.0 Pipeline — Entry Point
+Reasoner
 
 ================================================================
 USAGE — PRESETS (recommended)
@@ -54,7 +54,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from reasoner.pipeline import ARAPipeline
+from reasoner.pipeline import ReasonerPipeline
 from reasoner.renderer import export_to_json, render_pipeline_result
 from reasoner.llm import ProviderRouter, list_models
 from reasoner.core.settings import settings  # triggers dotenv load
@@ -183,7 +183,7 @@ async def main(args: argparse.Namespace) -> None:
         try:
             state = PipelineState.load(args.resume)
             print(f"\n{'='*60}")
-            print(f"  ARA v2.0 — Resumed from saved state")
+            print(f"  Reasoner v2.0 — Resumed from saved state")
             print(f"{'='*60}")
             print(f"  Problem: {state.problem[:120]}...")
             print(f"  Resumed at: {state.task_type.value if state.task_type else 'start'}")
@@ -222,7 +222,7 @@ async def main(args: argparse.Namespace) -> None:
                 sys.exit(1)
 
         print(f"\n{'='*60}")
-        print(f"  ARA v2.0 — Adaptive Reasoning Architecture")
+        print(f"  Reasoner v2.0 — Reasoner")
         print(f"{'='*60}")
         short_problem = problem[:120] + ("..." if len(problem) > 120 else "")
         print(f"  Problem: {short_problem}")
@@ -291,7 +291,7 @@ async def main(args: argparse.Namespace) -> None:
             else:
                 print(f"  [Gate] Pipeline selected ({decision.method or 'multi_perspective'}).\n")
 
-        pipeline = ARAPipeline(
+        pipeline = ReasonerPipeline(
             router=router,
             initial_state=initial_state,
             top_k=args.top_k,
@@ -342,7 +342,7 @@ def parse_args() -> argparse.Namespace:
         return resolve_preset_name(value)
 
     parser = argparse.ArgumentParser(
-        description="ARA v2.0 — Adaptive Reasoning Architecture Pipeline",
+        description="Reasoner v2.0 — Reasoner Pipeline",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

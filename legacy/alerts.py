@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Alerting Configuration
+Reasoner Pipeline - Alerting Configuration
 
 Defines alerts, thresholds, and notification strategies for production monitoring.
 Integrates with Prometheus, Grafana, and common alerting systems.
@@ -102,7 +102,7 @@ class AlertRule:
         return True
 
 
-# Pre-defined alert rules for ARA Pipeline
+# Pre-defined alert rules for Reasoner Pipeline
 DEFAULT_ALERT_RULES: list[AlertRule] = [
     # P0 - Critical
     AlertRule(

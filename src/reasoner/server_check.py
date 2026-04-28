@@ -73,7 +73,7 @@ def main():
     # Check 5: API App
     def check_api():
         from reasoner.api import app
-        return app.title == "ARA v2.0"
+        return app.title == "Reasoner v2.0"
     checks.append(check_component("API App", check_api))
     
     # Check 6: LLM Providers

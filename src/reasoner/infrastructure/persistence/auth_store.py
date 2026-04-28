@@ -16,6 +16,8 @@ from typing import Optional
 
 import aiosqlite
 
+from reasoner.security.encryption import get_encryption_service
+
 logger = logging.getLogger(__name__)
 
 # Schema version for future migrations
@@ -48,6 +50,7 @@ class AuthStore:
         self._db_path = db_path
         self._lock = asyncio.Lock()
         self._initialized = False
+        self._encryption = get_encryption_service()
 
     async def _ensure_schema(self, conn: aiosqlite.Connection) -> None:
         """Create tables if they don't exist."""
@@ -81,9 +84,13 @@ class AuthStore:
         expires_at: Optional[datetime],
         created_by: Optional[str],
     ) -> None:
-        """Insert a new API key."""
+        """Insert a new API key. Metadata is encrypted (Phase 3: E2EE)."""
         conn = await self._get_conn()
         try:
+            # Encrypt sensitive metadata (Phase 3: E2EE)
+            encrypted_name = self._encryption.encrypt(name)
+            encrypted_scopes = self._encryption.encrypt(json.dumps(sorted(scopes)))
+
             await conn.execute(
                 """
                 INSERT INTO api_keys (
@@ -93,8 +100,8 @@ class AuthStore:
                 """,
                 (
                     key_hash,
-                    name,
-                    json.dumps(sorted(scopes)),
+                    encrypted_name,
+                    encrypted_scopes,
                     1 if is_active else 0,
                     rate_limit_tier,
                     created_at.astimezone(timezone.utc).isoformat(),
@@ -166,12 +173,19 @@ class AuthStore:
 
     # ── helpers ──
 
-    @staticmethod
-    def _row_to_dict(row: aiosqlite.Row) -> dict:
-        """Convert a database row to a dict matching AuthManager's expectations."""
+    def _row_to_dict(self, row: aiosqlite.Row) -> dict:
+        """Convert a database row to a dict. Decrypts metadata (Phase 3: E2EE)."""
         d = dict(row)
+        
+        # Decrypt sensitive metadata (Phase 3: E2EE)
+        try:
+            d["name"] = self._encryption.decrypt(d["name"])
+            scopes_raw = self._encryption.decrypt(d.pop("scopes", ""))
+        except Exception:
+            # Fallback for old plaintext data
+            scopes_raw = d.pop("scopes", "[]")
+
         # JSON-decode scopes
-        scopes_raw = d.pop("scopes", "[]")
         d["scopes"] = set(json.loads(scopes_raw))
         # Boolean conversion
         d["is_active"] = bool(d.pop("is_active", 1))

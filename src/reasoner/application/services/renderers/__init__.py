@@ -1,4 +1,4 @@
-"""Renderer strategy registry for ARA pipeline methods."""
+"""Renderer strategy registry for Reasoner pipeline methods."""
 
 from __future__ import annotations
 

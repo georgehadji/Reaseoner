@@ -2,7 +2,7 @@
 
 ## 🚀 Overview
 
-This directory contains the **Self-Healing System** implementation for the ARA Pipeline v2.0. It transforms the passive codebase into an active, self-improving system with three independent healing loops.
+This directory contains the **Self-Healing System** implementation for the Reasoner Pipeline v2.0. It transforms the passive codebase into an active, self-improving system with three independent healing loops.
 
 ```
 ┌─────────────────────────────────────────────────────┐

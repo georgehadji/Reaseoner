@@ -1,7 +1,7 @@
 """Legal vertical configuration for VS."""
 from __future__ import annotations
 
-from reasoner.ara_vs_constants import VS_K_GENERATION, VS_TAIL_THRESHOLD_LEGAL
+from reasoner.reasoner_vs_constants import VS_K_GENERATION, VS_TAIL_THRESHOLD_LEGAL
 from reasoner.vs_config import VSVerticalConfig, VSVerticalRegistry
 
 LEGAL_CONFIG = VSVerticalConfig(

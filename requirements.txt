@@ -49,7 +49,9 @@ alembic>=1.13.0,<2.0.0
 sqlalchemy[asyncio]>=2.0.0,<3.0.0
 
 # System monitoring (optional, for memory limits)
-psutil>=5.9.0,<7.0.0
+psutil>=5.9.0
+cryptography>=42.0.0
+,<7.0.0
 
 # Testing
 pytest>=8.0.0,<9.0.0

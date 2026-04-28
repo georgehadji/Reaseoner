@@ -1,4 +1,12 @@
-# Project Tasks
+- Vision Truth Engine implementation:
+    - [ ] Implement Phase 1: Foundation & Taint Tracking (Weeks 1-2).
+    - [ ] Implement Phase 2: Source Reliability & NLI Logic Gates (Weeks 3-4).
+    - [ ] Implement Phase 3: Adversarial Red-Teaming (Weeks 5-6).
+    - [ ] Implement Phase 4: Compute Scaling & Forensic Audit (Weeks 7-8).
+    - [ ] Implement Phase 5: UI & Epistemic UX (Weeks 9-10).
+    - Review:
+      - Detailed implementation plan written to `tasks/truth-engine-implementation-plan.md`.
+- Project Tasks
 - Reasoner UI and image workflow enhancement plan:
     - [done] Create a thorough implementation plan covering image UX, result presentation, safety controls, testing, rollout, and rollback.
     - Review:

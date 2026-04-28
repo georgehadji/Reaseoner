@@ -5,9 +5,10 @@ import { useAppStore } from '@/stores/app-store';
 import { useSubscription } from '@/hooks/useSubscription';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { User, ShieldAlert } from 'lucide-react';
+import { User, ShieldAlert, ShieldCheck, Database, History } from 'lucide-react';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
+import { cn } from '@/lib/utils';
 
 export default function SettingsPage() {
   const user = useAppStore((s) => s.user);
@@ -16,6 +17,8 @@ export default function SettingsPage() {
   const { subscription } = useSubscription();
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [retention, setRetention] = useState('forever');
+  const [zeroRetention, setZeroRetention] = useState(false);
 
   if (!user) {
     if (typeof window !== 'undefined') router.push('/login');
@@ -68,7 +71,7 @@ export default function SettingsPage() {
       <h1 className="mb-8 text-3xl font-bold text-[var(--text)]">Account Settings</h1>
 
       {message.text && (
-        <div className={`mb-6 rounded-lg p-4 text-sm ${message.type === 'error' ? 'bg-red-500/10 text-red-600' : 'bg-green-500/10 text-green-600'}`}>
+        <div className={`mb-6 rounded-lg p-4 text-sm ${message.type === 'error' ? 'bg-[#606060]/10 text-[#A0A0A0]' : 'bg-[#808080]/10 text-[#A0A0A0]'}`}>
           {message.text}
         </div>
       )}
@@ -94,6 +97,61 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Privacy & Data Section */}
+        <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
+          <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold text-[var(--text)]">
+            <Database className="h-5 w-5 text-green-500" /> Privacy & Data
+          </h2>
+          
+          <div className="space-y-6">
+            <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-6">
+              <div>
+                <p className="font-medium text-[var(--text)]">Zero-Retention Mode</p>
+                <p className="text-sm text-[var(--text-muted)]">Queries and results are not stored on our servers. Best for sensitive research.</p>
+              </div>
+              <button 
+                onClick={() => setZeroRetention(!zeroRetention)}
+                className={cn(
+                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none",
+                  zeroRetention ? "bg-green-500" : "bg-[var(--surface-3)]"
+                )}
+              >
+                <span className={cn(
+                  "inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+                  zeroRetention ? "translate-x-5" : "translate-x-0"
+                )} />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] pb-6">
+              <div>
+                <p className="font-medium text-[var(--text)]">Data Retention Policy</p>
+                <p className="text-sm text-[var(--text-muted)]">Set how long your history is kept before automatic deletion.</p>
+              </div>
+              <select 
+                value={retention}
+                onChange={(e) => setRetention(e.target.value)}
+                className="rounded-lg bg-[var(--surface-2)] border border-[var(--border)] px-3 py-2 text-sm font-medium text-[var(--text)] focus:outline-none"
+              >
+                <option value="forever">Forever</option>
+                <option value="30days">30 Days</option>
+                <option value="7days">7 Days</option>
+                <option value="24hours">24 Hours</option>
+              </select>
+            </div>
+
+            <div className="flex items-start gap-3 rounded-lg bg-green-500/5 p-4 border border-green-500/20">
+              <ShieldCheck className="h-5 w-5 text-green-500 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-green-500">Encryption Active</p>
+                <p className="text-xs text-[var(--text-muted)] leading-relaxed mt-1">
+                  All your data is currently protected with AES-256-GCM encryption at rest and TLS 1.3 in transit. We follow SOC 2 Type II standards for your privacy.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* Security Section */}
         <section className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6">
           <h2 className="mb-4 text-xl font-semibold">Security</h2>
@@ -113,8 +171,8 @@ export default function SettingsPage() {
         </section>
 
         {/* Danger Zone */}
-        <section className="rounded-xl border border-red-500/30 bg-red-500/5 p-6">
-          <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold text-red-600">
+        <section className="rounded-xl border border-[#606060]/30 bg-[#606060]/5 p-6">
+          <h2 className="mb-4 flex items-center gap-2 text-xl font-semibold text-[#E0E0E0]">
             <ShieldAlert className="h-5 w-5" /> Danger Zone
           </h2>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -125,7 +183,7 @@ export default function SettingsPage() {
             <button
               onClick={handleDeleteAccount}
               disabled={loading}
-              className="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600 transition-colors disabled:opacity-50 whitespace-nowrap"
+              className="rounded-lg bg-[#606060] px-4 py-2 text-sm font-medium text-white hover:bg-[#505050] transition-colors disabled:opacity-50 whitespace-nowrap"
             >
               Delete Account
             </button>

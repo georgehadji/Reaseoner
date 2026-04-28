@@ -53,10 +53,10 @@ function AttachmentChip({ att, onRemove }: AttachmentChipProps) {
       <button
         type="button"
         onClick={() => onRemove(att.id)}
-        className="ml-1 cursor-pointer rounded-full p-0.5 text-[var(--text-subtle)] transition-colors hover:bg-red-500/15 hover:text-red-400"
+        className="ml-1 cursor-pointer rounded-full p-1 text-[var(--text-subtle)] transition-colors hover:bg-red-500/15 hover:text-red-400 min-touch focus-visible:outline-2 focus-visible:outline-[var(--accent)] focus-visible:outline-offset-2"
         aria-label={`Remove ${att.name}`}
       >
-        <X className="h-3 w-3" />
+        <X className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -220,7 +220,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           className={cn(
             'flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
             isPremium
-              ? 'border-teal-500/40 bg-teal-500/10 text-teal-300'
+              ? 'border-[var(--surface-2)] bg-[var(--surface)] text-[var(--text)]'
               : isLocked
                 ? 'cursor-not-allowed border-[var(--border)] text-[var(--text-subtle)] opacity-50'
                 : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]',
@@ -243,7 +243,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           className={cn(
             'flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
             isImageMode
-              ? 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300'
+              ? 'border-[var(--surface-2)] bg-[var(--surface)] text-[var(--text)]'
               : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]',
           )}
         >
@@ -261,7 +261,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         <button
           type="button"
           onClick={onStop}
-          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25"
+          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-[#606060]/15 text-[#A0A0A0] transition-colors hover:bg-[#606060]/25"
           aria-label="Stop"
         >
           <Square className="h-3.5 w-3.5 fill-current" />
@@ -290,10 +290,12 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
   const inputBox = (minH: number) => (
     <div
       className={cn(
-        'relative rounded-2xl border bg-[var(--surface)] transition-all duration-200',
+        'relative rounded-2xl border bg-[var(--surface)] transition-all duration-300 ease-out',
         isDragging
           ? 'border-[var(--accent)] shadow-[var(--accent-glow)]'
-          : 'border-[var(--border)] focus-within:border-[var(--border-strong)] focus-within:shadow-[var(--shadow-lg)]',
+          : running
+            ? 'border-[var(--accent)]/40 shadow-[0_0_20px_rgba(59,130,246,0.10)]'
+            : 'border-[var(--border)] focus-within:border-[var(--border-strong)] focus-within:shadow-[var(--shadow-lg)] focus-within:bg-[var(--surface-2)]',
       )}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -316,7 +318,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         onKeyDown={handleKeyDown}
         placeholder={isImageMode ? 'Describe the image you want to generate…' : 'Ask anything…'}
         rows={1}
-        className="w-full resize-none bg-transparent px-4 py-3.5 text-[16px] leading-relaxed text-[var(--text)] placeholder:text-[var(--text-muted)] focus:outline-none"
+        className="w-full resize-none bg-transparent px-4 py-3.5 text-[16px] leading-relaxed text-[var(--text)] placeholder:text-[var(--text-muted)] placeholder:transition-colors placeholder:duration-200 focus:outline-none transition-[height] duration-150 ease-out"
         style={{ minHeight: minH }}
       />
 
@@ -331,8 +333,11 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       <div className="flex items-center justify-between px-3 pb-3">
         <div className="flex items-center gap-1.5">
           <AttachButton />
-          <TierToggle />
-          <ImageModeToggle />
+          <div className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 p-0.5">
+            <TierToggle />
+            <div className="h-4 w-[1px] bg-[var(--border)] mx-0.5" />
+            <ImageModeToggle />
+          </div>
         </div>
         <ActionButton />
       </div>
@@ -345,7 +350,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       <div className="flex h-full w-full flex-col items-center justify-center px-4">
         <div className="w-full max-w-3xl">
           <h1 className="mb-6 text-center text-2xl font-semibold tracking-tight text-[var(--text)] sm:text-3xl">
-            What would you like to solve?
+            Brainstorm ideas
           </h1>
 
           {inputBox(120)}
@@ -366,7 +371,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
       <div className="mx-auto max-w-3xl">
         {isFollowup && (
           <div className="mb-2 flex items-center gap-2 px-1">
-            <span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-2.5 py-0.5 text-xs font-medium text-teal-300">
+            <span className="rounded-full border border-[#808080]/30 bg-[#808080]/10 px-2.5 py-0.5 text-xs font-medium text-[#A0A0A0]">
               Follow-up
             </span>
             <span className="text-xs text-[var(--text-subtle)]">Continuing conversation</span>

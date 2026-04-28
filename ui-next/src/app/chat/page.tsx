@@ -20,6 +20,7 @@ import { Tooltip } from '@/components/ui/Tooltip';
 import { PhaseTimeline } from '@/components/layout/PhaseTimeline';
 import { UserMenu } from '@/components/layout/UserMenu';
 import { UpgradeModal } from '@/components/layout/UpgradeModal';
+import { SecurityBadge } from '@/components/layout/SecurityBadge';
 import { PipelineError } from '@/hooks/usePipelineStream';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
@@ -1049,6 +1050,7 @@ export default function ChatPage() {
                 </button>
               </>
             )}
+            <SecurityBadge className="hidden sm:flex" />
             <UserMenu />
             <ThemeToggle />
           </div>

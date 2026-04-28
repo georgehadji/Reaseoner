@@ -11,6 +11,8 @@ from reasoner.core.constants import (
     MODEL_GEMINI_FLASH,
     MODEL_GEMINI_PRO,
     MODEL_GPT4O_MINI,
+    MODEL_LAGUNA_XS_FREE,
+    MODEL_LAGUNA_M_FREE,
     NVIDIA_BASE_URL,
 )
 from reasoner.infrastructure.llm.providers.openai_compat import (
@@ -82,6 +84,9 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     # Kimi
     "kimi-k2-5":        {"model": "moonshotai/kimi-k2.5"},
     "kimi-k2-6":        {"model": "moonshotai/kimi-k2.6"},
+    # Laguna (Poolside)
+    MODEL_LAGUNA_XS_FREE: {"model": "poolside/laguna-xs.2:free"},
+    MODEL_LAGUNA_M_FREE:  {"model": "poolside/laguna-m.1:free"},
     # GLM
     "glm-5":            {"model": "z-ai/glm-5"},
     "glm-4-plus":       {"model": "z-ai/glm-4.5"},

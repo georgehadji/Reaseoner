@@ -19,7 +19,7 @@ export const StreamingMarkdown = memo(function StreamingMarkdown({
     <div className={`markdown-body ${className}`}>
       <MarkdownRenderer>{text}</MarkdownRenderer>
       {isStreaming && (
-        <span className="inline-block h-[1em] w-0.5 animate-pulse bg-[var(--accent)] align-middle ml-0.5" />
+        <span className="inline-block h-[1em] w-0.5 animate-cursor-blink rounded-sm bg-[var(--accent)] align-middle ml-0.5" />
       )}
     </div>
   );

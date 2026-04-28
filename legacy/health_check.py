@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Health Checks
+Reasoner Pipeline - Health Checks
 Provider health monitoring and status reporting.
 """
 

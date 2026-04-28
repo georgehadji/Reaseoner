@@ -1,5 +1,5 @@
 """
-Core abstractions for the ARA pipeline.
+Core abstractions for the Reasoner pipeline.
 
 PhaseConfig  — per-phase LLM parameters (max_tokens, temperature, timeout, role)
 PhaseResult  — immutable output of one phase execution

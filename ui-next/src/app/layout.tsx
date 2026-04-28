@@ -10,11 +10,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: 'Reasoner — Think Deeper',
+  title: 'Reasoner — Think with Certainty',
   description:
     'Multi-method AI reasoning that decomposes complex problems, debates solutions, and delivers verified answers.',
+  icons: {
+    icon: '/logo.svg',
+    shortcut: '/logo.svg',
+  },
   openGraph: {
-    title: 'Reasoner — Think Deeper',
+    title: 'Reasoner — Think with Certainty',
     description: '17 reasoning methods · 90+ AI models · Verified answers',
     type: 'website',
   },

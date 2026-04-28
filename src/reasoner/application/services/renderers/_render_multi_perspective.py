@@ -14,7 +14,7 @@ from rich import box
 
 def _render_multi_perspective(state: PipelineState) -> None:
     duration = _duration(state)
-    console.rule(f"[bold blue]ARA v2.0 Pipeline Complete ({duration:.1f}s)[/bold blue]")
+    console.rule(f"[bold blue]Reasoner v2.0 Pipeline Complete ({duration:.1f}s)[/bold blue]")
 
     render_routing_table(state)
 

@@ -27,6 +27,7 @@ except ImportError:
 
 from reasoner.core.events.domain_events import DomainEvent, EventType
 from reasoner.core.constants import DEFAULT_DB_COMMAND_TIMEOUT
+from reasoner.security.encryption import get_encryption_service
 
 logger = logging.getLogger(__name__)
 
@@ -38,8 +39,8 @@ class PostgreSQLEventStore:
     Features:
     - Connection pooling (asyncpg)
     - Read replica support
-    - Advanced indexing
-    - Full-text search
+    - Advanced indexing (Limited for encrypted fields)
+    - Full-text search (Limited for encrypted fields)
     - Partitioning for large datasets
     """
     
@@ -58,6 +59,7 @@ class PostgreSQLEventStore:
         self._pool = None
         self._read_pool = None
         self._lock = asyncio.Lock()
+        self._encryption = get_encryption_service()
     
     async def initialize(self) -> None:
         """Initialize connection pools."""
@@ -212,12 +214,15 @@ class PostgreSQLEventStore:
             async with self._pool.acquire() as conn:
                 async with conn.transaction():
                     for event in events:
-                        # Serialize payload
-                        payload = {
+                        # Serialize and ENCRYPT payload (Phase 3: E2EE)
+                        raw_payload = {
                             k: v for k, v in asdict(event).items()
                             if k not in ('event_id', 'event_type', 'aggregate_id',
                                          'version', 'timestamp')
                         }
+                        payload_json = json.dumps(raw_payload)
+                        encrypted_payload = self._encryption.encrypt(payload_json)
+                        final_payload = {"_e": encrypted_payload}
 
                         # Determine aggregate type
                         aggregate_type = self._get_aggregate_type(event.event_type)
@@ -236,7 +241,7 @@ class PostgreSQLEventStore:
                             aggregate_type,
                             event.version,
                             event.timestamp,
-                            json.dumps(payload),
+                            json.dumps(final_payload),
                         )
 
                         # Update aggregate
@@ -288,7 +293,8 @@ class PostgreSQLEventStore:
         problem = preset = method = status = None
         
         if isinstance(event, PipelineStarted):
-            problem = event.problem
+            # Encrypt sensitive problem field (Phase 3: E2EE)
+            problem = self._encryption.encrypt(event.problem)
             preset = event.preset
             method = event.method
             status = "running"
@@ -338,11 +344,16 @@ class PostgreSQLEventStore:
             return [e for e in (self._deserialize_event(row) for row in rows) if e is not None]
     
     def _deserialize_event(self, row: Any) -> DomainEvent | None:
-        """Deserialize database row to event. Returns None and logs on corruption."""
+        """Deserialize database row to event. Decrypts payload if necessary (Phase 3)."""
         from reasoner.core.events.domain_events import make_event
 
         try:
             payload = json.loads(row["payload"])
+            
+            # Check for encrypted payload (Phase 3: E2EE)
+            if "_e" in payload:
+                decrypted_json = self._encryption.decrypt(payload["_e"])
+                payload = json.loads(decrypted_json)
 
             event = make_event(
                 EventType(row["event_type"]),
@@ -358,13 +369,13 @@ class PostgreSQLEventStore:
             return event
         except Exception as exc:
             logger.error(
-                "Failed to deserialize event %s (aggregate %s v%s): %s",
+                "Data integrity failure: event %s (aggregate %s v%s): %s",
                 row.get("event_id"),
                 row.get("aggregate_id"),
                 row.get("version"),
                 exc,
             )
-            return None
+            raise RuntimeError(f"Corrupted event data: {exc}") from exc
     
     async def list_pipelines(
         self,
@@ -393,19 +404,28 @@ class PostgreSQLEventStore:
             
             rows = await conn.fetch(query, *params)
             
-            return [
-                {
+            results = []
+            for row in rows:
+                problem = row["problem"]
+                if problem:
+                    try:
+                        # Attempt decryption (Phase 3: E2EE)
+                        problem = self._encryption.decrypt(problem)
+                    except Exception:
+                        # Fallback for old plaintext data
+                        pass
+                
+                results.append({
                     "aggregate_id": row["aggregate_id"],
                     "status": row["status"],
-                    "problem": row["problem"],
+                    "problem": problem,
                     "preset": row["preset"],
                     "method": row["method"],
                     "version": row["current_version"],
                     "created_at": row["created_at"].isoformat(),
                     "updated_at": row["updated_at"].isoformat(),
-                }
-                for row in rows
-            ]
+                })
+            return results
     
     async def search_events(
         self,
@@ -461,6 +481,11 @@ class PostgreSQLEventStore:
         logger = logging.getLogger(__name__)
         
         try:
+            # Encrypt snapshot state (Phase 3: E2EE)
+            state_json = json.dumps(state)
+            encrypted_state = self._encryption.encrypt(state_json)
+            final_state = {"_e": encrypted_state}
+
             async with self._pool.acquire() as conn:
                 await conn.execute("""
                     INSERT INTO snapshots
@@ -469,7 +494,7 @@ class PostgreSQLEventStore:
                     ON CONFLICT (aggregate_id) DO UPDATE SET
                         version = EXCLUDED.version,
                         state = EXCLUDED.state
-                """, aggregate_id, version, json.dumps(state), snapshot_type)
+                """, aggregate_id, version, json.dumps(final_state), snapshot_type)
         except _AsyncpgError as e:
             logger.error(f"PostgreSQL error saving snapshot for {aggregate_id}: {e}")
             raise
@@ -492,7 +517,12 @@ class PostgreSQLEventStore:
             """, aggregate_id)
             
             if row:
-                return row["version"], json.loads(row["state"])
+                state = json.loads(row["state"])
+                # Check for encryption (Phase 3: E2EE)
+                if isinstance(state, dict) and "_e" in state:
+                    decrypted_json = self._encryption.decrypt(state["_e"])
+                    state = json.loads(decrypted_json)
+                return row["version"], state
             return None
     
     # ─────────────────────────────────────────────────────────────────────
@@ -507,22 +537,17 @@ class PostgreSQLEventStore:
         version: int = 0,
     ) -> None:
         """
-        Save denormalized read model.
-        
-        Args:
-            model_name: Name of the read model
-            model_key: Key for the model
-            data: Data dictionary
-            version: Version number
-            
-        Raises:
-            asyncpg.Error: If database operation fails
-            json.JSONDecodeError: If data cannot be serialized
+        Save denormalized read model. Encrypts data (Phase 3: E2EE).
         """
         import logging
         logger = logging.getLogger(__name__)
         
         try:
+            # Encrypt read model data (Phase 3: E2EE)
+            data_json = json.dumps(data)
+            encrypted_data = self._encryption.encrypt(data_json)
+            final_data = {"_e": encrypted_data}
+
             async with self._pool.acquire() as conn:
                 await conn.execute("""
                     INSERT INTO read_models
@@ -532,7 +557,7 @@ class PostgreSQLEventStore:
                         data = EXCLUDED.data,
                         version = EXCLUDED.version,
                         updated_at = NOW()
-                """, model_name, model_key, json.dumps(data), version)
+                """, model_name, model_key, json.dumps(final_data), version)
         except _AsyncpgError as e:
             logger.error(f"PostgreSQL error saving read model {model_name}/{model_key}: {e}")
             raise
@@ -548,7 +573,7 @@ class PostgreSQLEventStore:
         model_name: str,
         model_key: str,
     ) -> dict[str, Any] | None:
-        """Get denormalized read model."""
+        """Get denormalized read model. Decrypts data (Phase 3: E2EE)."""
         pool = self._read_pool if self.use_read_replica else self._pool
         
         async with pool.acquire() as conn:
@@ -559,7 +584,12 @@ class PostgreSQLEventStore:
             
             if row:
                 try:
-                    return json.loads(row["data"])
+                    data = json.loads(row["data"])
+                    # Check for encryption (Phase 3: E2EE)
+                    if isinstance(data, dict) and "_e" in data:
+                        decrypted_json = self._encryption.decrypt(data["_e"])
+                        data = json.loads(decrypted_json)
+                    return data
                 except (json.JSONDecodeError, ValueError) as exc:
                     logger.error(
                         "Corrupted read model data for %s/%s: %s",

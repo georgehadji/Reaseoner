@@ -2,7 +2,7 @@
 # SELF-HEALING SYSTEM — IMPLEMENTATION COMPLETE
 # ═══════════════════════════════════════════════════════════════════════════════
 
-**Project:** ARA Pipeline v2.0 (Reasoner)
+**Project:** Reasoner Pipeline v2.0 (Reasoner)
 **Implementation Date:** 2026-03-25
 **Status:** ✅ ALL THREE HEALING LOOPS IMPLEMENTED
 **Auto-Apply Policy:** DISABLED (human review required for all fixes)

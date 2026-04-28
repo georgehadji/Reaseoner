@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Response Parsing Utilities
+Reasoner Pipeline - Response Parsing Utilities
 Robust JSON extraction from LLM responses.
 """
 

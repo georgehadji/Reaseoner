@@ -1,6 +1,6 @@
 # Background FX Research
 
-Ideas for ambient visual effects behind the ARA chat interface. All recommendations are evaluated against the ElevenLabs-inspired design system (warm, minimal, surfaces that "barely exist").
+Ideas for ambient visual effects behind the Reasoner chat interface. All recommendations are evaluated against the ElevenLabs-inspired design system (warm, minimal, surfaces that "barely exist").
 
 ---
 

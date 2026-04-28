@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { X, Lock } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface UpgradeModalProps {
   open: boolean;
@@ -24,8 +25,6 @@ function isValidCheckoutUrl(url: string): boolean {
 export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-
-  if (!open) return null;
 
   const handleUpgrade = async () => {
     setError('');
@@ -58,7 +57,10 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+      className={cn(
+        'fixed inset-0 z-50 flex items-center justify-center px-4 transition-all duration-300',
+        open ? 'bg-black/50 opacity-100' : 'bg-black/0 opacity-0 pointer-events-none',
+      )}
       role="dialog"
       aria-modal="true"
       aria-labelledby="upgrade-title"
@@ -67,7 +69,12 @@ export function UpgradeModal({ open, onClose }: UpgradeModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-lg)]">
+      <div
+        className={cn(
+          'w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-lg)] transition-all duration-300',
+          open ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-4 opacity-0 scale-95',
+        )}
+      >
         <div className="mb-4 flex items-center justify-between">
           <h2 id="upgrade-title" className="text-xl font-bold text-[var(--text)]">
             Upgrade to Pro

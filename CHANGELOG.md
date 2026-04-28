@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Reasoner (ARA Pipeline) project.
+All notable changes to the Reasoner Pipeline project.
 
 ## [Unreleased] — Phase 6 (E2E Tests & Benchmarks)
 

@@ -103,7 +103,7 @@ function DashboardContent() {
   };
 
   const percent = quota && quota.max > 0 ? Math.min((quota.used / quota.max) * 100, 100) : 0;
-  const barColor = percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-amber-500' : 'bg-[var(--accent)]';
+  const barColor = percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-orange-400' : 'bg-[var(--accent)]';
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -144,7 +144,7 @@ function DashboardContent() {
             {subscription?.tier && subscription.tier !== 'free' && (
               <button
                 onClick={openPortal}
-                className="mt-2 text-sm text-[var(--accent)] hover:underline"
+                className="mt-2 flex min-h-[40px] items-center text-sm font-medium text-[var(--accent)] hover:underline"
               >
                 Manage Billing
               </button>

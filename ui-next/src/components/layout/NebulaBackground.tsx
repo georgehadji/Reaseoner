@@ -2,9 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { DEFAULT_ACCENT_RGB, type MethodId, METHOD_ACCENT_RGB } from '@/lib/method-colors';
 
 const VERTEX_SHADER = /* glsl */ `
@@ -19,9 +16,6 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform float uTime;
   uniform vec2 uResolution;
   uniform float uMotion;
-  uniform vec2 uMouse;
-  uniform float uClickTime;
-  uniform vec2 uClickPos;
   uniform vec3 uAccent;
   varying vec2 vUv;
 
@@ -68,47 +62,30 @@ const FRAGMENT_SHADER = /* glsl */ `
 
   void main() {
     vec2 uv = vUv;
-    float t = uTime * 0.03 * uMotion;
+    // Very slow time — barely perceptible drift
+    float t = uTime * 0.015 * uMotion;
 
-    // Mouse parallax: subtle shift opposite to cursor
-    vec2 mouseOffset = (uMouse - 0.5) * 0.12;
-    uv += mouseOffset;
-
-    // Slow nebula drift
     vec2 p = uv * 2.5;
-    p.x += t * 0.3;
-    p.y += t * 0.1;
+    p.x += t * 0.15;
+    p.y += t * 0.05;
 
-    float n1 = fbm(p + vec2(t * 0.2, 0.0));
-    float n2 = fbm(p * 1.3 + vec2(0.0, t * 0.15) + 10.0);
-    float n3 = fbm(p * 0.7 + vec2(t * 0.1, t * 0.25) + 20.0);
+    float n1 = fbm(p + vec2(t * 0.1, 0.0));
+    float n2 = fbm(p * 1.3 + vec2(0.0, t * 0.08) + 10.0);
+    float n3 = fbm(p * 0.7 + vec2(t * 0.05, t * 0.12) + 20.0);
 
-    // Click ripple distortion
-    float clickAge = uTime - uClickTime;
-    float ripple = 0.0;
-    if (clickAge > 0.0 && clickAge < 3.0) {
-      float dist = length(vUv - uClickPos);
-      float wave = sin(dist * 30.0 - clickAge * 12.0);
-      float envelope = exp(-clickAge * 1.5) * smoothstep(0.0, 0.5, clickAge);
-      float radiusMask = smoothstep(0.0, 0.6, dist) * (1.0 - smoothstep(0.6, 1.0, dist));
-      ripple = wave * envelope * radiusMask * 0.15;
-    }
-    n1 += ripple;
-    n2 += ripple * 0.7;
+    // Deep carbon base
+    vec3 carbon = vec3(0.016, 0.031, 0.047);
+    vec3 coolAmber = vec3(0.957, 0.643, 0.231);
 
-    // Deep navy base
-    vec3 navy = vec3(0.024, 0.043, 0.063);
-    vec3 amber = vec3(0.961, 0.620, 0.043);
+    // Subtle nebula — low intensity for readability
+    vec3 col = carbon;
+    col = mix(col, uAccent * 0.28, smoothstep(-0.3, 0.6, n1) * 0.35);
+    col = mix(col, uAccent * 0.18, smoothstep(-0.2, 0.7, n2) * 0.25);
+    col = mix(col, coolAmber * 0.10, smoothstep(0.0, 0.8, n3) * 0.08);
 
-    // Method-accent color drives the nebula hue
-    vec3 col = navy;
-    col = mix(col, uAccent * 0.40, smoothstep(-0.3, 0.6, n1) * 0.4);
-    col = mix(col, uAccent * 0.30, smoothstep(-0.2, 0.7, n2) * 0.3);
-    col = mix(col, amber * 0.20, smoothstep(0.0, 0.8, n3) * 0.15);
-
-    // Subtle vignette
+    // Subtle vignette for depth
     float vignette = 1.0 - smoothstep(0.4, 1.2, length(vUv - 0.5) * 1.4);
-    col *= 0.85 + vignette * 0.15;
+    col *= 0.88 + vignette * 0.12;
 
     gl_FragColor = vec4(col, 1.0);
   }
@@ -130,7 +107,7 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const motionScale = prefersReducedMotion ? 0.0 : 1.0;
 
-    // Scene setup
+    // Scene setup — no bloom, simple direct render
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
@@ -142,21 +119,6 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
     renderer.domElement.style.display = 'block';
     container.appendChild(renderer.domElement);
 
-    // Post-processing: Bloom
-    const composer = new EffectComposer(renderer);
-    composer.addPass(new RenderPass(scene, camera));
-    const bloomPass = new UnrealBloomPass(
-      new THREE.Vector2(window.innerWidth, window.innerHeight),
-      0.35,  // strength
-      0.45,  // radius
-      0.82   // threshold — only bright pixels bloom
-    );
-    composer.addPass(bloomPass);
-
-    // Interaction state
-    const mouse = { x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 };
-    const click = { time: -100.0, x: 0.5, y: 0.5 };
-
     // Color state — smooth transition
     const targetAccent = new THREE.Vector3(...DEFAULT_ACCENT_RGB);
     const currentAccent = new THREE.Vector3(...DEFAULT_ACCENT_RGB);
@@ -166,9 +128,6 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
       uTime: { value: 0.0 },
       uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
       uMotion: { value: motionScale },
-      uMouse: { value: new THREE.Vector2(0.5, 0.5) },
-      uClickTime: { value: -100.0 },
-      uClickPos: { value: new THREE.Vector2(0.5, 0.5) },
       uAccent: { value: currentAccent },
     };
 
@@ -182,43 +141,7 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
 
-    // Event handlers
-    function onMouseMove(e: MouseEvent) {
-      mouse.targetX = e.clientX / window.innerWidth;
-      mouse.targetY = 1.0 - e.clientY / window.innerHeight;
-    }
-
-    function onClick(e: MouseEvent) {
-      click.time = uniforms.uTime.value;
-      click.x = e.clientX / window.innerWidth;
-      click.y = 1.0 - e.clientY / window.innerHeight;
-      uniforms.uClickTime.value = click.time;
-      uniforms.uClickPos.value.set(click.x, click.y);
-    }
-
-    function onTouchMove(e: TouchEvent) {
-      if (e.touches.length > 0) {
-        mouse.targetX = e.touches[0].clientX / window.innerWidth;
-        mouse.targetY = 1.0 - e.touches[0].clientY / window.innerHeight;
-      }
-    }
-
-    function onTouchStart(e: TouchEvent) {
-      if (e.touches.length > 0) {
-        click.time = uniforms.uTime.value;
-        click.x = e.touches[0].clientX / window.innerWidth;
-        click.y = 1.0 - e.touches[0].clientY / window.innerHeight;
-        uniforms.uClickTime.value = click.time;
-        uniforms.uClickPos.value.set(click.x, click.y);
-      }
-    }
-
-    window.addEventListener('mousemove', onMouseMove, { passive: true });
-    window.addEventListener('click', onClick);
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-
-    // Animation
+    // Animation — very low frame rate feel via longer intervals
     let rafId = 0;
     const startTime = performance.now();
 
@@ -226,21 +149,16 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
       rafId = requestAnimationFrame(animate);
       uniforms.uTime.value = (performance.now() - startTime) / 1000;
 
-      // Smooth mouse lerp (damping)
-      mouse.x += (mouse.targetX - mouse.x) * 0.04;
-      mouse.y += (mouse.targetY - mouse.y) * 0.04;
-      uniforms.uMouse.value.set(mouse.x, mouse.y);
+      // Smooth accent color transition
+      currentAccent.lerp(targetAccent, 0.012);
 
-      // Smooth accent color transition (2-second lerp)
-      currentAccent.lerp(targetAccent, 0.016);
-
-      composer.render();
+      renderer.render(scene, camera);
     }
 
     if (motionScale > 0) {
       animate();
     } else {
-      composer.render();
+      renderer.render(scene, camera);
     }
 
     // Resize handler
@@ -248,9 +166,8 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
       const w = window.innerWidth;
       const h = window.innerHeight;
       renderer.setSize(w, h);
-      composer.setSize(w, h);
       uniforms.uResolution.value.set(w, h);
-      if (motionScale === 0) composer.render();
+      if (motionScale === 0) renderer.render(scene, camera);
     }
 
     window.addEventListener('resize', onResize);
@@ -265,10 +182,6 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
     return () => {
       cancelAnimationFrame(rafId);
       window.removeEventListener('resize', onResize);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('click', onClick);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchstart', onTouchStart);
       geometry.dispose();
       material.dispose();
       renderer.dispose();
@@ -283,7 +196,7 @@ export function NebulaBackground({ method }: NebulaBackgroundProps) {
       ref={containerRef}
       className="fixed inset-0 z-0"
       aria-hidden="true"
-      style={{ opacity: 0.9 }}
+      style={{ opacity: 0.85 }}
     />
   );
 }

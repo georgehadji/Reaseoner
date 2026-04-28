@@ -1,4 +1,4 @@
-"""Pydantic request/response schemas for the ARA API."""
+"""Pydantic request/response schemas for the Reasoner API."""
 
 from __future__ import annotations
 

@@ -217,6 +217,10 @@ MODEL_QWEN36_PLUS: str = "qwen3.6-plus"
 MODEL_MINIMAX_M25_FREE: str = "minimax-m2.5-free"
 MODEL_MINIMAX_M27: str = "minimax-m2.7"
 
+# Poolside (temperature-supporting, non-OpenAI, cross-lab diversity)
+MODEL_LAGUNA_XS_FREE: str = "laguna-xs-free"
+MODEL_LAGUNA_M_FREE: str = "laguna-m-free"
+
 # Xiaomi (temperature-supporting, non-OpenAI, cross-lab diversity)
 MODEL_MIMO_V2_PRO: str = "mimo-v2-pro"
 MODEL_MIMO_V2_FLASH: str = "mimo-v2-flash"
@@ -297,6 +301,7 @@ PHASE_TIMEOUTS: dict[str, float] = {
     "Maieutic Questions": 60.0,
     "Dialectic Answers": 60.0,
     "Generation Pool": 90.0,
+    "VS Idea Generation": 180.0,
     "Critic Pool": 90.0,
     "Verification & Meta": 90.0,
     "Deep Research": 120.0,

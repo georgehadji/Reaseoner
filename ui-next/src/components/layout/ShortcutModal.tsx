@@ -1,6 +1,7 @@
 'use client';
 
 import { X } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 interface ShortcutModalProps {
   isOpen: boolean;
@@ -8,8 +9,6 @@ interface ShortcutModalProps {
 }
 
 export function ShortcutModal({ isOpen, onClose }: ShortcutModalProps) {
-  if (!isOpen) return null;
-
   const shortcuts = [
     { keys: ['Enter'], label: 'Run pipeline' },
     { keys: ['Shift', 'Enter'], label: 'New line in composer' },
@@ -24,12 +23,20 @@ export function ShortcutModal({ isOpen, onClose }: ShortcutModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-[300] flex items-center justify-center bg-black/60 p-4"
+      className={cn(
+        'fixed inset-0 z-[300] flex items-center justify-center p-4 transition-all duration-300',
+        isOpen ? 'bg-black/60 opacity-100' : 'bg-black/0 opacity-0 pointer-events-none',
+      )}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-lg)]">
+      <div
+        className={cn(
+          'w-full max-w-md rounded-xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-lg)] transition-all duration-300',
+          isOpen ? 'translate-y-0 opacity-100 scale-100' : 'translate-y-4 opacity-0 scale-95',
+        )}
+      >
         <div className="mb-4 flex items-center justify-between">
           <span className="text-base font-semibold text-[var(--text)]">Keyboard Shortcuts</span>
           <button

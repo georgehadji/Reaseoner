@@ -1,5 +1,5 @@
 """
-ARA Pipeline — Multi-Provider LLM Abstraction
+Reasoner Pipeline — Multi-Provider LLM Abstraction
 Backward-compatible shim.  All implementations have moved to
 reasoner.infrastructure.llm submodules.
 """

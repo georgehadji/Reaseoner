@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Audit Logging
+Reasoner Pipeline - Audit Logging
 Comprehensive audit logging for API calls and pipeline operations.
 """
 

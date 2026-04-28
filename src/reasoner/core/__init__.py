@@ -1,5 +1,5 @@
 """
-core — shared abstractions for the ARA pipeline.
+core — shared abstractions for the Reasoner pipeline.
 
 Imports:
     from reasoner.core import Phase, PhaseResult, PhaseConfig, make_phase_result

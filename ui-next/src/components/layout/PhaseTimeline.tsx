@@ -46,7 +46,8 @@ export function PhaseTimeline({
               disabled={!isCompleted}
               onClick={() => onPhaseClick?.(p.id)}
               className={cn(
-                'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2.5 text-left transition-all',
+                'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2.5 text-left',
+                'transition-all duration-300 ease-out',
                 isActive
                   ? 'bg-[var(--accent-dim)] text-[var(--text)]'
                   : isCompleted
@@ -54,30 +55,35 @@ export function PhaseTimeline({
                     : 'cursor-default text-[var(--text-subtle)] opacity-50',
               )}
             >
-              {/* Dot indicator */}
-              <span className="relative flex h-1.5 w-1.5 shrink-0 items-center justify-center">
+              {/* Dot indicator with smooth state transitions */}
+              <span className="relative flex h-2 w-2 shrink-0 items-center justify-center">
                 <span
                   className={cn(
-                    'h-1.5 w-1.5 rounded-full',
+                    'h-2 w-2 rounded-full transition-all duration-500',
                     isError
                       ? 'bg-red-400'
                       : isActive
-                        ? 'bg-[var(--accent)]'
+                        ? 'bg-[var(--accent)] scale-110'
                         : isCompleted
                           ? 'bg-[var(--text-muted)]'
                           : 'bg-[var(--surface-3)]',
                   )}
                 />
                 {isActive && (
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--accent)] opacity-50 motion-reduce:animate-none" />
+                  <span
+                    className="absolute inline-flex h-full w-full rounded-full bg-[var(--accent)] motion-reduce:animate-none"
+                    style={{
+                      animation: 'phase-ping 2s cubic-bezier(0, 0, 0.2, 1) infinite',
+                    }}
+                  />
                 )}
               </span>
 
               {/* Label */}
-              <span className="text-xs">
+              <span className="text-xs transition-colors duration-300">
                 {p.short}
                 {isCompleted && phaseDurations?.[p.id] !== undefined && (
-                  <span className="ml-1 opacity-50">{phaseDurations[p.id].toFixed(1)}s</span>
+                  <span className="ml-1 opacity-50 tabular-nums">{phaseDurations[p.id].toFixed(1)}s</span>
                 )}
               </span>
             </button>
@@ -91,7 +97,7 @@ export function PhaseTimeline({
             <button
               type="button"
               onClick={onExpandAll}
-              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[11px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[11px] font-medium text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--border-strong)] hover:text-[var(--text)]"
             >
               Expand all
             </button>
@@ -100,7 +106,7 @@ export function PhaseTimeline({
             <button
               type="button"
               onClick={onCollapseAll}
-              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[11px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[11px] font-medium text-[var(--text-muted)] transition-all duration-200 hover:border-[var(--border-strong)] hover:text-[var(--text)]"
             >
               Collapse all
             </button>

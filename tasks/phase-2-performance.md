@@ -304,7 +304,7 @@ def is_article_request(problem: str) -> bool:
     return any(re.search(p, lower) for p in _WRITING_INDICATORS)
 ```
 
-Integrate into `ARAPipeline.run()` — if `is_article_request(state.problem)` → bypass generic classification, enter article workflow directly.
+Integrate into `ReasonerPipeline.run()` — if `is_article_request(state.problem)` → bypass generic classification, enter article workflow directly.
 
 **AC:** Article request always enters writing workflow.
 

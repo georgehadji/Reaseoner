@@ -26,7 +26,7 @@ Output ONLY a JSON object with this exact shape:
 }
 
 Rules:
-- Map each stakeholder to one of the four ARA perspective labels
+- Map each stakeholder to one of the four Reasoner perspective labels
 - concerns should be specific to the problem domain
 - Include at least 2 and at most 5 stakeholders
 """

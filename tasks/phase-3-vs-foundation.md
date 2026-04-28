@@ -20,14 +20,14 @@ Before writing any code, resolve these in `docs/decisions/vs-constants.md`:
 | Tail thresholds | radiology=0.10, legal=0.08, aerospace=0.06 | Calibrated per vertical risk tolerance |
 | JSON parse error strategy | 2 retry + direct fallback | Balanced resilience vs latency |
 
-**AC:** Decision doc approved (even if self-approved with rationale); all constants frozen in `ara_vs_constants.py`.
+****AC:**** Decision doc approved (even if self-approved with rationale); all constants frozen in `reasoner_vs_constants.py`.
 
 ---
 
-## 3.1 `ara_vs_constants.py` — First File Written
+## 3.1 `reasoner_vs_constants.py` — First File Written
 
 **Effort:** 2 hours  
-**New file:** `src/reasoner/ara_vs_constants.py`
+**New file:** `src/reasoner/reasoner_vs_constants.py`
 
 ```python
 """Verbalized Sampling constants — zero magic numbers outside this file."""
@@ -94,14 +94,14 @@ PROFILE_NLI_BUDGET = {
 }
 ```
 
-**AC:** `test_vs_constants.py` — weights sum=1.0; thresholds in (0,1); k≥2; all flags default True.
+****AC:**** `test_vs_constants.py` — weights sum=1.0; thresholds in (0,1); k≥2; all flags default True.
 
 ---
 
-## 3.2 `ara_verbalized_sampling.py` — Primitives
+## 3.2 `reasoner_verbalized_sampling.py` — Primitives
 
 **Effort:** 1 day  
-**New file:** `src/reasoner/ara_verbalized_sampling.py`
+**New file:** `src/reasoner/reasoner_verbalized_sampling.py`
 
 ### Models
 ```python
@@ -168,7 +168,7 @@ def top_candidate(candidates: list[VSCandidate]) -> VSCandidate:
     return max(candidates, key=lambda c: (c.probability, -candidates.index(c)))
 ```
 
-**AC:** `test_vs_primitives.py` ~25 tests:
+****AC:**** `test_vs_primitives.py` ~25 tests:
 - Normalize all-zero → uniform
 - Renormalize off-by-5%
 - JSON fence stripping (7 cases)
@@ -235,7 +235,7 @@ class VSVerticalRegistry:
         ))
 ```
 
-**AC:** `test_vs_config_models.py` ~10 tests:
+****AC:**** `test_vs_config_models.py` ~10 tests:
 - `all_disabled()` sets all flags to False
 - Invalid k (>20) raises ValueError
 - Missing domain returns default config
@@ -256,8 +256,8 @@ class VSVerticalRegistry:
 
 ## Definition of Done
 
-- [ ] `ara_vs_constants.py` frozen — no numeric literals outside it.
-- [ ] `ara_verbalized_sampling.py` passes ~25 primitive tests.
+- [ ] `reasoner_vs_constants.py` frozen — no numeric literals outside it.
+- [ ] `reasoner_verbalized_sampling.py` passes ~25 primitive tests.
 - [ ] `vs_config.py` passes ~10 config tests.
 - [ ] `VSFeatureFlags.all_disabled()` verified.
 - [ ] pytest coverage ≥ 85% for new modules.

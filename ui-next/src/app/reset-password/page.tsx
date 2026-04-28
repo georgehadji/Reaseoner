@@ -45,7 +45,7 @@ function ResetPasswordForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4" noValidate>
       {error && (
-        <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-600" role="alert" aria-live="assertive">
+        <div className="rounded-lg bg-red-500/10 p-3 text-sm text-red-400" role="alert" aria-live="assertive">
           {error}
         </div>
       )}

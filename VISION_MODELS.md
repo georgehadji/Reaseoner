@@ -2,7 +2,7 @@
 
 > **Research Date:** April 20, 2026  
 > **Source:** OpenRouter AI, provider docs, benchmark aggregators (Artificial Analysis, LangDB, CloudPrice)  
-> **Scope:** All major multimodal (vision) models available via OpenRouter, with pricing, context, benchmarks, and ARA integration notes.
+> **Scope:** All major multimodal (vision) models available via OpenRouter, with pricing, context, benchmarks, and Reasoner integration notes.
 
 ---
 
@@ -623,10 +623,10 @@
 
 ---
 
-## 7. ARA Integration Notes
+## 7. Reasoner Integration Notes
 
-### Vision-Capable Models Already in ARA Registry
-| ARA ID | OpenRouter Path | Vision? |
+### Vision-Capable Models Already in Reasoner Registry
+| Reasoner ID | OpenRouter Path | Vision? |
 |---|---|---|
 | `claude-sonnet` | `anthropic/claude-sonnet-4.6` | ✅ |
 | `claude-opus` | `qwen/qwen3.6-plus` (alias) | ❌ (wrong alias) |
@@ -643,7 +643,7 @@
 | `grok-4` | `x-ai/grok-4` | ✅ |
 
 ### Models to Add for Vision Support
-| ARA ID | OpenRouter Path | Why Add |
+| Reasoner ID | OpenRouter Path | Why Add |
 |---|---|---|
 | `gemini-3-flash` | `google/gemini-3-flash-preview` | 1M context, $0.50/$3.00, PDF+video+vision |
 | `gemini-3-pro` | `google/gemini-3.1-pro-preview` | Frontier reasoning, $2/$12, best scientific |
@@ -655,7 +655,7 @@
 | `grok-4.1-fast` | `x-ai/grok-4.1-fast` | 2M context vision at $0.20/$0.50 |
 | `gemma-3-27b` | `google/gemma-3-27b-it` | Open-weight vision at $0.08/$0.16 |
 
-### Implementation Strategy for ARA
+### Implementation Strategy for Reasoner
 1. **Phase 1 (Text Extraction)**: Works with ALL models — use `pypdf` + cheap vision model (Gemini Flash or GLM-4.6V) to caption images, inject text into prompt
 2. **Phase 2 (Native Multimodal)**: For presets using vision-capable models, pass `image_url` directly via OpenRouter API. Models that support this:
    - Claude Sonnet 4.6, Opus 4.6/4.7, Haiku 4.5
@@ -670,7 +670,7 @@
 
 ### Cost-Optimized Vision Routing
 | Budget Tier | Vision Model | Cost |
-|---|---|---|
+|---|---|---|---|
 | Ultra-budget | Gemma 3 27B / `:free` | $0.08 or FREE |
 | Budget | Gemini 2.5 Flash-Lite | $0.10/$0.40 |
 | Balanced | GLM-4.6V / MiniMax-01 | $0.20/$0.90–$1.10 |

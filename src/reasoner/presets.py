@@ -1,5 +1,5 @@
 """
-ARA Pipeline — Routing Presets
+Reasoner Pipeline — Routing Presets
 Backward-compatible shim.  Core logic moved to reasoner.domain.preset_core;
 preset data moved to reasoner.domain.preset_registry.
 """
@@ -70,7 +70,7 @@ def print_presets_summary() -> None:
     from rich import box
 
     console = Console()
-    table = Table(title="ARA v2.0 — Available Pipeline Presets", box=box.ROUNDED)
+    table = Table(title="Reasoner v2.0 — Available Pipeline Presets", box=box.ROUNDED)
     table.add_column("Preset ID", style="cyan", width=22)
     table.add_column("Name", width=30)
     table.add_column("Primary Model", width=18)

@@ -6,9 +6,9 @@
 ██╔══██╗██╔══██╗██╔══██╗        ██╔══██╗██║██╔══██╗██╔════╝██║     ██║████╗  ██║██╔════╝
 ███████║██████╔╝███████║        ██████╔╝██║██████╔╝█████╗  ██║     ██║██╔██╗ ██║█████╗  
 ██╔══██║██╔══██╗██╔══██║        ██╔═══╝ ██║██╔══██╗██╔══╝  ██║     ██║██║╚██╗██║██╔══╝  
-██║  ██║██║  ██║██║  ██║        ██║     ██║██║  ██║███████╗███████╗██║██║ ╚████║███████╗
+██║  ██║██║  ██║██║  ██║        ██║     ██║██║  ██║███████╗███████╗██║██║ ╚████║██╔════╗
 ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝        ╚═╝     ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝╚═╝  ╚═══╝╚══════╝
-v2.2 — Adaptive Reasoning Architecture
+v2.2 — Reasoner
 </pre>
 
 <!-- Badges -->
@@ -161,7 +161,7 @@ python main.py --problem "..." --top-k 3
 
 ```python
 import asyncio
-from reasoner.pipeline import ARAPipeline
+from reasoner.pipeline import ReasonerPipeline
 from reasoner.llm import ProviderRouter
 
 async def main():
@@ -169,9 +169,9 @@ async def main():
         primary_id="claude-sonnet",
         routing={"scoring": "sonar-pro", "synthesis": "glm-5"}
     )
-    pipeline = ARAPipeline(router=router, preset_name="multi-perspective-premium")
+    pipeline = ReasonerPipeline(router=router, preset_name="multi-perspective-premium")
     state = await pipeline.run("Your complex problem here")
-
+```
     print(f"Task Type: {state.task_type}")
     print(f"Sub-problems: {state.sub_problems}")
     print(f"Final Answer: {state.final_solution.core_solution}")
@@ -185,7 +185,7 @@ asyncio.run(main())
 
 ## 🧠 Reasoning Methods
 
-ARA supports **16 specialized reasoning methodologies** beyond the default orchestrated pipeline:
+Reasoner supports **16 specialized reasoning methodologies** beyond the default orchestrated pipeline:
 
 | Method | Description | Best For |
 |--------|-------------|----------|
@@ -267,6 +267,19 @@ Different model families are trained on different data distributions, reward fun
 
 ---
 
+## 🔒 Security & Encryption
+
+Reasoner v2.1 implements a comprehensive **Zero-Trust** security architecture to ensure your data is protected at every stage.
+
+- **End-to-End Transit Encryption:** All traffic, both external (client-to-proxy) and internal (inter-container), is encrypted via TLS 1.3/1.2.
+- **Internal PKI:** An automated certificate generation system provisions unique internal certificates for all services (`backend`, `frontend`, `database`, `redis`) on every startup.
+- **At-Rest Protection:** Sensitive data, including API key metadata, user information, and full pipeline execution states, is encrypted at the application layer using **AES-256-GCM** before storage.
+- **Zero-Trust Networking:** All internal components (PostgreSQL, Redis, FastAPI, Next.js) strictly require TLS, making the internal network opaque even to local attackers.
+
+For more technical details, see [ENCRYPTION.md](./ENCRYPTION.md).
+
+---
+
 ## 🛠️ Development
 
 ### Running Tests
@@ -297,7 +310,7 @@ cd ui-next && npm run lint
 
 <div align="center">
 
-**[⬆ Back to Top](#ara-pipeline-v22)**
+**[⬆ Back to Top](#reasoner-v22)**
 
 Made with ❤️ and a lot of reasoning
 
@@ -308,7 +321,7 @@ es decisions. The epistemic labels (`VERIFIED` / `HYPOTHESIS` / `UNKNOWN`) are h
 
 <div align="center">
 
-**[⬆ Back to Top](#ara-pipeline-v22)**
+**[⬆ Back to Top](#reasoner-v22)**
 
 Made with ❤️ and a lot of reasoning
 

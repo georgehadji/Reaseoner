@@ -176,6 +176,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
+        {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
     );
   }
@@ -191,6 +192,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
+        {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
     );
   }
@@ -285,6 +287,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
               })}
             </div>
           )}
+          {onComplete && <CompletionTrigger onComplete={onComplete} />}
         </PhaseCard>
       );
     }
@@ -304,6 +307,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
+        {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </PhaseCard>
     );
   }
@@ -382,6 +386,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
           </div>
         )}
         <SynthesisRenderer text={md} />
+        {onComplete && <CompletionTrigger onComplete={onComplete} />}
       </SynthesisCard>
     );
   }
@@ -398,6 +403,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
       ) : (
         <div className={`markdown-body ${phaseTextClass}`}><MarkdownRenderer>{md}</MarkdownRenderer></div>
       )}
+      {onComplete && <CompletionTrigger onComplete={onComplete} />}
     </PhaseCard>
   );
 });

@@ -1,7 +1,7 @@
 """Radiology vertical configuration for VS."""
 from __future__ import annotations
 
-from reasoner.ara_vs_constants import VS_K_RADIOLOGY_GENERATION, VS_TAIL_THRESHOLD_RADIOLOGY
+from reasoner.reasoner_vs_constants import VS_K_RADIOLOGY_GENERATION, VS_TAIL_THRESHOLD_RADIOLOGY
 from reasoner.vs_config import VSVerticalConfig, VSVerticalRegistry
 
 RADIOLOGY_CONFIG = VSVerticalConfig(

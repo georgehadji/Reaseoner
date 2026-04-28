@@ -6,13 +6,13 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from reasoner.ara_vs_constants import (
+from reasoner.reasoner_vs_constants import (
     W_ENTROPY,
     W_SUPPORT,
     W_NLI,
     W_RANK,
 )
-from reasoner.ara_verbalized_sampling import VSCandidate, compute_verbalized_entropy as _compute_entropy
+from reasoner.reasoner_verbalized_sampling import VSCandidate, compute_verbalized_entropy as _compute_entropy
 from reasoner.phases.vs_generation import VSGenerationResult, GenerationCandidate
 from reasoner.vs_config import VSFeatureFlags
 

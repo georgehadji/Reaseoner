@@ -2,7 +2,7 @@
 # SELF-HEALING SYSTEM — ARTIFACT SUMMARY
 # ═══════════════════════════════════════════════════════════════════════════════
 
-**Project:** ARA Pipeline v2.0 (Reasoner)
+**Project:** Reasoner Pipeline v2.0 (Reasoner)
 **Implementation Date:** 2026-03-25
 **Status:** ✅ ALL THREE HEALING LOOPS IMPLEMENTED AND VERIFIED
 

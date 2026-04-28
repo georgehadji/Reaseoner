@@ -8,7 +8,7 @@ import random
 from abc import ABC, abstractmethod
 
 from reasoner.exceptions import (
-    ARAError,
+    ReasonerError,
     is_retryable,
 )
 from reasoner.core.constants import (
@@ -19,7 +19,7 @@ from reasoner.core.constants import (
 logger = logging.getLogger(__name__)
 
 
-class LLMError(ARAError):
+class LLMError(ReasonerError):
     """Raised when an LLM call fails after all retries."""
     retryable = False
 

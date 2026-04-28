@@ -1,6 +1,6 @@
 # Author: Georgios-Chrysovalantis Chatzivantsidis
 """
-ARA Pipeline - Retry Utilities
+Reasoner Pipeline - Retry Utilities
 Provides automatic retry with exponential backoff for transient failures.
 """
 

@@ -1,5 +1,5 @@
 """
-Per-run cancellation state management for the ARA API.
+Per-run cancellation state management for the Reasoner API.
 
 Encapsulates the _run_cancel_events dict and _active_runs set,
 using an asyncio.Lock for async-context safety.

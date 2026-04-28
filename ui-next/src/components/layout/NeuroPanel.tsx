@@ -226,7 +226,7 @@ export function NeuroPanel({ conversationId, lastUserPrompt, lastAssistantRespon
               {canLearn ? 'Learn this turn' : 'No turn to learn'}
             </button>
             {learnStatus && (
-              <div className="text-xs text-green-600">{learnStatus}</div>
+              <div className="text-xs text-blue-400">{learnStatus}</div>
             )}
           </div>
         </>

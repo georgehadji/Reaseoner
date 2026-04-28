@@ -8,7 +8,7 @@ from typing import Any, Protocol
 
 from pydantic import BaseModel, Field, field_validator
 
-from reasoner.ara_vs_constants import (
+from reasoner.reasoner_vs_constants import (
     VS_K_GENERATION,
     PROFILE_NLI_BUDGET,
     LOG_VS_STRATEGY,
@@ -16,7 +16,7 @@ from reasoner.ara_vs_constants import (
     LOG_VS_NLI_SCORES,
     LOG_VS_CANDIDATE_RANK,
 )
-from reasoner.ara_verbalized_sampling import VSMode, build_vs_prompt, parse_vs_response
+from reasoner.reasoner_verbalized_sampling import VSMode, build_vs_prompt, parse_vs_response
 from reasoner.exceptions import ProviderError
 from reasoner.vs_config import VSDeploymentProfile, VSFeatureFlags
 

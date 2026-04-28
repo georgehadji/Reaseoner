@@ -117,16 +117,26 @@ export function CommandPalette({
     return () => document.removeEventListener('keydown', handler);
   }, [isOpen, filtered, selectedIndex, onClose, onRecordCommand]);
 
-  if (!isOpen || !isEnabled('command-palette')) return null;
+  if (!isEnabled('command-palette')) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[400] flex items-start justify-center bg-black/60 p-4 pt-[20vh]"
+      className={cn(
+        'fixed inset-0 z-[400] flex items-start justify-center p-4 pt-[20vh] transition-all duration-200',
+        isOpen
+          ? 'bg-black/60 opacity-100'
+          : 'bg-black/0 opacity-0 pointer-events-none',
+      )}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)]">
+      <div
+        className={cn(
+          'w-full max-w-lg overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-lg)] transition-all duration-200',
+          isOpen ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0',
+        )}
+      >
         <div className="flex items-center gap-3 border-b border-[var(--border)] px-4 py-3">
           <Command className="h-4 w-4 text-[var(--text-muted)]" />
           <input

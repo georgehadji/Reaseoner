@@ -23,7 +23,7 @@
       "src/reasoner/cache/token_cache.py"
     ],
     "critical_paths": [
-      "POST /api/run -> run_pipeline -> run_stream_cached -> run_stream -> ARAPipeline",
+      "POST /api/run -> run_pipeline -> run_stream_cached -> run_stream -> ReasonerPipeline",
       "POST /api/run-followup -> run_followup_stream -> run_stream -> neuro/learn",
       "DELETE /api/cache -> clear_cache"
     ],

@@ -7,7 +7,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 const faqs = [
   {
     q: "What is Reasoner?",
-    a: "ARA (Advanced Reasoning Architecture) is an AI platform that breaks down complex queries into manageable phases, verifying facts, running multiple models, and searching the web to synthesize a high-quality final answer."
+    a: "Reasoner is an AI platform that breaks down complex queries into manageable phases, verifying facts, running multiple models, and searching the web to synthesize a high-quality final answer."
   },
   {
     q: "How does billing work?",
@@ -38,7 +38,7 @@ export default function FAQPage() {
       <SiteHeader />
       <main className="mx-auto max-w-3xl px-4 py-16 flex-1 w-full">
       <h1 className="text-4xl font-bold mb-2">Frequently Asked Questions</h1>
-      <p className="text-[var(--text-muted)] mb-12">Find answers to common questions about ARA.</p>
+      <p className="text-[var(--text-muted)] mb-12">Find answers to common questions about Reasoner.</p>
       
       <div className="space-y-4">
         {faqs.map((faq, idx) => (

@@ -9,12 +9,12 @@
       "max_files_in_context": 30,
       "bug_budget": 3
     },
-    "repository": "Reasoner (ARA Pipeline v2.2)",
+    "repository": "Reasoner (Reasoner Pipeline v2.2)",
     "agent_model": "Kimi Code CLI"
   },
   "repository_map": {
     "core_modules": [
-      "src/reasoner/pipeline.py (ARAPipeline orchestrator)",
+      "src/reasoner/pipeline.py (ReasonerPipeline orchestrator)",
       "src/reasoner/api/__init__.py (FastAPI app factory)",
       "src/reasoner/infrastructure/llm/router.py (ProviderRouter)",
       "src/reasoner/infrastructure/llm/registry.py (Model registry)",
@@ -31,7 +31,7 @@
       "src/reasoner/infrastructure/persistence/event_store.py (SQLite event store)"
     ],
     "critical_paths": [
-      "POST /api/run -> streaming.py:run_stream -> ARAPipeline.run",
+      "POST /api/run -> streaming.py:run_stream -> ReasonerPipeline.run",
       "WS /ws -> WebSocketManager -> RunStateStore cancellation",
       "ProviderRouter.call -> complete_with_retry -> httpx POST",
       "POST /api/feedback -> FeedbackStore.insert",
@@ -414,7 +414,7 @@
         {
           "test_id": "REG-003-01",
           "description": "Context route error is generic",
-          "preconditions": "ARAPipeline raises RuntimeError with secret path",
+          "preconditions": "ReasonerPipeline raises RuntimeError with secret path",
           "input": "POST /api/run-with-context",
           "expected_behavior_with_patch": "Response error field is 'Internal server error', secret not present",
           "failure_behavior_without_patch": "Response error field contains the secret path"

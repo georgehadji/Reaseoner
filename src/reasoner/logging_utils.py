@@ -1,5 +1,5 @@
 """
-ARA Pipeline - Structured Logging Utilities
+Reasoner Pipeline - Structured Logging Utilities
 Provides JSON-structured logging with correlation IDs for observability.
 Includes automatic redaction of sensitive API keys and secrets.
 """

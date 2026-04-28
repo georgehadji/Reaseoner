@@ -1,6 +1,6 @@
 """
 Gate Agent — Lightweight pre-flight router that decides whether a user prompt
-should receive a direct answer or be processed through the full ARA pipeline.
+should receive a direct answer or be processed through the full Reasoner pipeline.
 
 Security principles:
 - Opaque taxonomy: real method names are never exposed to the LLM prompt.
@@ -16,14 +16,6 @@ import logging
 import re
 from typing import Any, Literal
 
-# HyperGateAgent is the recommended replacement for GateAgent.
-# Import here so callers can do: from reasoner.gate_agent import HyperGateAgent
-# Lazy import to avoid a circular dependency at module load time.
-def __getattr__(name: str):  # noqa: N807
-    if name == "HyperGateAgent":
-        from reasoner.hypergate.hyperagent import HyperGateAgent  # noqa: PLC0415
-        return HyperGateAgent
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 from pydantic import BaseModel, Field
 

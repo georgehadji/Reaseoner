@@ -2,6 +2,10 @@
 
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { DEFAULT_ACCENT_RGB, type MethodId, METHOD_ACCENT_RGB } from '@/lib/method-colors';
 
 const VERTEX_SHADER = /* glsl */ `
   varying vec2 vUv;
@@ -18,6 +22,7 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform vec2 uMouse;
   uniform float uClickTime;
   uniform vec2 uClickPos;
+  uniform vec3 uAccent;
   varying vec2 vUv;
 
   // Simplex 2D noise
@@ -91,14 +96,14 @@ const FRAGMENT_SHADER = /* glsl */ `
     n1 += ripple;
     n2 += ripple * 0.7;
 
-    // Teal (#00C9B1) → deep navy base
-    vec3 teal = vec3(0.0, 0.788, 0.694);
+    // Deep navy base
     vec3 navy = vec3(0.024, 0.043, 0.063);
     vec3 amber = vec3(0.961, 0.620, 0.043);
 
+    // Method-accent color drives the nebula hue
     vec3 col = navy;
-    col = mix(col, teal * 0.35, smoothstep(-0.3, 0.6, n1) * 0.4);
-    col = mix(col, teal * 0.25, smoothstep(-0.2, 0.7, n2) * 0.3);
+    col = mix(col, uAccent * 0.40, smoothstep(-0.3, 0.6, n1) * 0.4);
+    col = mix(col, uAccent * 0.30, smoothstep(-0.2, 0.7, n2) * 0.3);
     col = mix(col, amber * 0.20, smoothstep(0.0, 0.8, n3) * 0.15);
 
     // Subtle vignette
@@ -109,9 +114,13 @@ const FRAGMENT_SHADER = /* glsl */ `
   }
 `;
 
-export function NebulaBackground() {
+interface NebulaBackgroundProps {
+  /** Active reasoning method — drives nebula accent color. */
+  method?: MethodId | null;
+}
+
+export function NebulaBackground({ method }: NebulaBackgroundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -132,11 +141,25 @@ export function NebulaBackground() {
     renderer.domElement.style.height = '100%';
     renderer.domElement.style.display = 'block';
     container.appendChild(renderer.domElement);
-    rendererRef.current = renderer;
+
+    // Post-processing: Bloom
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(
+      new THREE.Vector2(window.innerWidth, window.innerHeight),
+      0.35,  // strength
+      0.45,  // radius
+      0.82   // threshold — only bright pixels bloom
+    );
+    composer.addPass(bloomPass);
 
     // Interaction state
     const mouse = { x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 };
     const click = { time: -100.0, x: 0.5, y: 0.5 };
+
+    // Color state — smooth transition
+    const targetAccent = new THREE.Vector3(...DEFAULT_ACCENT_RGB);
+    const currentAccent = new THREE.Vector3(...DEFAULT_ACCENT_RGB);
 
     // Shader material
     const uniforms = {
@@ -146,6 +169,7 @@ export function NebulaBackground() {
       uMouse: { value: new THREE.Vector2(0.5, 0.5) },
       uClickTime: { value: -100.0 },
       uClickPos: { value: new THREE.Vector2(0.5, 0.5) },
+      uAccent: { value: currentAccent },
     };
 
     const material = new THREE.ShaderMaterial({
@@ -161,7 +185,7 @@ export function NebulaBackground() {
     // Event handlers
     function onMouseMove(e: MouseEvent) {
       mouse.targetX = e.clientX / window.innerWidth;
-      mouse.targetY = 1.0 - e.clientY / window.innerHeight; // flip Y for shader
+      mouse.targetY = 1.0 - e.clientY / window.innerHeight;
     }
 
     function onClick(e: MouseEvent) {
@@ -207,13 +231,16 @@ export function NebulaBackground() {
       mouse.y += (mouse.targetY - mouse.y) * 0.04;
       uniforms.uMouse.value.set(mouse.x, mouse.y);
 
-      renderer.render(scene, camera);
+      // Smooth accent color transition (2-second lerp)
+      currentAccent.lerp(targetAccent, 0.016);
+
+      composer.render();
     }
 
     if (motionScale > 0) {
       animate();
     } else {
-      renderer.render(scene, camera);
+      composer.render();
     }
 
     // Resize handler
@@ -221,11 +248,19 @@ export function NebulaBackground() {
       const w = window.innerWidth;
       const h = window.innerHeight;
       renderer.setSize(w, h);
+      composer.setSize(w, h);
       uniforms.uResolution.value.set(w, h);
-      if (motionScale === 0) renderer.render(scene, camera);
+      if (motionScale === 0) composer.render();
     }
 
     window.addEventListener('resize', onResize);
+
+    // Expose color updater for React prop changes
+    function updateMethodColor() {
+      const rgb = method ? METHOD_ACCENT_RGB[method] : DEFAULT_ACCENT_RGB;
+      targetAccent.set(rgb[0], rgb[1], rgb[2]);
+    }
+    updateMethodColor();
 
     return () => {
       cancelAnimationFrame(rafId);
@@ -241,7 +276,7 @@ export function NebulaBackground() {
         container.removeChild(renderer.domElement);
       }
     };
-  }, []);
+  }, [method]);
 
   return (
     <div

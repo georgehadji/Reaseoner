@@ -3,6 +3,8 @@
 import { useState, useRef, useCallback, useReducer, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAppStore } from '@/stores/app-store';
+import { NebulaBackground } from '@/components/layout/NebulaBackground';
+import type { MethodId } from '@/lib/method-colors';
 
 import { usePipelineStream } from '@/hooks/usePipelineStream';
 import { useWebSocketPipeline } from '@/hooks/useWebSocketPipeline';
@@ -941,8 +943,14 @@ export default function ChatPage() {
     }
   }
 
+  // Normalize auto-selected method for NebulaBackground accent color
+  const nebulaMethod = autoSelectedMethod
+    ? (autoSelectedMethod.replace(/_/g, '-').toLowerCase() as MethodId)
+    : null;
+
   return (
     <div className="flex h-[100dvh] w-full bg-[var(--bg)] text-[var(--text)] overflow-hidden">
+      <NebulaBackground method={nebulaMethod} />
       <Sidebar
         conversations={history}
         onLoad={handleLoad}

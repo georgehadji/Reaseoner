@@ -184,7 +184,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           onClick={() => fileInputRef.current?.click()}
           disabled={attachments.length >= 5 || running}
           className={cn(
-            'flex h-8 w-8 cursor-pointer items-center justify-center rounded-xl border text-[var(--text-muted)] transition-all',
+            'flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border text-[var(--text-muted)] transition-all',
             attachments.length >= 5 || running
               ? 'cursor-not-allowed border-[var(--border)] opacity-40'
               : 'border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
@@ -218,7 +218,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           onClick={() => { if (!isLocked) toggleTier(); }}
           disabled={isLocked && !isPremium}
           className={cn(
-            'flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
+            'flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
             isPremium
               ? 'border-teal-500/40 bg-teal-500/10 text-teal-300'
               : isLocked
@@ -241,7 +241,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           type="button"
           onClick={toggleImageMode}
           className={cn(
-            'flex h-8 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
+            'flex h-10 cursor-pointer items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition-all',
             isImageMode
               ? 'border-fuchsia-500/40 bg-fuchsia-500/10 text-fuchsia-300'
               : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]',
@@ -261,7 +261,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         <button
           type="button"
           onClick={onStop}
-          className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25"
+          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-red-500/15 text-red-400 transition-colors hover:bg-red-500/25"
           aria-label="Stop"
         >
           <Square className="h-3.5 w-3.5 fill-current" />
@@ -274,7 +274,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         onClick={onSubmit}
         disabled={!hasContent}
         className={cn(
-          'flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl font-semibold text-white transition-all',
+          'flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl font-semibold text-white transition-all',
           hasContent
             ? 'bg-[var(--accent)] hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent-glow)]'
             : 'bg-[var(--surface-3)] text-[var(--text-subtle)] cursor-not-allowed',

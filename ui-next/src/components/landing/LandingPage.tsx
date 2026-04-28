@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
-import { ThreeBackground } from '@/components/layout/ThreeBackground';
+import { NebulaBackground } from '@/components/layout/NebulaBackground';
 import {
   ArrowRight,
   Zap,
@@ -175,8 +175,8 @@ export default function LandingPage() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[var(--bg)] text-[var(--text)]">
-      {/* Three.js Neural Network Background */}
-      <ThreeBackground />
+      {/* WebGL Nebula Background */}
+      <NebulaBackground />
 
       {/* Subtle ambient orbs on top of canvas */}
       <div className="pointer-events-none fixed inset-0 z-[1] overflow-hidden" aria-hidden="true">

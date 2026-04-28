@@ -15,9 +15,9 @@ export function Button({
   return (
     <button
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[rgba(var(--method-accent-rgb,255,255,255),0.5)] disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' && 'h-8 px-3 text-xs',
-        size === 'md' && 'h-9 px-4 text-sm',
+        'inline-flex items-center justify-center rounded-lg font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 min-touch',
+        size === 'sm' && 'h-10 px-3 text-xs',
+        size === 'md' && 'h-10 px-4 text-sm',
         variant === 'primary' &&
           'bg-[var(--accent)] text-[var(--bg)] hover:bg-[var(--accent-hover)]',
         variant === 'ghost' &&

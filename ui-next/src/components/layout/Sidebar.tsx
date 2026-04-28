@@ -138,7 +138,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={onNew}
-            className="flex h-9 flex-1 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-medium text-[var(--text)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)]"
+            className="flex h-10 flex-1 cursor-pointer items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 text-sm font-medium text-[var(--text)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-3)]"
           >
             <Plus className="h-3.5 w-3.5 text-[var(--accent)]" />
             New problem
@@ -147,7 +147,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={toggleSidebar}
-              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
               aria-label="Collapse sidebar"
             >
               <PanelLeft className="h-4 w-4" />
@@ -161,7 +161,7 @@ export function Sidebar({
             type="button"
             onClick={() => neuroPanelOpen && toggleNeuroPanel()}
             className={cn(
-              'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-all',
+              'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-medium transition-all',
               !neuroPanelOpen
                 ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text)]',
@@ -174,7 +174,7 @@ export function Sidebar({
             type="button"
             onClick={() => !neuroPanelOpen && toggleNeuroPanel()}
             className={cn(
-              'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-medium transition-all',
+              'flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-xs font-medium transition-all',
               neuroPanelOpen
                 ? 'bg-[var(--surface)] text-[var(--text)] shadow-[var(--shadow)]'
                 : 'text-[var(--text-muted)] hover:text-[var(--text)]',
@@ -293,7 +293,7 @@ export function Sidebar({
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onResume(conv.pipeline_id!); }}
-                                    className="cursor-pointer flex h-6 w-6 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)]"
+                                    className="cursor-pointer flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)]"
                                     aria-label="Resume pipeline"
                                   >
                                     <Play className="h-3 w-3" />
@@ -303,7 +303,7 @@ export function Sidebar({
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
-                                className="cursor-pointer flex h-6 w-6 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-red-400"
+                                className="cursor-pointer flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-red-400"
                                 aria-label="Delete"
                               >
                                 <Trash2 className="h-3 w-3" />
@@ -339,7 +339,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={toggleSidebar}
-            className="fixed left-3 top-3 z-50 hidden h-9 w-9 cursor-pointer items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] shadow-[var(--shadow)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] sm:flex"
+            className="fixed left-3 top-3 z-50 hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] shadow-[var(--shadow)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] sm:flex"
             aria-label="Open sidebar"
           >
             <PanelLeft className="h-4 w-4" />

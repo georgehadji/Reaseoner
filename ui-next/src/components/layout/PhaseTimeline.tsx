@@ -46,7 +46,7 @@ export function PhaseTimeline({
               disabled={!isCompleted}
               onClick={() => onPhaseClick?.(p.id)}
               className={cn(
-                'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-left transition-all',
+                'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2.5 text-left transition-all',
                 isActive
                   ? 'bg-[var(--accent-dim)] text-[var(--text)]'
                   : isCompleted
@@ -91,7 +91,7 @@ export function PhaseTimeline({
             <button
               type="button"
               onClick={onExpandAll}
-              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[11px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
             >
               Expand all
             </button>
@@ -100,7 +100,7 @@ export function PhaseTimeline({
             <button
               type="button"
               onClick={onCollapseAll}
-              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
+              className="cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-[11px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--border-strong)] hover:text-[var(--text)]"
             >
               Collapse all
             </button>

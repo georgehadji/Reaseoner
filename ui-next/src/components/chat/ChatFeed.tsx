@@ -519,7 +519,8 @@ function ChatFeedComponent({
                   onFeedback={onFeedback}
                 />
                 {msg.id === messages.filter((m) => m.role === 'assistant' && !m.isStreaming).at(-1)?.id &&
-                  !messages.some((m) => m.isStreaming) && (
+                  !messages.some((m) => m.isStreaming) &&
+                  msg.phases?.some((p) => p.name?.toLowerCase().includes('synthesis')) && (
                   <ContinueButton onContinue={onContinueGenerating} />
                 )}
               </>

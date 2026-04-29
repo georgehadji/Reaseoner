@@ -318,6 +318,10 @@ PHASE_TIMEOUTS: dict[str, float] = {
     "Journal Review": 90.0,
     "Final Assembly": 120.0,
     "Humanize": 90.0,
+    # Brainstorming (Verbalized Sampling) — sequential multi-round LLM calls need headroom
+    "VS Idea Generation": 300.0,   # 5 rounds × ~45s each worst-case
+    "Cluster & Score": 120.0,
+    "Deep Development": 180.0,
     "default": 90.0,
 }
 

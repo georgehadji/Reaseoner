@@ -1,9 +1,10 @@
 """Verbalized Sampling brainstorming pipeline mixin.
 
-Implements three phases:
+Implements four phases:
   Phase 2 — VS Idea Generation  (_phase_brainstorm_generate)
   Phase 3 — Cluster & Score     (_phase_brainstorm_cluster)
   Phase 4 — Deep Development    (_phase_brainstorm_develop)
+  Phase 5 — Synthesis           (_phase_synthesis_brainstorming)
 
 The mixin reads its runtime configuration from
 ``state.brainstorming_state["config"]`` which is injected by streaming.py
@@ -15,15 +16,17 @@ from __future__ import annotations
 
 import logging
 
-from reasoner.models import PipelineState
+from reasoner.models import FinalSolution, MetaCognitiveAudit, PipelineState
 from reasoner.parsing import extract_json
 from reasoner.phases.brainstorming import (
     VS_CLUSTER_SYSTEM,
     VS_DEVELOP_SYSTEM,
     VS_GENERATION_SYSTEM,
+    VS_SYNTHESIS_SYSTEM,
     vs_cluster_prompt,
     vs_develop_prompt,
     vs_generation_prompt,
+    vs_synthesis_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,3 +145,85 @@ class BrainstormingMixin:
         except Exception as exc:
             self._log(_LOG_TAG, f"Develop parse error: {exc}", state)
             state.errors.append(f"VS develop: {exc}")
+
+    # ── Phase 5: Synthesis ────────────────────────────────────────────────────
+
+    async def _phase_synthesis_brainstorming(self, state: PipelineState) -> None:
+        """Synthesize VS developments into a final integrated FinalSolution."""
+        developments: list[dict] = state.brainstorming_state.get("developments", [])
+        clusters: list[dict] = state.brainstorming_state.get("clusters", [])
+
+        # Fallback: if development phase was skipped (e.g. errors), use top_ideas
+        if not developments:
+            top_ideas: list[dict] = state.brainstorming_state.get("top_ideas", [])
+            if top_ideas:
+                self._log(
+                    _LOG_TAG,
+                    "No developments found — synthesizing from top_ideas directly.",
+                    state,
+                )
+                developments = top_ideas
+            else:
+                self._log(_LOG_TAG, "No ideas to synthesize — skipping.", state)
+                state.errors.append("Brainstorming synthesis: no developments or top_ideas available.")
+                return
+
+        self._log(_LOG_TAG, f"Synthesizing {len(developments)} developed ideas…", state)
+        raw, _ = await self._call_llm_cached(
+            role="synthesis",
+            system_prompt=VS_SYNTHESIS_SYSTEM,
+            user_prompt=vs_synthesis_prompt(state, developments, clusters),
+            state=state,
+        )
+
+        try:
+            data = extract_json(raw)
+
+            # Build action blueprint — normalise plain strings and dicts
+            raw_bp = data.get("action_blueprint", [])
+            action_blueprint: list[dict] = []
+            for step in raw_bp if isinstance(raw_bp, list) else []:
+                if isinstance(step, dict):
+                    action_blueprint.append(step)
+                elif step is not None and str(step).strip():
+                    action_blueprint.append({"action": str(step).strip()})
+
+            meta_audit = MetaCognitiveAudit(
+                most_dangerous_assumption=data.get("most_dangerous_assumption", ""),
+                dominant_bias=data.get("dominant_bias", ""),
+                remaining_uncertainty=data.get("remaining_uncertainty", ""),
+                assumption_failure_impact="",
+                non_obvious_insight="",
+            )
+
+            state.final_solution = FinalSolution(
+                core_solution=data.get("core_solution", ""),
+                critical_insights=data.get("critical_insights", []),
+                action_blueprint=action_blueprint,
+                open_questions=data.get("open_questions", []),
+                claim_labels={},
+                meta_audit=meta_audit,
+                sources=[],
+            )
+            self._log(_LOG_TAG, "Brainstorming synthesis complete.", state)
+        except Exception as exc:
+            self._log(_LOG_TAG, f"Synthesis parse error: {exc}", state)
+            state.errors.append(f"VS synthesis: {exc}")
+            # Graceful degradation: build a FinalSolution from raw text so the
+            # UI still has something meaningful to render.
+            if raw and raw.strip():
+                state.final_solution = FinalSolution(
+                    core_solution=raw.strip(),
+                    critical_insights=[],
+                    action_blueprint=[],
+                    open_questions=[],
+                    claim_labels={},
+                    meta_audit=MetaCognitiveAudit(
+                        most_dangerous_assumption="",
+                        dominant_bias="",
+                        remaining_uncertainty="",
+                        assumption_failure_impact="",
+                        non_obvious_insight="",
+                    ),
+                    sources=[],
+                )

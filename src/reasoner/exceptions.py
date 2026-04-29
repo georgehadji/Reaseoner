@@ -54,10 +54,6 @@ class ReasonerError(Exception):
         self.details = details or {}
 
 
-# Backward-compatible alias (some modules still import ARAError)
-ARAError = ReasonerError
-
-
 # ─────────────────────────────────────────────────────────────────────
 # PARSE ERRORS
 # ─────────────────────────────────────────────────────────────────────

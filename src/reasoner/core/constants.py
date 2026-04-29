@@ -250,7 +250,7 @@ class Timeouts:
     LLM_CALL: float = 45.0     # reduced from 90s — most models respond in <30s
     # Phase-specific timeouts — tighter budgets per role
     CLASSIFICATION: float = 20.0
-    DECOMPOSITION: float = 30.0
+    DECOMPOSITION: float = 60.0
     SYNTHESIS: float = 120.0   # synthesis legitimately needs more time
 
 
@@ -290,7 +290,7 @@ TRUNCATION = TruncationLimits()
 
 PHASE_TIMEOUTS: dict[str, float] = {
     "Classification": 20.0,
-    "Decomposition": 30.0,
+    "Decomposition": 60.0,
     "Deep Read": 45.0,
     "Perspectives": 90.0,
     "Opening Statements": 60.0,

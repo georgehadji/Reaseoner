@@ -33,7 +33,9 @@ from reasoner.phases.brainstorming import (  # noqa: F401
     VS_GENERATION_SYSTEM,
     VS_CLUSTER_SYSTEM,
     VS_DEVELOP_SYSTEM,
+    VS_SYNTHESIS_SYSTEM,
     vs_generation_prompt,
     vs_cluster_prompt,
     vs_develop_prompt,
+    vs_synthesis_prompt,
 )

@@ -45,6 +45,17 @@ VS_DEVELOP_SYSTEM = (
     "Output ONLY valid JSON."
 )
 
+VS_SYNTHESIS_SYSTEM = (
+    "You are a synthesis strategist. Given a set of deeply developed brainstormed ideas, "
+    "your job is to produce a final integrated synthesis: identify the single strongest direction "
+    "or portfolio of complementary ideas, extract non-obvious cross-idea insights, and produce "
+    "a concrete action blueprint. Be decisive — rank and recommend, do not list without judgment. "
+    "CRITICAL RULE: Your final recommendation and all insights MUST be derived EXCLUSIVELY from the "
+    "provided 'Developed ideas' context. Do NOT introduce external concepts or information. "
+    "Ground your entire analysis in the provided text. "
+    "Output ONLY valid JSON."
+)
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Prompt builders
 # ─────────────────────────────────────────────────────────────────────────────
@@ -111,6 +122,36 @@ def vs_cluster_prompt(state: PipelineState, all_ideas: list[dict]) -> str:
         f"Deduplicate, cluster into 3-5 themes, and score each idea. "
         f"Mark the best idea(s) per cluster with keep=true.\n\n"
         f"Return JSON: {json_schema}"
+    )
+
+
+def vs_synthesis_prompt(state: PipelineState, developments: list[dict], clusters: list[dict]) -> str:
+    """Build the final synthesis prompt from developed ideas and cluster themes."""
+    lang = get_language_instruction(state)
+    devs_json = json.dumps(developments, ensure_ascii=False, indent=2)
+    cluster_themes = [c.get("theme", "") for c in clusters if c.get("theme")]
+    themes_str = (
+        "Themes explored: " + ", ".join(cluster_themes) + "\n\n"
+        if cluster_themes else ""
+    )
+
+    return (
+        f"{lang}\n\n"
+        f"Problem: {_wrap_user_input(state.problem)}\n\n"
+        f"{themes_str}"
+        f"Developed ideas ({len(developments)} total):\n{devs_json}\n\n"
+        f"Synthesize these developments into a final integrated recommendation. "
+        f"Identify the strongest idea(s), extract 3-5 non-obvious cross-idea insights, "
+        f"and produce a concrete action blueprint (2-4 steps with time horizons).\n\n"
+        f'Return JSON: {{'
+        f'"core_solution": "integrated recommendation narrative (3-5 sentences)", '
+        f'"critical_insights": ["insight 1", "insight 2"], '
+        f'"action_blueprint": [{{"action": "...", "time_horizon": "...", "go_criteria": "...", "fallback": "..."}}], '
+        f'"open_questions": ["question 1"], '
+        f'"most_dangerous_assumption": "...", '
+        f'"dominant_bias": "...", '
+        f'"remaining_uncertainty": "..."'
+        f"}}"
     )
 
 

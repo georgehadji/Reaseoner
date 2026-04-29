@@ -508,6 +508,13 @@ async def run_stream(
                 logger.warning("Prompt enhancement failed, using original: %s", exc)
                 state.enhanced_problem = state.problem
 
+        # ── Context Vetting Serializer ───────────────────────────────────
+        def _ser_context_vetting(state: PipelineState) -> dict:
+            return {
+                "context_quality": getattr(state, "context_quality", "unknown"),
+                "tokens": state.phase_tokens.get("Phase 1.25: Context Vetting", {"input": 0, "output": 0}),
+            }
+
         async def _run_context_vetting(state: PipelineState):
             await pipeline._phase_context_vetting(state, source_type=req.source_type)
 
@@ -516,17 +523,17 @@ async def run_stream(
         phases: list[tuple[float, str, Any, Any]] = [
             (0, "Classification", pipeline._phase_0_classify, _ser_0),
         ]
-        if not (state.method == "writing" or state.decomposition):
+        is_brainstorming = (state.method == "brainstorming")
+        if not (state.method == "writing" or state.decomposition or is_brainstorming):
             phases.append((1, "Decomposition", pipeline._phase_1_decompose, _ser_1))
-            phases.append((1.25, "Context Vetting", _run_context_vetting, _ser_1))
-        else:
-            # Writing method: skip generic decomposition — article pipeline owns its own.
-            # Use a sentinel so the phase loop emits nothing for these slots.
+            phases.append((1.25, "Context Vetting", _run_context_vetting, _ser_context_vetting))
+        elif not is_brainstorming:
+            # Writing method or existing decomposition: skip generic decomposition/vetting
             async def _noop(s: PipelineState) -> None:  # noqa: E306
                 pass
             _noop._is_silent_noop = True  # type: ignore[attr-defined]
             phases.append((1, "Decomposition", _noop, _ser_1))
-            phases.append((1.25, "Context Vetting", _noop, _ser_1))
+            phases.append((1.25, "Context Vetting", _noop, _ser_context_vetting))
         phases.append((1.5, "Deep Read", pipeline._phase_deep_read, _ser_1_5))
 
         flow = build_default_flow_registry(pipeline)

@@ -1,4 +1,4 @@
-﻿# Meta-Orchestration Assessment — Reasoner (ARA Pipeline v2.2)
+﻿# Meta-Orchestration Assessment — Reasoner (Reasoner Pipeline v2.2)
 
 > **Protocol:** Meta-Orchestration Prompt v3.0
 > **Analyzed:** 2026-04-27
@@ -12,7 +12,7 @@
 
 | Context Item | Status | Value |
 |---|---|---|
-| System description | **[VF]** | Production-grade AI reasoning orchestrator (ARA v2.2). Hexagonal DDD + CQRS + Event Sourcing + Mixin Composition. FastAPI backend, Next.js frontend. |
+| System description | **[VF]** | Production-grade AI reasoning orchestrator (Reasoner v2.2). Hexagonal DDD + CQRS + Event Sourcing + Mixin Composition. FastAPI backend, Next.js frontend. |
 | Deployment status | **[UN]** | Claimed production-grade; actual deployment status unknown. |
 | P0/P1 incidents (30d) | **[UN]** | No incident data available in provided context. |
 | Team size | **[UN]** | Unknown. |
@@ -21,7 +21,7 @@
 ### 0.2 Decomposition & Scoring
 
 **Subsystem Mapping:**
-- **Core Logic:** ARAPipeline (902 lines), 11 mixins, 17 reasoning methods, 42 presets, 90+ model registry
+- **Core Logic:** ReasonerPipeline (902 lines), 11 mixins, 17 reasoning methods, 42 presets, 90+ model registry
 - **Data Layer:** SQLite event store (single-threaded), JSONL tagged memory, PostgreSQL (optional/lazy)
 - **External Deps:** OpenRouter (primary), SearXNG, Perplexity, Cohere, Supabase, Stripe, Redis, Ollama
 - **Interfaces:** FastAPI SSE streaming, WebSocket, Next.js App Router
@@ -31,7 +31,7 @@
 
 | Metric | Score | Justification |
 |---|---|---|
-| **C (Complexity)** | **8** [VF] | 902-line God Object (ARAPipeline) + 11 mixins. 5 architectural layers with known violations. 17 reasoning methods x 3 tiers = 51 flow variants. Event sourcing + CQRS present but bypassed in hot path. 647-line SearchMixin. Deferred imports to avoid cycles. |
+| **C (Complexity)** | **8** [VF] | 902-line God Object (ReasonerPipeline) + 11 mixins. 5 architectural layers with known violations. 17 reasoning methods x 3 tiers = 51 flow variants. Event sourcing + CQRS present but bypassed in hot path. 647-line SearchMixin. Deferred imports to avoid cycles. |
 | **S (Stability)** | **6** [ES] | Circuit breaker, rate limiter, fallback chains, 60+ tests, self-healing CI present. BUT: deferred imports, layer violations, God Object, SPOFs (OpenRouter, SQLite, SearXNG), Windows monkeypatch fragility. |
 | **F (Fragility)** | **7** [VF] | OpenRouter = SPOF for LLM. SearXNG = SPOF for search. SQLite = SPOF for event store (single-threaded ThreadPoolExecutor). 90+ models = 90+ failure modes. Perplexity silent fallback assumes 400 error semantics. |
 | **G (Growth)** | **5** [ES] | Rich feature set (SaaS billing, Neuro memory, 17 methods, image gen). Unknown actual usage. Active model registry expansion (NVIDIA NIM, Ling-2.6). |
@@ -75,7 +75,7 @@ Regret Potential = (C + F) x (10 - S) / 10
 
 **Selected Mode:** SIMPLIFY
 **Mode Confidence:** HIGH
-**Influential Metric:** C = 8 (highest complexity subsystem: ARAPipeline at 902 lines + 11 mixins)
+**Influential Metric:** C = 8 (highest complexity subsystem: ReasonerPipeline at 902 lines + 11 mixins)
 
 **Rejection Rationale:**
 - **HARDEN rejected** despite F=7 and [FRAGILE] active because protocol priority is SIMPLIFY > HARDEN > EXPAND, and the dominant state is OVER-COMPLEX. Hardening a God Object preserves the complexity that generates fragility.
@@ -87,13 +87,13 @@ Regret Potential = (C + F) x (10 - S) / 10
 
 ### 2.S.1 Target Selection
 
-**Target:** pipeline.py — ARAPipeline class (902 lines + 11 mixins)
+**Target:** pipeline.py — ReasonerPipeline class (902 lines + 11 mixins)
 
 **Justification [VF]:** The Architecture Mindmap explicitly flags this as a **High-severity God Object** — the #1 architectural risk in the system. It combines orchestration, LLM execution, caching, cost tracking, phase sequencing, and state mutation in a single class. Extracting a responsibility is the highest-leverage simplification possible.
 
 ### 2.S.2 Primary Simplification Path
 
-**Path:** Extract _call_llm_cached() and related LLM orchestration concerns from ARAPipeline into a standalone LLMExecutor class in infrastructure/llm/executor.py.
+**Path:** Extract _call_llm_cached() and related LLM orchestration concerns from ReasonerPipeline into a standalone LLMExecutor class in infrastructure/llm/executor.py.
 
 **What moves:**
 - _call_llm_cached() method (~80-100 lines)
@@ -109,14 +109,14 @@ Regret Potential = (C + F) x (10 - S) / 10
 **C delta:** -0.7 [ES]
 **Effort:** Small-Medium (2-3 hours, localized change)
 
-**Rationale:** This is a clear responsibility boundary violation. LLM execution (caching, routing, retry, cost tracking) is infrastructure/orchestration, not pipeline phase logic. Extracting it reduces ARAPipeline to its core concern: phase sequencing and state management.
+**Rationale:** This is a clear responsibility boundary violation. LLM execution (caching, routing, retry, cost tracking) is infrastructure/orchestration, not pipeline phase logic. Extracting it reduces ReasonerPipeline to its core concern: phase sequencing and state management.
 
 ### 2.S.3 Fallback Inventory
 
 | Fallback | Scope | C Delta | Risk Level |
 |---|---|---|---|
 | **Partial:** Extract only CostTrackingState mutation into CostTracker helper class. | Move cost tracking out of _call_llm_cached into a focused utility. | -0.3 | **Low** — cost tracking is already partially isolated in PipelineState. |
-| **Interface-only:** Define LLMExecutorProtocol in core/protocol.py without moving implementation. | Create a formal port for LLM execution. ARAPipeline depends on the protocol, not concrete method. | -0.1 | **Minimal** — pure additive change, no behavioral change. |
+| **Interface-only:** Define LLMExecutorProtocol in core/protocol.py without moving implementation. | Create a formal port for LLM execution. ReasonerPipeline depends on the protocol, not concrete method. | -0.1 | **Minimal** — pure additive change, no behavioral change. |
 
 ### 2.S.4 Rollback & Verification
 
@@ -124,14 +124,14 @@ Regret Potential = (C + F) x (10 - S) / 10
 
 **Rollback Trigger:**
 - pytest pass rate drops below 95% of baseline
-- ARAPipeline line count does not decrease by > 80 lines
+- ReasonerPipeline line count does not decrease by > 80 lines
 - New circular import introduced
 - _call_llm_cached no longer accessible to mixins (breaks mixin contract)
 
 **Verification Tests:**
 1. Run full pytest suite — assert >= 95% baseline pass rate
 2. Run python main.py --problem "test" --preset default — end-to-end smoke test
-3. Verify ARAPipeline no longer contains token_cache or build_provider inline logic
+3. Verify ReasonerPipeline no longer contains token_cache or build_provider inline logic
 4. Verify all 11 mixins still function (they call self._call_llm_cached() via LLMExecutor delegation)
 
 ---
@@ -145,7 +145,7 @@ Regret Potential = (C + F) x (10 - S) / 10
 | **Adversarial misuse** | LLMExecutor exposes only execute(state, role, prompt, config) — state is read/write but isolated from phase sequencing. No new attack surface. |
 | **10x load** | LLMExecutor delegates to existing ProviderRouter and TokenCache which already handle concurrency. No regression. |
 | **Primary dep collapse (OpenRouter)** | Fallback chain remains inside ProviderRouter, unchanged. LLMExecutor is a thin wrapper. |
-| **Maintenance attrition** | New file is ~100 lines with single responsibility. Easier to onboard than understanding 902-line ARAPipeline. |
+| **Maintenance attrition** | New file is ~100 lines with single responsibility. Easier to onboard than understanding 902-line ReasonerPipeline. |
 | **Partial rollback failure** | Change touches one new file + one modified file (pipeline.py). Git revert is trivial. No schema or API changes. |
 
 ### 3.2 Convergence Verification
@@ -167,9 +167,9 @@ Regret Potential = (C + F) x (10 - S) / 10
 
 ### 4.1 Summary
 
-1. **System State:** OVER-COMPLEX + FRAGILE. God Object (ARAPipeline, 902 lines) is the dominant complexity driver. Regret Potential = 6.0.
+1. **System State:** OVER-COMPLEX + FRAGILE. God Object (ReasonerPipeline, 902 lines) is the dominant complexity driver. Regret Potential = 6.0.
 2. **Mode & Confidence:** SIMPLIFY. HIGH confidence. Priority rule selects SIMPLIFY over HARDEN because C > 6 and [OVER-COMPLEX] is dominant.
-3. **Scoped Action Plan:** Extract _call_llm_cached() from ARAPipeline into infrastructure/llm/executor.py as LLMExecutor class. Reduces ARAPipeline by ~100 lines, creates clean infrastructure port, enables independent testing.
+3. **Scoped Action Plan:** Extract _call_llm_cached() from ReasonerPipeline into infrastructure/llm/executor.py as LLMExecutor class. Reduces ReasonerPipeline by ~100 lines, creates clean infrastructure port, enables independent testing.
 4. **Two Fallbacks:** (a) Partial — extract only CostTracker, C-0.3; (b) Interface-only — define LLMExecutorProtocol, C-0.1.
 5. **Risk/Regret Delta:** Regret Potential drops from 6.0 -> 5.5 [ES]. Complexity drops from 8.0 -> 7.3 [ES]. No fragility increase.
 6. **Rollback Protocol:** Git snapshot + 95% test pass gate + line-count gate. Revert if any gate fails.
@@ -209,7 +209,7 @@ Regret Potential = (C + F) x (10 - S) / 10
     "primary_metric": "C"
   },
   "execution": {
-    "target": "pipeline.py / ARAPipeline God Object",
+    "target": "pipeline.py / ReasonerPipeline God Object",
     "path": "Extract _call_llm_cached into infrastructure/llm/executor.py",
     "c_delta": -0.7,
     "effort": "Small-Medium",

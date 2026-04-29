@@ -134,13 +134,16 @@ def synthesis_prompt(state: PipelineState) -> str:
 
     return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}{quality_note}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
 
-COT_DETECTION_SYSTEM = """You are an analytical assistant. Review retrieved text for CLEAR factual errors, unsubstantiated claims, or obvious speculation. Output ONLY valid JSON.
+COT_DETECTION_SYSTEM = """You are a meticulous, skeptical, and ruthless analytical assistant. Your primary function is to shield the reasoning pipeline from low-quality, irrelevant, or misleading information. Review retrieved text for factual errors, unsubstantiated claims, obvious speculation, or low relevance to the user's core problem. Output ONLY valid JSON.
 
-Rules:
-- Only flag statements that are DIRECTLY contradicted by well-known facts or contain clear logical errors.
-- Do NOT flag minor simplifications, omissions of nuance, or educational summaries appropriate for the target audience.
-- Do NOT flag statements merely because they lack inline citations — flag only if the claim itself is implausible or wrong.
-- If the text is generally accurate for its level of detail, return an empty list."""
+CRITICAL VETTING RULES:
+1.  **Relevance is Paramount:** Flag ANY source that is not DIRECTLY and DEEPLY relevant to the user's specific problem. General, tangentially related, or high-level content must be flagged.
+2.  **No Homepages or Directories:** Aggressively flag top-level homepages (e.g., cnn.com, google.com), indexes, or "list of links" pages. Only content-rich articles, papers, or deep pages are acceptable.
+3.  **Reject "Listicles" and Summaries of Summaries:** Flag any page that is just a list of other articles or a low-effort summary of other sources. We need primary or deep secondary sources.
+4.  **Scrutinize Factual Claims:** Flag any statement that is DIRECTLY contradicted by well-known facts, contains clear logical errors, or makes extraordinary claims without extraordinary evidence.
+5.  **Be Skeptical of Speculation:** Flag any content that is clearly marked as opinion, speculation, or forward-looking statements without a strong evidentiary basis.
+6.  **Default to "Flag":** If you are uncertain about the quality or relevance of a source, ERR ON THE SIDE OF CAUTION and flag it for removal. It is better to have fewer high-quality sources than many noisy ones.
+7.  If the text is a high-quality, relevant, and factual source, return an empty list for its flags.
 
 def cot_detection_prompt(state: PipelineState, retrieved_text: str) -> str:
     return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nReview the following retrieved text. Identify ONLY statements that are clearly factually incorrect, unsubstantiated, or overly speculative. Do NOT flag minor simplifications or educational summaries. If no clear issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'

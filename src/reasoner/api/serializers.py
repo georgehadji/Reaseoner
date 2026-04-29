@@ -586,11 +586,11 @@ def _ser_4(state: PipelineState) -> dict:
     if bs and bs.get("developments"):
         return {
             "brainstorming_state": {
-                "developments": bs["developments"],
+                "developments": bs.get("developments", []),
                 "top_ideas": bs.get("top_ideas", []),
             },
             "tokens": next(
-                (v for k, v in state.phase_tokens.items() if k.startswith("Phase 4:")),
+                (v for k, v in state.phase_tokens.items() if k.startswith("Phase 4:") or k.startswith("Phase 7:")),
                 {"input": 0, "output": 0},
             ),
         }

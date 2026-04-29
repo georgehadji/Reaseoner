@@ -22,7 +22,7 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "mistral-small",
             "systemic": "glm-4.7-flash",
@@ -39,7 +39,7 @@ _PRESET_CONFIGS: list[dict] = [
             "destructive": "deepseek-v3",
             "systemic": "qwen3-plus",
             "minimalist": "deepseek-v3",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "qwen3-plus",
             "synthesis": "glm-4-air"
         },
@@ -49,7 +49,8 @@ _PRESET_CONFIGS: list[dict] = [
             "Stress testing: Mistral Small — stronger adversarial reasoning than Gemini Flash Lite",
             "Ministral-3B for minimalist: smallest Mistral model enforces conciseness by design",
             "Full run estimated at <$0.02 total",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -104,14 +105,14 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
-            "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "systemic": "glm-4.7-flash",
+            "minimalist": "minimax-m2.5",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
-            "synthesis": "gemini-flash-lite"
+            "synthesis": "deepseek-v3"
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
@@ -126,10 +127,12 @@ _PRESET_CONFIGS: list[dict] = [
             "synthesis": "glm-4-air"
         },
         "notes": [
+            "MiniMax M2.5: minimalist pilot — MiniMax lab diversity, fallback to ministral-3b if unavailable",
             "DeepSeek + Qwen + GLM: genuine cross-lab debate",
             "Gemma 4 26B for classification: cheap but capable",
             "Estimated <$0.015 per debate run",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -182,11 +185,11 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
-            "minimalist": "ministral-3b",
+            "systemic": "glm-4.7-flash",
+            "minimalist": "minimax-m2.5",
             "scoring": "mistral-small",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
@@ -204,10 +207,12 @@ _PRESET_CONFIGS: list[dict] = [
             "synthesis": "glm-4-air"
         },
         "notes": [
+            "MiniMax M2.5: minimalist pilot — MiniMax lab diversity, fallback to ministral-3b if unavailable",
             "6 different labs = genuine epistemic diversity",
             "Ministral-8b for minimalist: order-of-magnitude fewer tokens",
             "Estimated <$0.02 per jury run",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -229,8 +234,8 @@ _PRESET_CONFIGS: list[dict] = [
             "synthesis": "qwen3.6-plus",
             "expert_1": "claude-sonnet",
             "expert_2": "kimi-k2-6",
-            "expert_3": "gemini-pro",
-            "expert_4": "gemini-pro",
+            "expert_3": "deepseek-r1t2-chimera",
+            "expert_4": "qwen3.6-plus",
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
@@ -250,9 +255,12 @@ _PRESET_CONFIGS: list[dict] = [
         },
         "required_tier": "pro",
         "notes": [
-            "MiMo V2 Pro as primary model for strong reasoning in complex phases and an expert role.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
-            "Claude + Kimi + DeepSeek + Gemini + Perplexity + GLM = 6 ecosystems",
+            "Claude Sonnet: expert_1 — constitutional AI training, distinct reasoning style",
+            "Kimi K2.6: expert_2 — 1T MoE, 256K context, strongest OSS agentic reasoning",
+            "DeepSeek R1T2 Chimera: expert_3 — 85K+ adversarial RL environments, adversarial perspective",
+            "Qwen 3.6 Plus: expert_4 — Alibaba lab, 4th genuinely distinct training lineage",
+            "Claude + Kimi + DeepSeek + Qwen = 4 genuinely different labs (no duplicates)",
             "Sonar Pro for scoring: live web fact-checking of every candidate",
             "GLM-5.1 for synthesis fallback: 200K context, 34% hallucination, honest consensus synthesis",
         ],
@@ -266,12 +274,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -291,7 +299,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for iterative search reasoning",
             "Qwen for synthesis: strong multilingual output",
             "Gemma for classification: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -342,12 +351,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -367,7 +376,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for hypothesis generation: strong reasoning",
             "Qwen for testing: good at structured evaluation",
             "GLM for scoring: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -418,12 +428,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -443,7 +453,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for Socratic questions: strong reasoning",
             "Qwen for answers: good at structured response",
             "GLM for evaluation: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -494,12 +505,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -519,7 +530,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for failure scenarios: strong adversarial reasoning",
             "Qwen for backtracking: good at structured analysis",
             "GLM for signals: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -570,12 +582,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -595,7 +607,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for priors: strong reasoning",
             "Qwen for likelihood: good at structured analysis",
             "GLM for posterior: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -646,12 +659,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -671,7 +684,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for thesis: strong reasoning",
             "Qwen for antithesis: good at structured opposition",
             "GLM for synthesis: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -722,12 +736,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -747,7 +761,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for abstraction: strong reasoning",
             "Qwen for domain search: good at structured search",
             "GLM for mapping: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -798,18 +813,18 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max",
-            "expert_1": "gemini-flash-lite",
+            "expert_1": "deepseek-v3",
             "expert_2": "qwen3-max",
             "expert_3": "glm-4-air",
-            "expert_4": "gemini-flash-lite",
+            "expert_4": "mistral-small",
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
@@ -831,7 +846,9 @@ _PRESET_CONFIGS: list[dict] = [
             "4 cheap models in round-robin = genuine diversity",
             "DeepSeek + Qwen + GLM + Gemma: 4 different labs",
             "Estimated <$0.03 per Delphi run",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output, including expert roles."
+            "DeepSeek V3 for expert_1 + decomposition: strong reasoning at budget cost.",
+            "Mistral Small for expert_4: European lab — 4th genuinely distinct perspective.",
+            "Gemini Flash Lite: reserved for coordination roles only."
         ],
     },
     {
@@ -853,8 +870,8 @@ _PRESET_CONFIGS: list[dict] = [
             "synthesis": "gemini-pro",
             "expert_1": "claude-sonnet",
             "expert_2": "kimi-k2-6",
-            "expert_3": "gemini-pro",
-            "expert_4": "gemini-pro",
+            "expert_3": "deepseek-r1t2-chimera",
+            "expert_4": "qwen3.6-plus",
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
@@ -874,8 +891,12 @@ _PRESET_CONFIGS: list[dict] = [
         },
         "required_tier": "pro",
         "notes": [
-            "MiMo V2 Pro as primary model for strong reasoning in complex phases and an expert role.",
             "MiMo V2 Flash for efficient early-phase prompt enhancement and classification.",
+            "Claude Sonnet: expert_1 — constitutional AI training, distinct reasoning style",
+            "Kimi K2.6: expert_2 — 1T MoE, 256K context, strongest OSS agentic reasoning",
+            "DeepSeek R1T2 Chimera: expert_3 — 85K+ adversarial RL environments, adversarial perspective",
+            "Qwen 3.6 Plus: expert_4 — Alibaba lab, 4th genuinely distinct training lineage",
+            "Claude + Kimi + DeepSeek + Qwen = 4 genuinely different labs (no duplicates)",
             "Claude + Kimi K2.6 + DeepSeek + Gemini: 4 top ecosystems",
             "Perplexity Sonar Pro for fact-checking: live web verification",
             "GLM-5 for synthesis: top of Artificial Analysis Intelligence Index",
@@ -890,12 +911,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
-            "cove_draft": "gemini-flash-lite",
-            "cove_verify": "deepseek-v3",
-            "cove_answer": "glm-4-air",
+            "decomposition": "deepseek-v3",
+            "cove_draft": "deepseek-v3",
+            "cove_verify": "qwen3-max",
+            "cove_answer": "glm-5.1",
             "cove_revise": "gemini-flash-lite",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -915,7 +936,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for drafting: strong reasoning",
             "Qwen for verification: good at structured checking",
             "GLM for revision: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -966,11 +988,11 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
-            "sot_skeleton": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
+            "sot_skeleton": "deepseek-v3",
             "sot_solve": "qwen3-max",
-            "sot_assemble": "glm-4-air",
-            "scoring": "glm-4-air",
+            "sot_assemble": "glm-5.1",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -989,7 +1011,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for skeleton: strong reasoning",
             "Qwen for solving: good at structured problem-solving",
             "GLM for assembly: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -1038,12 +1061,12 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
-            "tot_decompose": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
+            "tot_decompose": "deepseek-v3",
             "tot_generate": "qwen3-max",
-            "tot_evaluate": "deepseek-v3",
+            "tot_evaluate": "glm-4-air",
             "tot_backtrack": "gemini-flash-lite",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -1063,7 +1086,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for decomposition: strong reasoning",
             "Qwen for generation: good at structured generation",
             "GLM for evaluation: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -1114,11 +1138,11 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "pot_generate": "deepseek-v3",
             "pot_execute": "qwen3-max",
-            "pot_interpret": "glm-4-air",
-            "scoring": "glm-4-air",
+            "pot_interpret": "glm-5.1",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -1137,7 +1161,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for generation: strong reasoning",
             "Qwen for execution: good at structured execution",
             "GLM for interpretation: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -1186,11 +1211,11 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
-            "sd_select": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
+            "sd_select": "deepseek-v3",
             "sd_adapt": "qwen3-max",
             "sd_implement": "deepseek-v3",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max"
         },
@@ -1209,7 +1234,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepSeek for selection: strong reasoning",
             "Qwen for adaptation: good at structured adaptation",
             "GLM for implementation: cheap but capable",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
     {
@@ -1260,22 +1286,22 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "qwen3-max",
-            "systemic": "glm-4-air",
+            "systemic": "glm-4.7-flash",
             "minimalist": "ministral-3b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
             "synthesis": "qwen3-max",
-            "subagent_synthesis_analysis": "gemini-flash-lite",
+            "subagent_synthesis_analysis": "deepseek-v3",
             "subagent_synthesis_writer": "qwen3-max",
             "subagent_critique_logic": "glm-4-air",
-            "subagent_critique_evidence": "gemini-flash-lite",
-            "subagent_critique_bias": "gemini-flash-lite",
+            "subagent_critique_evidence": "deepseek-v3",
+            "subagent_critique_bias": "mistral-small",
             "subagent_critique_counter": "qwen3-max",
             "subagent_enhancement": "gemini-flash-lite",
-            "subagent_decomposition": "gemini-flash-lite",
+            "subagent_decomposition": "deepseek-v3",
             "subagent_search_query": "qwen3-max",
             "subagent_search_eval": "glm-4-air",
         },
@@ -1376,17 +1402,17 @@ _PRESET_CONFIGS: list[dict] = [
         "description": "Research-backed article generation with CoVE, Pre-Mortem, and SoT using cheap cross-lab models. DeepSeek decomposes + CoVE verifies, Mistral extracts, Kimi K2.6 synthesizes via SoT, DeepSeek-R1 criticizes with Pre-Mortem. Estimated <$0.05 per article.",
         "primary_id": "gemini-flash-lite",
         "routing": {
-            "article_decompose": "gemini-flash-lite",
+            "article_decompose": "deepseek-v3",
             "article_claim_extract": "mistral-small",
             "article_cove_verify": "deepseek-v3",
             "article_cove_answer": "gemini-flash-lite",
-            "article_cove_revise": "gemini-flash-lite",
-            "article_verifier": "gemini-flash-lite",
-            "article_sot_skeleton": "gemini-flash-lite",
+            "article_cove_revise": "glm-4-air",
+            "article_verifier": "glm-4-air",
+            "article_sot_skeleton": "deepseek-v3",
             "article_sot_solve": "kimi-k2-6",
             "article_synthesize": "kimi-k2-6",
-            "article_pre_mortem": "gemini-flash-lite",
-            "article_critic": "gemini-flash-lite",
+            "article_pre_mortem": "mistral-small",
+            "article_critic": "qwen3-max",
             "article_assemble": "kimi-k2-6",
         },
         "fallback_routing": {
@@ -1404,11 +1430,12 @@ _PRESET_CONFIGS: list[dict] = [
             "article_assemble": "deepseek-v3",
         },
         "notes": [
-            "DeepSeek V3: CoVE verification — chain-of-thought training aligns naturally with fact-checking",
-            "Mistral Small: claim extraction — precise factual text extraction at $0.10/M vs $2.00/M for Large",
+            "DeepSeek V3: decompose + sot_skeleton + cove_verify — reasoning backbone for article structure",
+            "Mistral Small: claim extraction + pre_mortem — adversarial/factual European-lab perspective",
+            "Qwen3-Max: critic — independent adversarial review from different lab than generator",
             "Kimi K2.6: SoT section writing, synthesis, assembly — 1T MoE, 256K context, best OSS writing model",
-            "Gemini Flash Lite: reliable JSON and instruction-following for structural article phases",
-            "GLM-4-Air: universal fallback — cheapest capable model if primary fails",
+            "GLM-4-Air: cove_revise + verifier — light correction/verification tasks",
+            "Gemini Flash Lite: cove_answer only — short structured answer, low stakes",
             "Estimated <$0.05 per article"
         ],
     },
@@ -1529,7 +1556,7 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement": "gemini-flash-lite",
             "classification": "gpt-4o-mini",
-            "decomposition": "gemini-flash-lite",
+            "decomposition": "deepseek-v3",
             "constructive": "gemini-flash-lite",
             "destructive": "mistral-small",
             "systemic": "glm-4.7-flash",
@@ -1546,7 +1573,7 @@ _PRESET_CONFIGS: list[dict] = [
             "destructive": "deepseek-v3",
             "systemic": "qwen3-plus",
             "minimalist": "deepseek-v3",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "qwen3-plus",
             "synthesis": "glm-4-air",
         },
@@ -1557,7 +1584,8 @@ _PRESET_CONFIGS: list[dict] = [
             "DeepL free tier: 500K chars/month — sufficient for most use cases",
             "DeepL paid tier: 50M chars/month with next-gen model support",
             "Translation preserves formatting and line breaks",
-            "Gemini Flash Lite: low-cost primary workhorse with reliable JSON output across all structural phases."
+            "DeepSeek V3: decomposition backbone — stronger structured reasoning than Gemini Flash Lite at comparable cost.",
+            "Gemini Flash Lite: reserved for coordination roles (prompt_enhancement, constructive) — JSON formatting, low-stakes structure."
         ],
     },
 
@@ -1627,7 +1655,7 @@ _PRESET_CONFIGS: list[dict] = [
             "destructive": "mistral-large-3",
             "systemic": "deepseek-v3",
             "minimalist": "gemma-4-26b",
-            "scoring": "glm-4-air",
+            "scoring": "qwen3.5-flash",
             "stress_testing": "deepseek-v3",
             "synthesis": "qwen3-max",
         },
@@ -1654,7 +1682,7 @@ _PRESET_CONFIGS: list[dict] = [
         "routing": {
             "prompt_enhancement":  "gemini-flash-lite",
             "classification":      "gpt-4o-mini",
-            "decomposition":       "gemini-flash-lite",
+            "decomposition":       "deepseek-v3",
             "brainstorm_generate": "qwen3-max",
             "brainstorm_cluster":  "gemini-flash-lite",
             "brainstorm_develop":  "deepseek-v3",

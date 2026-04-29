@@ -351,19 +351,18 @@ class ReasonerPipeline(
         else:
             pass # Skipping _phase_1_decompose (decomposition already set).
 
-        # --- CONTEXT VETTING (NEW UNIVERSAL PHASE) ---
-        if not state.vetted_context: # Only vet context if not already done
-            await self._phase_context_vetting(state, source_type=self.source_type)
-        else:
-            pass # Skipping _phase_context_vetting (vetted_context already set).
-
-        # --- DYNAMIC METHOD BRANCHING ---
+        # --- DYNAMIC METHOD BRANCHING (detect early to control universal phases) ---
         method = self._get_method_from_preset()
         self._log("ORCHESTRATOR", f"Routing to '{method}' method pipeline.", state)
+
+        # --- CONTEXT VETTING (skip for brainstorming — pure ideation needs no web context) ---
+        if method != "brainstorming" and not state.vetted_context:
+            await self._phase_context_vetting(state, source_type=self.source_type)
 
         # --- DEEP READ (Optional - for critical sources) ---
         # Run deep read for research method, OR for technical/hybrid problems
         # that ask for learning resources, frameworks, or tutorials.
+        # Never run for brainstorming — VS generation works from the raw problem.
         _edu_keywords = {"learn", "tutorial", "framework", "steps", "how to", "getting started",
                          "βήματα", "μάθω", "εκμάθηση", "οδηγός", "resources"}
         _historical_religious_keywords = {
@@ -376,7 +375,7 @@ class ReasonerPipeline(
             state.task_type in (TaskType.TECHNICAL, TaskType.HYBRID, TaskType.ANALYTICAL)
             and any(kw in state.problem.lower() for kw in _edu_keywords | _historical_religious_keywords)
         )
-        if method == "research" or _is_knowledge_dense:
+        if method == "research" or (method != "brainstorming" and _is_knowledge_dense):
             await self._phase_deep_read(state)
         
         # --- CROSS-LANGUAGE TRANSLATION (Optional) ---
@@ -548,6 +547,12 @@ class ReasonerPipeline(
         self._log("SYNTHESIS", "Synthesizing final solution...", state)
 
         method_name = self._get_method_from_preset()
+
+        # ── Brainstorming path — synthesize from VS developments ──────────────
+        if method_name == "brainstorming":
+            await self._phase_synthesis_brainstorming(state)
+            return
+
         if method_name == "writing" and state.writing_state.get("final_article"):
             self._log("SYNTHESIS", "Using assembled article directly for writing workflow.", state)
             final_article = state.writing_state.get("final_article", "")

@@ -11,10 +11,68 @@ export function CritiqueCard({ data }: CritiqueCardProps) {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
   const scores = Array.isArray(d.scores) ? d.scores : [];
-  if (!scores.length) return null;
+  const criticScores = Array.isArray(d.critic_scores) ? d.critic_scores : [];
+  
+  if (!scores.length && !criticScores.length) return null;
 
   return (
     <div className="space-y-4">
+      {criticScores.map((cs: Record<string, unknown>, idx: number) => {
+        const criticId = typeof cs.critic_id === 'string' ? cs.critic_id : '?';
+        const criticModel = typeof cs.critic_model === 'string' ? cs.critic_model : '';
+        const candidateScores = cs.candidate_scores as Record<string, any>;
+        const dissentingNote = typeof cs.dissenting_note === 'string' ? cs.dissenting_note : '';
+
+        return (
+          <div
+            key={`critic-${idx}`}
+            className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"
+          >
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <span className="text-base font-medium text-[var(--text)]">
+                {criticId}
+              </span>
+              {criticModel && (
+                <span className="text-sm font-mono text-[var(--text-subtle)]">
+                  {criticModel.split('/').pop() || criticModel}
+                </span>
+              )}
+            </div>
+
+            {candidateScores && typeof candidateScores === 'object' && (
+              <div className="space-y-2 mt-2">
+                {Object.entries(candidateScores).map(([genId, dims], i) => {
+                  const total = typeof dims.total === 'number' ? dims.total : 0;
+                  const barWidth = Math.min(100, total * 10); // assuming 0-10 scale
+                  
+                  return (
+                    <div key={i} className="flex flex-col gap-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-[var(--text-muted)]">{genId}</span>
+                        <span className="font-mono font-semibold text-[var(--text)]">{total.toFixed(1)}</span>
+                      </div>
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-[var(--surface-3)]">
+                        <div
+                          className="h-full rounded-full bg-[var(--accent)] transition-all"
+                          style={{ width: `${barWidth}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {dissentingNote && (
+              <div className="mt-3 text-sm text-[var(--text-muted)] border-t border-[var(--border)] pt-2">
+                <span className="font-medium text-yellow-500/80">Dissenting Note:</span>{' '}
+                {dissentingNote}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
       {scores.map((s: Record<string, unknown>, idx: number) => {
         const perspective =
           typeof s.perspective === 'string'

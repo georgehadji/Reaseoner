@@ -394,8 +394,11 @@ class SearchMixin(PipelineMixinProtocol):
             state.context_quality = "partial"
         else:
             state.context_quality = "good"
-        self._log("VETTING", f"Context vetting complete. Quality: {state.context_quality}", state)
-        state.vetted_context = results
+            
+        clean_results = [r for r in results if not r.get("vetting_flags")]
+        dropped_count = total - len(clean_results)
+        self._log("VETTING", f"Context vetting complete. Removed {dropped_count} flagged sources. Quality: {state.context_quality}", state)
+        state.vetted_context = clean_results
 
     # ── Deep read ────────────────────────────────────────────────────────
 

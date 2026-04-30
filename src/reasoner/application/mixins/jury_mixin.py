@@ -65,6 +65,7 @@ class JuryMixin(PipelineMixinProtocol):
                     confidence_vs_accuracy_penalty=float(dims.get('confidence_vs_accuracy_penalty') or 0.0)
                 )
             data['candidate_scores'] = candidate_scores
+            data['critic_id'] = critic_id
             return CriticScore(**data)
 
         # Get critics from preset (simplified for now, assume roles exist)

@@ -82,7 +82,7 @@ def _ser_1_5(state: PipelineState) -> dict:
             "relevant_quotes": r.get("relevant_quotes", []),
             "extraction_success": r.get("extraction_success", False),
         }
-        if item["url"] and item["title"]:
+        if item["url"] and item["title"] and item.get("extraction_success"):
             clean.append(item)
 
     return {

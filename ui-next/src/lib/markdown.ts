@@ -987,6 +987,30 @@ export function buildMarkdownFromPhase(
   }
 
   // ── Critique & Pruning ──
+  if (Array.isArray(d.critic_scores) && d.critic_scores.length) {
+    append('**Critic Scores Matrix**\n');
+    (d.critic_scores as Array<Record<string, any>>).forEach((cs) => {
+      const criticId = typeof cs.critic_id === 'string' ? cs.critic_id : '';
+      const criticModel = typeof cs.critic_model === 'string' ? cs.critic_model : '';
+      const modelLabel = criticModel ? ` *(model: ${criticModel.split('/').pop() || criticModel})*` : '';
+      append(`#### ${criticId}${modelLabel}\n`);
+      
+      const candidateScores = cs.candidate_scores as Record<string, any>;
+      if (candidateScores && typeof candidateScores === 'object') {
+        Object.entries(candidateScores).forEach(([genId, scores]) => {
+          const total = typeof scores.total === 'number' ? scores.total.toFixed(1) : '?';
+          append(`- **${genId}** — total: ${total}\n`);
+          if (typeof scores.steel_man === 'string' && scores.steel_man.trim()) {
+            append(`  *Steel man:* ${scores.steel_man}\n`);
+          }
+        });
+      }
+      if (typeof cs.dissenting_note === 'string' && cs.dissenting_note.trim()) {
+        append(`> *Dissenting Note:* ${cs.dissenting_note}\n`);
+      }
+      append('\n');
+    });
+  }
   if (Array.isArray(d.scores) && d.scores.length) {
     append('**Scores**\n');
     (d.scores as Array<Record<string, any>>).forEach((s) => {

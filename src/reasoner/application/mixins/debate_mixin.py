@@ -100,7 +100,7 @@ class DebateMixin(PipelineMixinProtocol):
             raw, _ = r
             data = extract_json(raw)
             state.debate_rounds.append({
-                "phase": "cross_examine",
-                "side": data.get("side", "?"),
-                "challenges": data.get("challenges", []),
+                "round": 3,
+                "type": "cross_examination",
+                "challenges": data,
             })

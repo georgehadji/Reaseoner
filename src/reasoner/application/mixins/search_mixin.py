@@ -423,6 +423,7 @@ class SearchMixin(PipelineMixinProtocol):
 
         # Fallback: use top vetted results
         if not sources_to_scrape and state.vetted_context:
+            self._log("DEEP_READ", "No critical sources specified, using top 3 vetted sources.", state)
             sources_to_scrape = [
                 r.get("url") for r in state.vetted_context[:max_sources] if r.get("url")
             ]

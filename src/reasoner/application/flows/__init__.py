@@ -14,6 +14,7 @@ from reasoner.api.serializers import (
     _ser_writing_critic,
 )
 from reasoner.pipeline import ReasonerPipeline
+from reasoner.models import TaskType # Import TaskType for Adaptive Depth
 
 from .pipeline_flow import PhaseStep, PipelineFlow
 
@@ -31,11 +32,13 @@ def build_default_flow_registry(pipeline: ReasonerPipeline) -> PipelineFlow:
     flow = PipelineFlow()
 
     # ── Multi-Perspective (default) ────────────────────────────────────
-    flow.register("multi_perspective", [
+    multi_perspective_phases = [
         PhaseStep(2, "Perspectives",       pipeline._phase_2_perspectives, _ser_2),
         PhaseStep(3, "Critique & Pruning", pipeline._phase_3_critique,     _ser_3, critical=True),
-        PhaseStep(4, "Stress Testing",     pipeline._phase_4_stress_test,  _ser_4),
-    ])
+    ]
+    if pipeline.initial_state and pipeline.initial_state.complexity != "simple":
+        multi_perspective_phases.append(PhaseStep(4, "Stress Testing",     pipeline._phase_4_stress_test,  _ser_4))
+    flow.register("multi_perspective", multi_perspective_phases)
 
     # ── Debate ─────────────────────────────────────────────────────────
     flow.register("debate", [
@@ -45,11 +48,15 @@ def build_default_flow_registry(pipeline: ReasonerPipeline) -> PipelineFlow:
     ])
 
     # ── Jury / Orchestrated ────────────────────────────────────────────
-    flow.register("jury", [
+    jury_phases = [
         PhaseStep(2, "Generation Pool",     pipeline._phase_jury_generate,             _ser_2),
         PhaseStep(3, "Critic Pool",         pipeline._phase_jury_critique,             _ser_3, critical=True),
-        PhaseStep(4, "Verification & Meta", pipeline._phase_jury_verify_and_meta_eval, _ser_4),
-    ])
+    ]
+    # Skip verification for simple tasks or tasks not requiring factual claims (e.g., pure creative or strategic)
+    if (pipeline.initial_state and pipeline.initial_state.complexity != "simple") and \
+       (pipeline.initial_state and pipeline.initial_state.task_type not in [TaskType.CREATIVE, TaskType.STRATEGIC]):
+        jury_phases.append(PhaseStep(4, "Verification & Meta", pipeline._phase_jury_verify_and_meta_eval, _ser_4))
+    flow.register("jury", jury_phases)
 
     # ── Research ───────────────────────────────────────────────────────
     flow.register("research", [
@@ -161,7 +168,7 @@ def build_default_flow_registry(pipeline: ReasonerPipeline) -> PipelineFlow:
     # ── Writing (Research-Backed Article with CoVE, Pre-Mortem, SoT) ───
     flow.register("writing", [
         PhaseStep(2,    "Decompose Topic",       pipeline._phase_article_decompose,      _ser_2),
-        PhaseStep(2.5,  "Retrieve Sources",      pipeline._phase_article_retrieve,       _ser_2),
+        PhaseStep(2.5,  "Retrieve Sources",      pipeline._phase_article_retrieve,       _ser_2, critical=True),
         PhaseStep(3,    "Extract Claims (CoVE)", pipeline._phase_article_extract_claims,  _ser_3),
         PhaseStep(3.5,  "Adversarial Verify",    pipeline._phase_article_verify,          _ser_3, critical=True),
         PhaseStep(4,    "Synthesize (SoT)",      pipeline._phase_article_synthesize,      _ser_4),

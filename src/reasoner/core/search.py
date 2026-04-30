@@ -455,12 +455,18 @@ class PerplexitySearchClient:
             content = response.choices[0].message.content or ""
             citations = getattr(response, "citations", [])
 
+            url = (citations[0] or "") if citations else ""
+            if not url:
+                # Perplexity via OpenRouter often returns empty citations.
+                # Use a synthetic URL so the result isn't dropped by downstream filters.
+                url = f"perplexity://synthetic/{query[:40].replace(' ', '_')}"
             return [{
                 "title": f"Perplexity result for: {query[:50]}",
-                "url": (citations[0] or "") if citations else "",
+                "url": url,
                 "content": content,
                 "snippet": content[:TRUNCATION.SNIPPET],
                 "source": "perplexity",
+                "source_type": "synthetic",
                 "citations": citations,
                 "freshness_score": 1.0,
             }]
@@ -727,15 +733,29 @@ async def get_discovery_client(
 async def get_search_client(
     source_type: Optional[SourceType] = None,
 ) -> tuple[SearchClient, Optional[SourceType]]:
-    """Factory: returns Perplexity via OpenRouter if key available, else SearXNG."""
-    searxng_open = not await _SEARXNG_CB.can_execute()
+    """Factory: returns SearXNG when healthy, Perplexity when SearXNG is down or
+    when OpenRouter key is available and SearXNG fails."""
+    searxng_open = await _SEARXNG_CB.can_execute()
 
+    # Strategy 1: SearXNG is healthy — try it first for raw source diversity
+    if searxng_open:
+        try:
+            client, resolved_type = await get_discovery_client(source_type=source_type)
+            # Quick health check: perform a lightweight search
+            health_results = await client.search("test", num_results=1)
+            if health_results is not None:
+                return client, resolved_type
+        except Exception as exc:
+            logger.warning("SearXNG health check failed (%s) — considering fallback", exc)
+
+    # Strategy 2: SearXNG is down or unhealthy — use Perplexity if available
     if settings.OPENROUTER_API_KEY:
-        if searxng_open:
-            logger.info("SearXNG circuit OPEN — using Perplexity exclusively")
+        logger.info("SearXNG circuit OPEN/unhealthy — using Perplexity fallback")
         try:
             return PerplexitySearchClient(), source_type
         except ValueError:
-            # OpenRouter key missing or invalid, fall back to SearXNG
-            pass
+            logger.warning("Perplexity client init failed — falling back to SearXNG")
+
+    # Strategy 3: Last resort — return SearXNG even if circuit breaker suggests it's open.
+    # The caller's error handling will deal with actual failures.
     return await get_discovery_client(source_type=source_type)

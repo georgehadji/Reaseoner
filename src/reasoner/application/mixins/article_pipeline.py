@@ -366,20 +366,25 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                     num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY,
                     domain=self.domain,
                 )
-                return [
-                    {
+                mapped = []
+                for res in results:
+                    url = res.get("url", "")
+                    # Accept synthetic sources (e.g., Perplexity) even without real URLs
+                    if not url and res.get("source") == "perplexity":
+                        url = res.get("url", "")
+                    if not url:
+                        continue
+                    mapped.append({
                         "title": res.get("title", ""),
-                        "url": res.get("url", ""),
+                        "url": url,
                         "date": res.get("published", ""),
                         "authority_score": res.get("score", res.get("freshness_score", 0.0)),
                         "excerpt": res.get("content", "")[:800],
                         "source_type": res.get("source_type", "website"),
                         "query_id": query_id,
                         "query_text": query_text,
-                    }
-                    for res in results
-                    if res.get("url")
-                ]
+                    })
+                return mapped
             except Exception as exc:
                 self._log("ARTICLE", f"Search failed for '{query_text[:60]}': {exc}", state)
                 return []
@@ -408,17 +413,19 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
         self._log("ARTICLE", f"Initial retrieval: {len(ranked_sources)} ranked sources from {len(all_sources)} unique hits", state)
 
-        # Fallback: if no sources from subquestions, try a broad search with the original problem
+        # Fallback 1: if no sources from subquestions, try a broad search with the original problem
         if not ranked_sources:
             self._log("ARTICLE", "No sources from subquestions — trying broad fallback search...", state)
             try:
                 fallback_results = await client.search(
                     state.problem,
                     num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY * 2,
-                    domain=self.domain,
+                    domain=None,  # drop domain constraint for broader results
                 )
                 for res in fallback_results:
                     url = res.get("url", "")
+                    if not url and res.get("source") == "perplexity":
+                        url = res.get("url", "")
                     if url and url not in seen_urls:
                         seen_urls.add(url)
                         all_sources.append({
@@ -439,9 +446,55 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             except Exception as exc:
                 self._log("ARTICLE", f"Fallback search failed: {exc}", state)
 
+        # Fallback 2: if still empty, try with a different source type (news for current events)
+        if not ranked_sources:
+            self._log("ARTICLE", "Broad fallback empty — retrying with news source type...", state)
+            try:
+                from reasoner.core.search import get_discovery_client
+                news_client, _ = await get_discovery_client()
+                news_results = await news_client.search(
+                    state.problem,
+                    num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY * 2,
+                    source_type="news",
+                )
+                for res in news_results:
+                    url = res.get("url", "")
+                    if url and url not in seen_urls:
+                        seen_urls.add(url)
+                        all_sources.append({
+                            "title": res.get("title", ""),
+                            "url": url,
+                            "date": res.get("published", ""),
+                            "authority_score": res.get("score", res.get("freshness_score", 0.0)),
+                            "excerpt": res.get("content", "")[:800],
+                            "source_type": res.get("source_type", "news"),
+                            "query_id": "FALLBACK_NEWS",
+                            "query_text": state.problem,
+                        })
+                ranked_sources = sorted(
+                    (_normalize_source_record(source) for source in all_sources),
+                    key=lambda source: (float(source.get("authority_score", 0.0)), len(source.get("excerpt", ""))),
+                    reverse=True,
+                )[:ARTICLE_MAX_SOURCE_COUNT]
+            except Exception as exc:
+                self._log("ARTICLE", f"News fallback search failed: {exc}", state)
+
         state.web_discovery_results = ranked_sources
         state.writing_state["retrieved_sources"] = ranked_sources
-        self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources from {len(all_sources)} unique hits", state)
+
+        # Diagnostics: record what happened
+        diagnostics = {
+            "queries_executed": len(all_queries),
+            "unique_hits_before_dedup": len(all_sources) + len(seen_urls) - len({s.get("url") for s in all_sources}),
+            "ranked_sources": len(ranked_sources),
+            "fallback_attempts": [
+                "broad_problem_search" if any(s.get("query_id") == "FALLBACK" for s in all_sources) else None,
+                "news_source_type" if any(s.get("query_id") == "FALLBACK_NEWS" for s in all_sources) else None,
+            ],
+            "client_type": type(client).__name__,
+        }
+        state.writing_state["retrieval_diagnostics"] = diagnostics
+        self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources. Diagnostics: {diagnostics}", state)
 
         if not ranked_sources and state.vetted_context:
             self._log("ARTICLE", "No sources from search — using Phase 3 vetted context as fallback", state)
@@ -465,7 +518,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             self._log("ARTICLE", f"Vetted context fallback: {len(ranked_sources)} sources available", state)
 
         if not ranked_sources:
-            self._log("ARTICLE", "No sources found — falling back to knowledge-only synthesis", state)
+            self._log("ARTICLE", "No sources found — evidence gate will trigger before synthesis", state)
         elif len(ranked_sources) < ARTICLE_MIN_SOURCE_COUNT:
             self._log(
                 "ARTICLE",
@@ -482,6 +535,11 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         if not sources:
             self._log("ARTICLE", "No sources to extract claims from", state)
             state.pending_events.append({"type": "phase_warning", "message": "Skipped: no sources available from Phase 6 (Retrieve Sources)."})
+            state.writing_state["cove_draft_claims"] = []
+            state.writing_state["cove_verification_questions"] = []
+            state.writing_state["cove_verification_answers"] = []
+            state.writing_state["cove_changes_made"] = []
+            state.writing_state["cove_remaining_uncertainties"] = []
             return
 
         if len(sources) > ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION:
@@ -609,6 +667,8 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         if not claims:
             self._log("ARTICLE", "No claims to verify", state)
             state.pending_events.append({"type": "phase_warning", "message": "Skipped: no claims extracted from Phase 7 (Extract Claims)."})
+            state.writing_state["verifications"] = []
+            state.writing_state["metrics"] = self._calculate_metrics([], []).to_dict()
             return
 
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
@@ -701,7 +761,17 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
     def _calculate_metrics(self, claims: list[dict], verifications: list[dict]) -> ArticleMetrics:
         total = len(claims)
         if total == 0:
-            return ArticleMetrics()
+            # Sentinel values distinguish "no claims" from "all metrics are zero"
+            return ArticleMetrics(
+                total_claims=0,
+                verified_claims=0,
+                weak_claims=0,
+                conflicted_claims=0,
+                unknown_claims=0,
+                citation_accuracy=-1.0,
+                contradiction_rate=-1.0,
+                claim_support_ratio=-1.0,
+            )
 
         status_counts = {"VERIFIED": 0, "WEAK": 0, "CONFLICTED": 0, "UNKNOWN": 0}
         for v in verifications:
@@ -740,9 +810,44 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         verified_ids = {v["claim_id"] for v in verifications if v.get("status") in ("VERIFIED", "WEAK")}
         usable_claims = [c for c in claims if c.get("id", "") in verified_ids]
 
+        # ── Evidence Gate ──
+        retrieved_sources = state.writing_state.get("retrieved_sources", [])
+        if not usable_claims and len(retrieved_sources) < ARTICLE_MIN_SOURCE_COUNT:
+            self._log("ARTICLE", "EVIDENCE GATE: No usable claims and insufficient sources. Halting synthesis.", state)
+            diagnostics = state.writing_state.get("retrieval_diagnostics", {})
+            queries = diagnostics.get("queries_executed", 0)
+            fallback_attempts = [f for f in diagnostics.get("fallback_attempts", []) if f]
+            article_text = (
+                f"# Insufficient Evidence\n\n"
+                f"No authoritative sources could be retrieved for this topic.\n\n"
+                f"## What was attempted\n"
+                f"- {queries} search queries executed against the decomposition\n"
+            )
+            if fallback_attempts:
+                article_text += f"- Fallback attempts: {', '.join(fallback_attempts)}\n"
+            else:
+                article_text += "- No fallback attempts succeeded\n"
+            article_text += (
+                f"\n## Recommendations\n"
+                f"- Try a more specific query with named entities, dates, or events\n"
+                f"- Check that the search backend (SearXNG or Perplexity) is reachable\n"
+                f"- For rapidly evolving topics, try again in a few minutes\n"
+            )
+            state.writing_state["article"] = article_text
+            state.writing_state["sections"] = []
+            state.writing_state["abstract"] = "Insufficient evidence to produce a verified article."
+            state.writing_state["title"] = "Insufficient Evidence"
+            state.writing_state["gaps_noted"] = ["No sources retrieved", "No claims extracted"]
+            state.writing_state["insufficient_evidence"] = True
+            state.pending_events.append({
+                "type": "phase_warning",
+                "message": "Evidence gate triggered: no sources or verified claims available. Output is a failure report, not a research article.",
+            })
+            return
+
         if not usable_claims:
             self._log("ARTICLE", "No usable claims — falling back to knowledge-only synthesis", state)
-            if not state.writing_state.get("retrieved_sources"):
+            if not retrieved_sources:
                 state.pending_events.append({
                     "type": "phase_warning",
                     "message": "No sources or verified claims available. Output will rely on model knowledge only — treat as unverified.",
@@ -889,12 +994,34 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             state.errors.append(f"Article synthesize: parse error: {exc}")
             data = {}
 
-        state.writing_state["article"] = data.get("article", "")
-        state.writing_state["sections"] = data.get("sections", [])
+        article_text = data.get("article", "")
+        sections = data.get("sections", [])
+        if not article_text and sections:
+            # Reconstruct article text from sections if the model didn't provide it
+            lines = []
+            has_abstract_section = any(
+                sec.get("heading", "").lower().strip() in ("abstract", "summary", "overview")
+                for sec in sections
+            )
+            if data.get("title"):
+                lines.append(f"# {data['title']}\n")
+            if data.get("abstract") and not has_abstract_section:
+                lines.append(f"**Abstract:** {data['abstract']}\n")
+            for sec in sections:
+                heading = sec.get("heading", "")
+                content = sec.get("content", "")
+                if heading:
+                    lines.append(f"\n## {heading}\n")
+                if content:
+                    lines.append(content + "\n")
+            article_text = "\n".join(lines)
+
+        state.writing_state["article"] = article_text
+        state.writing_state["sections"] = sections
         state.writing_state["abstract"] = data.get("abstract", "")
         state.writing_state["title"] = data.get("title", "")
         state.writing_state["gaps_noted"] = data.get("gaps_noted", [])
-        self._log("ARTICLE", f"Monolithic synthesis: {len(data.get('sections', []))} sections", state)
+        self._log("ARTICLE", f"Monolithic synthesis: {len(sections)} sections", state)
 
     def _synthesizer_prompt(self, state: PipelineState, claims_json: str) -> str:
         has_claims = claims_json.strip() not in ("[]", "", "null")
@@ -960,6 +1087,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
     async def _phase_article_pre_mortem(self, state: PipelineState) -> None:
         """Pre-mortem analysis: imagine the article fails and work backwards."""
         self._log("ARTICLE", "Running pre-mortem analysis...", state)
+        if state.writing_state.get("insufficient_evidence"):
+            self._log("ARTICLE", "Pre-mortem skipped: insufficient evidence gate triggered", state)
+            return
         article = state.writing_state.get("article", "")
         claims = state.writing_state.get("claims", [])
         if not article:
@@ -1024,6 +1154,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
     async def _phase_article_critic(self, state: PipelineState) -> None:
         self._log("ARTICLE", "Running final journal review...", state)
+        if state.writing_state.get("insufficient_evidence"):
+            self._log("ARTICLE", "Journal review skipped: insufficient evidence gate triggered", state)
+            return
         article = state.writing_state.get("article", "")
         claims = state.writing_state.get("claims", [])
         if not article:
@@ -1031,12 +1164,25 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
             return
 
-        raw, _ = await self._call_llm_cached(
-            role="article_critic",
-            system_prompt=_CRITIC_SYSTEM,
-            user_prompt=self._critic_prompt(state, article, claims),
-            state=state,
-        )
+        import asyncio as _asyncio
+        try:
+            raw, _ = await _asyncio.wait_for(
+                self._call_llm_cached(
+                    role="article_critic",
+                    system_prompt=_CRITIC_SYSTEM,
+                    user_prompt=self._critic_prompt(state, article, claims),
+                    state=state,
+                ),
+                timeout=60.0,
+            )
+        except _asyncio.TimeoutError:
+            self._log("ARTICLE", "Journal review timed out after 60s — skipping", state)
+            state.pending_events.append({"type": "phase_warning", "message": "Journal Review timed out after 60s — proceeding without critique."})
+            state.writing_state["critic_corrections"] = []
+            state.writing_state["critic_score"] = 0
+            state.writing_state["must_revise"] = False
+            return
+
         try:
             data = extract_json(raw)
         except Exception as exc:
@@ -1183,11 +1329,25 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         doc_type = state.writing_state.get("document_type", "article")
         ref_heading = "References" if doc_type in ("paper", "thesis") else "Sources"
 
+        # Detect if abstract is already duplicated in sections
+        section_headings_lower = []
+        for sec in sections:
+            if isinstance(sec, dict):
+                h = sec.get("heading", "").lower().strip()
+            else:
+                h = getattr(sec, "heading", "").lower().strip()
+            section_headings_lower.append(h)
+        abstract_already_in_sections = any(
+            h in ("abstract", "summary", "overview") for h in section_headings_lower
+        )
+        if abstract_already_in_sections and abstract:
+            self._log("ARTICLE", "Abstract already present in sections — skipping duplicate", state)
+
         # Build final article text
         lines: list[str] = []
         if title:
             lines.append(f"# {title}\n")
-        if abstract:
+        if abstract and not abstract_already_in_sections:
             if doc_type in ("paper", "thesis"):
                 lines.append(f"## Abstract\n\n{abstract}\n")
             else:
@@ -1208,15 +1368,20 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             for g in gaps:
                 lines.append(f"- {g}\n")
 
-        # Add metrics section
+        # Add metrics section with sentinel handling
+        def _fmt_metric(val):
+            if isinstance(val, (int, float)) and val < 0:
+                return "N/A (no claims tracked)"
+            return str(val)
+
         lines.append("\n## Quality Metrics\n")
         lines.append(f"- Total Claims: {metrics.get('total_claims', 0)}\n")
         lines.append(f"- Verified: {metrics.get('verified_claims', 0)}\n")
         lines.append(f"- Weak: {metrics.get('weak_claims', 0)}\n")
         lines.append(f"- Conflicted: {metrics.get('conflicted_claims', 0)}\n")
-        lines.append(f"- Claim Support Ratio: {metrics.get('claim_support_ratio', 0)}\n")
-        lines.append(f"- Citation Accuracy: {metrics.get('citation_accuracy', 0)}\n")
-        lines.append(f"- Contradiction Rate: {metrics.get('contradiction_rate', 0)}\n")
+        lines.append(f"- Claim Support Ratio: {_fmt_metric(metrics.get('claim_support_ratio', 0))}\n")
+        lines.append(f"- Citation Accuracy: {_fmt_metric(metrics.get('citation_accuracy', 0))}\n")
+        lines.append(f"- Contradiction Rate: {_fmt_metric(metrics.get('contradiction_rate', 0))}\n")
 
         # Add conflict section if contradictions exist
         conflicted = [v for v in verifications if v.get("status") == "CONFLICTED"]

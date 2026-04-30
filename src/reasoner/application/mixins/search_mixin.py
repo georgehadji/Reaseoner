@@ -416,10 +416,14 @@ class SearchMixin(PipelineMixinProtocol):
         sources_to_scrape = []
 
         # Check if decomposition marked any sources as critical
-        if state.decomposition and isinstance(state.decomposition, dict):
-            critical_sources = state.decomposition.get("critical_sources", [])
+        if state.decomposition:
+            if isinstance(state.decomposition, dict):
+                critical_sources = state.decomposition.get("critical_sources", [])
+            else:
+                critical_sources = getattr(state.decomposition, "critical_sources", [])
+                
             if critical_sources:
-                sources_to_scrape = [s.get("url") for s in critical_sources if s.get("url")]
+                sources_to_scrape = [s.get("url") for s in critical_sources if isinstance(s, dict) and s.get("url")]
 
         # Fallback: use top vetted results
         if not sources_to_scrape and state.vetted_context:

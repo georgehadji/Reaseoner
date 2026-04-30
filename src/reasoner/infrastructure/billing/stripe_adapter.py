@@ -29,13 +29,20 @@ class StripeBillingAdapter(BillingPort):
         price_id = self._price_id_for_tier(tier)
         session = await asyncio.to_thread(
             stripe.checkout.Session.create,
-            payment_method_types=["card"],
+            payment_method_types=["card", "link"],
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
             success_url=success_url,
             cancel_url=cancel_url,
             client_reference_id=user_id,
             allow_promotion_codes=True,
+            automatic_tax={"enabled": True},
+            billing_address_collection="required",
+            payment_method_options={
+                "card": {
+                    "setup_future_usage": "off_session",
+                },
+            },
         )
         return session.url
 

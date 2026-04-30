@@ -63,7 +63,11 @@ const plans = [
 function isValidCheckoutUrl(url: string): boolean {
   try {
     const u = new URL(url);
-    return u.protocol === 'https:' && u.hostname.endsWith('.stripe.com');
+    // Stripe checkout URLs
+    if (u.protocol === 'https:' && u.hostname.endsWith('.stripe.com')) return true;
+    // PayPal checkout/approval URLs
+    if (u.protocol === 'https:' && (u.hostname === 'www.paypal.com' || u.hostname === 'www.sandbox.paypal.com')) return true;
+    return false;
   } catch {
     return false;
   }
@@ -71,15 +75,17 @@ function isValidCheckoutUrl(url: string): boolean {
 
 export default function PricingPage() {
   const [loadingTier, setLoadingTier] = useState<string | null>(null);
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
   const [error, setError] = useState('');
 
-  const handleUpgrade = async (tier: string) => {
+  const handleUpgrade = async (tier: string, provider: 'stripe' | 'paypal') => {
     setError('');
-    setLoadingTier(tier);
+    setLoadingTier(`${tier}:${provider}`);
     try {
-      const res = await apiFetch(`/api/billing/checkout?tier=${encodeURIComponent(tier)}`, {
-        method: 'POST',
-      });
+      const res = await apiFetch(
+        `/api/billing/checkout?tier=${encodeURIComponent(tier)}&provider=${provider}`,
+        { method: 'POST' }
+      );
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail || `Checkout failed (HTTP ${res.status})`);
@@ -96,6 +102,9 @@ export default function PricingPage() {
       setLoadingTier(null);
     }
   };
+
+  const isLoading = (tier: string, provider: 'stripe' | 'paypal') =>
+    loadingTier === `${tier}:${provider}`;
 
   return (
     <div className="flex min-h-screen flex-col bg-[var(--bg)] text-[var(--text)]">
@@ -156,18 +165,70 @@ export default function PricingPage() {
               </ul>
 
               {plan.tier !== 'free' && (
-                <button
-                  onClick={() => handleUpgrade(plan.tier)}
-                  disabled={!!loadingTier}
-                  className={`w-full rounded-xl py-2.5 font-medium transition-all disabled:opacity-40 ${
-                    plan.highlighted
-                      ? 'bg-[var(--accent)] text-[var(--accent-text)] hover:opacity-90'
-                      : 'border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--surface-3)]'
-                  }`}
-                  aria-busy={loadingTier === plan.tier}
-                >
-                  {loadingTier === plan.tier ? 'Loading…' : plan.tier === 'enterprise' ? 'Contact Sales' : 'Upgrade'}
-                </button>
+                <div className="space-y-2">
+                  {selectedTier === plan.tier ? (
+                    <>
+                      <button
+                        onClick={() => handleUpgrade(plan.tier, 'stripe')}
+                        disabled={!!loadingTier}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] py-2.5 font-medium text-[var(--accent-text)] transition-all hover:opacity-90 disabled:opacity-40"
+                        aria-busy={isLoading(plan.tier, 'stripe')}
+                      >
+                        {isLoading(plan.tier, 'stripe') ? (
+                          'Loading…'
+                        ) : (
+                          <>
+                            <CreditCard className="h-4 w-4" />
+                            Pay with Card
+                          </>
+                        )}
+                      </button>
+                      {/* Payment method badges */}
+                      <div className="flex items-center justify-center gap-2 text-[10px] text-[var(--text-subtle)]">
+                        <span className="rounded border border-[var(--border)] px-1.5 py-0.5">Visa</span>
+                        <span className="rounded border border-[var(--border)] px-1.5 py-0.5">Mastercard</span>
+                        <span className="rounded border border-[var(--border)] px-1.5 py-0.5">Apple Pay</span>
+                        <span className="rounded border border-[var(--border)] px-1.5 py-0.5">Google Pay</span>
+                      </div>
+                      <button
+                        onClick={() => handleUpgrade(plan.tier, 'paypal')}
+                        disabled={!!loadingTier}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] py-2.5 font-medium text-[var(--text)] transition-all hover:bg-[var(--surface-3)] disabled:opacity-40"
+                        aria-busy={isLoading(plan.tier, 'paypal')}
+                      >
+                        {isLoading(plan.tier, 'paypal') ? (
+                          'Loading…'
+                        ) : (
+                          <>
+                            {/* PayPal icon SVG */}
+                            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a3.35 3.35 0 0 0-.607-.541c-1.027-.707-2.503-1.023-4.19-1.023h-5.533c-.468 0-.868.334-.94.8l-1.828 11.597a.493.493 0 0 0 .488.572h3.968c.34 0 .63-.246.687-.583l.404-2.56a.684.684 0 0 1 .687-.583h1.737c3.62 0 5.958-1.758 6.723-5.445.317-1.575.154-2.89-.596-3.834z" />
+                            </svg>
+                            PayPal
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setSelectedTier(null)}
+                        className="w-full py-1 text-xs text-[var(--text-muted)] hover:text-[var(--text)]"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => setSelectedTier(plan.tier)}
+                      disabled={!!loadingTier}
+                      className={`w-full rounded-xl py-2.5 font-medium transition-all disabled:opacity-40 ${
+                        plan.highlighted
+                          ? 'bg-[var(--accent)] text-[var(--accent-text)] hover:opacity-90'
+                          : 'border border-[var(--border)] bg-[var(--surface-2)] text-[var(--text)] hover:bg-[var(--surface-3)]'
+                      }`}
+                    >
+                      {plan.tier === 'enterprise' ? 'Contact Sales' : 'Upgrade'}
+                    </button>
+                  )}
+                </div>
               )}
               {plan.tier === 'free' && (
                 <button
@@ -185,7 +246,7 @@ export default function PricingPage() {
         <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-[var(--text-subtle)]">
           <div className="flex items-center gap-1.5">
             <Shield className="h-4 w-4" />
-            <span>Secure Stripe checkout</span>
+            <span>Secure checkout (Stripe &amp; PayPal)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <CreditCard className="h-4 w-4" />

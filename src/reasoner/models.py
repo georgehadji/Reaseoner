@@ -221,6 +221,7 @@ class FinalSolution:
     claim_labels: dict[str, ClaimLabel]
     meta_audit: MetaCognitiveAudit
     sources: list[dict[str, str]] = field(default_factory=list)  # Citation sources: [{"title": "...", "url": "..."}]
+    layout_hints: dict[str, Any] = field(default_factory=dict) # Presentation hints: color, layout type
     # ORCHESTRATED method fields
     generator_attribution: dict[str, str] = field(default_factory=dict)  # generator_id → contribution summary
     critic_weighting: dict[str, float] = field(default_factory=dict)  # critic_id → weight based on reliability
@@ -261,6 +262,7 @@ class PipelineState:
     task_type: TaskType | None = None
     task_type_rationale: str = ""
     language: str = "English"  # Detected language from the problem
+    complexity: str | None = None # Estimated problem complexity (simple, medium, complex)
     decomposition: Decomposition | None = None
     candidates: list[SolutionCandidate] = field(default_factory=list)
     scores: list[CritiqueScore] = field(default_factory=list)

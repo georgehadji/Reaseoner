@@ -14,8 +14,14 @@ export const metadata: Metadata = {
   description:
     'Multi-method AI reasoning that decomposes complex problems, debates solutions, and delivers verified answers.',
   icons: {
-    icon: '/logo.svg',
-    shortcut: '/logo.svg',
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml', sizes: 'any' },
+      { url: '/favicon.ico', sizes: '48x48' },
+      { url: '/favicon-32x32.png', type: 'image/png', sizes: '32x32' },
+      { url: '/favicon-16x16.png', type: 'image/png', sizes: '16x16' },
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/apple-touch-icon.png',
   },
   openGraph: {
     title: 'Reasoner — Think with Certainty',

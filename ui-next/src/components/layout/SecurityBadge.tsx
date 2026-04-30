@@ -3,23 +3,22 @@
 import { useState } from 'react';
 import { Lock } from 'lucide-react';
 import { SecurityModal } from './SecurityModal';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/Button';
 
 export function SecurityBadge({ className }: { className?: string }) {
   const [isOpen, setIsOpen] = useState(false);
 
   return (
     <>
-      <button
+      <Button
+        variant="outline"
+        size="sm"
+        leftIcon={<Lock className="h-3.5 w-3.5" />}
         onClick={() => setIsOpen(true)}
-        className={cn(
-          'flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1 text-[10px] font-medium text-[var(--text-muted)] transition-all hover:border-[var(--text-subtle)] hover:text-[var(--text)] active:scale-[0.98]',
-          className
-        )}
+        className={className}
       >
-        <Lock className="h-3 w-3 text-green-500" />
-        <span>Secure</span>
-      </button>
+        Secure
+      </Button>
 
       <SecurityModal isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </>

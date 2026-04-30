@@ -68,21 +68,31 @@ class JuryMixin(PipelineMixinProtocol):
             data['critic_id'] = critic_id
             return CriticScore(**data)
 
-        # Get critics from preset (simplified for now, assume roles exist)
-        critic_roles = [cfg.role for name, cfg in self.phase_configs.items() if "critic" in name]
-        if not critic_roles:
-            critic_roles = ["critic_1", "critic_2", "critic_3"]
-            
-        tasks = [_get_jury_critique(role) for role in critic_roles]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for i, r in enumerate(results):
-            if isinstance(r, Exception):
-                role = critic_roles[i]
-                msg = f"Jury critic '{role}' failed: {r}"
+        if self.batch_critique_jury:
+            self._log("JURY_CRITIQUE", "Running batch critique (single panel critic)...", state)
+            try:
+                panel_score = await _get_jury_critique("panel_critic")
+                state.critic_scores.append(panel_score)
+            except Exception as exc:
+                msg = f"Batch jury critic failed: {exc}"
                 self._log("JURY_CRITIQUE", msg, state)
                 state.errors.append(msg)
-            else:
-                state.critic_scores.append(r)
+        else:
+            # Get critics from preset (simplified for now, assume roles exist)
+            critic_roles = [cfg.role for name, cfg in self.phase_configs.items() if "critic" in name]
+            if not critic_roles: # Fallback if config is minimal
+                critic_roles = ["critic_1", "critic_2", "critic_3"]
+                
+            tasks = [_get_jury_critique(role) for role in critic_roles]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, r in enumerate(results):
+                if isinstance(r, Exception):
+                    role = critic_roles[i]
+                    msg = f"Jury critic '{role}' failed: {r}"
+                    self._log("JURY_CRITIQUE", msg, state)
+                    state.errors.append(msg)
+                else:
+                    state.critic_scores.append(r)
 
         # After critiques, identify if any candidates need recovery path
         for critic_score in state.critic_scores:

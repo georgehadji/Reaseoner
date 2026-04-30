@@ -61,7 +61,38 @@ JSON: {{"causal_chain": [{{"step": 1, "action": "<action>", "produces": ["<outpu
 
 Rules: Max 5 steps. Surface assumptions with rationale. VERIFIED assumptions MUST cite a source_hint. If web results exist, list 1-2 critical_sources. Be specific.'''
 
-SYNTHESIS_SYSTEM = """You are an analytical assistant. Integrate insights honestly. Acknowledge uncertainty.
+FUSION_SYSTEM = """You are an analytical assistant. Your job is to classify the task type, detect the language, and decompose the problem into a causal chain. Output ONLY valid JSON."""
+
+def fusion_prompt(state: PipelineState, language: str) -> str:
+    lang_instruction = get_language_instruction(PipelineState(problem="", language=language))
+    is_jury = "jury" in (state.preset_name or "")
+    jury_instr = " Add jury_guidelines." if is_jury else ""
+    web_context = f"\nWeb: {state.web_discovery_results[:TRUNCATION.KEY_INSIGHTS]}" if state.web_discovery_results else ""
+    followup = _followup_context(state)
+
+    return (
+        f'{lang_instruction}\n\nProblem: {_wrap_user_input(state.problem)}{web_context}{followup}\n\n'
+        f'First, choose exactly ONE task type from: analytical, strategic, creative, technical, predictive, hybrid. '
+        f'Then, decompose the problem into a causal chain (max 5 steps). {jury_instr}\n\n'
+        f'Output JSON: {{\n'
+        f'  "task_type": "analytical",\n'
+        f'  "task_rationale": "<why this task type>",\n'
+        f'  "language": "{language}",\n'
+        f'  "causal_chain": [{{"step": 1, "action": "<action>", "produces": ["<output>"]}}],\n'
+        f'  "assumptions": [{{"text": "<assumption>", "label": "VERIFIED|HYPOTHESIS|UNKNOWN", "rationale": "<why>", "source_hint": "<source name or URL if VERIFIED>"}}],\n'
+        f'  "failure_modes": ["<failure>"],\n'
+        f'  "critical_sources": [{{"url": "<URL>", "reason": "<why it matters>"}}]\n'
+        f'}}\n\n'
+        f'Rules: Max 5 steps for causal_chain. Surface assumptions with rationale. VERIFIED assumptions MUST cite a source_hint. If web results exist, list 1-2 critical_sources. Be specific.'
+    )
+
+SYNTHESIS_SYSTEM = """You are a senior analytical strategist and expert technical writer. Your goal is to produce a definitive, professional synthesis that resolves complex problems with clarity and authority.
+
+STYLE MANDATE (PROFESSIONALISM):
+1.  **Crisp & Precise:** Use direct, high-signal language. Avoid "corporate fluff," filler phrases, and generic signposting.
+2.  **Visual Hierarchy:** Use clear Markdown headings (###), bolding for key terms, and bulleted lists for readability.
+3.  **Logical Flow:** Start with a high-level summary, move into thematic deep-dives, and end with a concrete path forward.
+4.  **Tone:** Authoritative yet epistemically honest. Acknowledge the limits of the data without sacrificing clarity.
 
 LANGUAGE RULE (CRITICAL):
 - The user has explicitly requested a specific language at the start of the prompt.
@@ -69,30 +100,24 @@ LANGUAGE RULE (CRITICAL):
 - Do NOT use English unless the user explicitly asked for English.
 
 FORMAT RULES:
-- Use this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] followed by a JSON block in ```json...```
+- Use this exact format: [SOLUTION]...prose with structured headings and citations...[/SOLUTION] followed by a JSON block in ```json...```
 - If you cannot produce the [SOLUTION] tag, return ONLY the JSON block; the pipeline will synthesize prose for you.
-- Output valid JSON inside the fence with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.
+- Output valid JSON inside the fence with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources, layout_hints.
 
 CITATION REQUIREMENTS:
-- When referencing information from web sources, include citations in your response
-- Use format: [source_title](url) after each claim from a source
+- Use format: [source_title](url) after each claim from a source.
 - You MUST only cite sources listed in the WEB SOURCES section above. Do not invent or reuse URLs from memory.
-- Include all sources used in a "sources" array in the JSON output
-- If no sources were used, set sources to empty array []
+- Include all sources used in a "sources" array in the JSON output.
+
+LAYOUT HINTS (JSON Field):
+- Provide a `layout_hints` object with keys: `primary_theme_color` (hex), `suggested_layout` ("standard"|"academic"|"executive"), and `important_sections` (array of section headers).
 
 ACTION BLUEPRINT RULES:
 - Each item MUST be an object with keys: step, action, time_horizon, go_criteria, fallback.
-- Do not use "?" or other placeholder keys. If you cannot produce a concrete action, return an empty list.
-
-META AUDIT REQUIREMENTS:
-- Only include meta_audit if you have genuine audit data from a real review process
-- If no real audit data exists, set every meta_audit field to an empty string
-- Do NOT invent dates, scores, or review statuses
 
 CIRCUIT BREAKER:
-- If you could not find reliable sources or the context is contaminated, say so explicitly.
-- Do NOT synthesize confident answers from UNVERIFIED or missing data.
-- Flag uncertainty honestly rather than hallucinating certainty.""" + HUMANIZATION_RULES
+- If sources are missing or unreliable, flag this explicitly in the abstract or a "Data Integrity" section.
+- Do NOT synthesize confident answers from UNVERIFIED data.""" + HUMANIZATION_RULES
 
 def synthesis_prompt(state: PipelineState) -> str:
     final_context = state.to_context_dict(phase="synthesis")
@@ -132,7 +157,7 @@ def synthesis_prompt(state: PipelineState) -> str:
     followup = _followup_context(state)
     quality_note = f"\nCONTEXT QUALITY: {state.context_quality}\n" if state.context_quality and state.context_quality != "unknown" else ""
 
-    return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}{quality_note}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with citations like [Title](url)...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources.'
+    return f'{get_language_instruction(state)}\n\nFinal Context:\n{_wrap_external_content(json.dumps(final_context, indent=2))}\n{_wrap_external_content(sources_info)}{followup}{quality_note}\n\n{method_hint}\n\nUse this exact format: [SOLUTION]...prose with structured headings and citations...[/SOLUTION] ```json...``` with fields: critical_insights, action_blueprint, open_questions, claim_labels, meta_audit, sources, layout_hints.'
 
 COT_DETECTION_SYSTEM = """You are a meticulous, skeptical, and ruthless analytical assistant. Your primary function is to shield the reasoning pipeline from low-quality, irrelevant, or misleading information. Review retrieved text for factual errors, unsubstantiated claims, obvious speculation, or low relevance to the user's core problem. Output ONLY valid JSON.
 

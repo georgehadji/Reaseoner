@@ -6,6 +6,7 @@ import asyncio
 import logging
 import random
 from abc import ABC, abstractmethod
+from typing import AsyncIterator # Add AsyncIterator import
 
 from reasoner.exceptions import (
     ReasonerError,
@@ -38,6 +39,15 @@ class BaseLLMProvider(ABC):
         temperature: float = DEFAULT_TEMPERATURE,
     ) -> str: ...
 
+    @abstractmethod
+    async def stream_complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        temperature: float = DEFAULT_TEMPERATURE,
+    ) -> AsyncIterator[str]: ...
+
     async def complete_with_retry(
         self,
         system_prompt: str,
@@ -60,5 +70,32 @@ class BaseLLMProvider(ABC):
                     await asyncio.sleep(min(2 ** attempt, 4) + random.uniform(0, 0.5))
         raise LLMError(
             f"{self.__class__.__name__}({self.model}) failed "
+            f"after {self.max_retries} retries: {last_error}"
+        ) from last_error
+
+    async def stream_complete_with_retry(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = 2048,
+        temperature: float = 0.7,
+    ) -> AsyncIterator[str]:
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                async for chunk in self.stream_complete(
+                    system_prompt, user_prompt, max_tokens, temperature
+                ):
+                    yield chunk
+                return # Success
+            except Exception as exc:
+                last_error = exc
+                # Don't retry non-retryable errors
+                if not is_retryable(exc):
+                    raise
+                if attempt < self.max_retries:
+                    await asyncio.sleep(min(2 ** attempt, 4) + random.uniform(0, 0.5))
+        raise LLMError(
+            f"{self.__class__.__name__}({self.model}) stream failed "
             f"after {self.max_retries} retries: {last_error}"
         ) from last_error

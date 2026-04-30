@@ -245,7 +245,7 @@ def _ser_2(state: PipelineState) -> dict:
         }
 
     writing = _get_v(state, 'writing_state', {})
-    if writing and writing.get("retrieved_sources"):
+    if writing and "retrieved_sources" in writing:
         # "Retrieve Sources" phase completed — show sources, not subquestions
         return {
             "writing_state": {
@@ -478,7 +478,7 @@ def _ser_3(state: PipelineState) -> dict:
         }
 
     writing = _get_v(state, 'writing_state', {})
-    if writing and writing.get("cove_draft_claims"):
+    if writing and "cove_draft_claims" in writing:
         return {
             "writing_state": {
                 "cove_draft_claims": writing.get("cove_draft_claims", []),
@@ -490,10 +490,10 @@ def _ser_3(state: PipelineState) -> dict:
             },
             "tokens": state.phase_tokens.get("Phase 3: Extract Claims (CoVE)", {"input": 0, "output": 0}),
         }
-    if writing and writing.get("claims"):
+    if writing and "claims" in writing:
         return {
             "writing_state": {
-                "claims": writing["claims"],
+                "claims": writing.get("claims", []),
                 "verifications": writing.get("verifications", []),
                 "metrics": writing.get("metrics", {}),
             },
@@ -564,10 +564,10 @@ def _ser_4(state: PipelineState) -> dict:
         }
 
     dialectical = _get_v(state, 'dialectical_state', {})
-    if dialectical and dialectical.get("irreconcilable"):
+    if dialectical and (dialectical.get("irreconcilable") or dialectical.get("compatible") or dialectical.get("synthesis_candidates")):
         return {
             "dialectical_state": {
-                "irreconcilable": dialectical["irreconcilable"],
+                "irreconcilable": dialectical.get("irreconcilable", []),
                 "compatible": dialectical.get("compatible", []),
                 "synthesis_candidates": dialectical.get("synthesis_candidates", []),
             },
@@ -668,7 +668,7 @@ def _ser_4(state: PipelineState) -> dict:
 
     # Writing flow — SoT synthesis (check before pre_mortem/critic since article persists)
     writing = _get_v(state, 'writing_state', {})
-    if writing and (writing.get("article") or writing.get("sot_sections")):
+    if writing and (writing.get("article") or writing.get("sot_sections") or writing.get("sections")):
         return {
             "writing_state": {
                 "article": writing.get("article", ""),
@@ -765,6 +765,9 @@ def _ser_writing_premortem(state: PipelineState) -> dict:
     """Serializer dedicated to the article Pre-Mortem phase (4.25)."""
     writing = _get_v(state, 'writing_state', {})
     pm = writing.get("pre_mortem", {}) if writing else {}
+    # Prefer the revised article if corrections were applied, else show original
+    article_original = writing.get("article", "") if writing else ""
+    article_revised = writing.get("article_revised", "") if writing else ""
     return {
         "writing_state": {
             "pre_mortem": {
@@ -777,7 +780,8 @@ def _ser_writing_premortem(state: PipelineState) -> dict:
                 "early_warnings": pm.get("early_warnings", []),
             },
             # surface the current article draft alongside so the UI can show both
-            "article": writing.get("article", "") if writing else "",
+            "article": article_revised if article_revised else article_original,
+            "article_original": article_original if article_revised else "",
         },
         "tokens": state.phase_tokens.get("Phase 4.25: Pre-Mortem", {"input": 0, "output": 0}),
     }
@@ -1010,6 +1014,7 @@ def _ser_synthesis(state: PipelineState) -> dict:
             "open_questions": _get_v(fs, "open_questions", []),
             "claim_labels": clean_labels,
             "meta_audit": meta_audit,
+            "layout_hints": _get_v(fs, "layout_hints", {}),
             "tokens": {"input": total_input, "output": total_output},
         }
 

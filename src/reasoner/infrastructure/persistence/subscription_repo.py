@@ -35,27 +35,68 @@ class PostgresSubscriptionRepository:
         return self._pool
 
     async def upsert_subscription(self, sub: Subscription) -> None:
-        """Idempotently update subscription in Postgres."""
+        """Idempotently update subscription in Postgres.
+
+        Handles both Stripe and PayPal subscriptions by checking
+        stripe_sub_id, paypal_sub_id, or user_id.
+        """
         pool = await self._get_pool()
-        await pool.execute(
-            """
-            INSERT INTO subscriptions (user_id, tier, status, stripe_sub_id, stripe_customer_id, current_period_end)
-            VALUES ($1, $2, $3, $4, $5, $6)
-            ON CONFLICT (stripe_sub_id) DO UPDATE SET
-                user_id = EXCLUDED.user_id,
-                tier = EXCLUDED.tier,
-                status = EXCLUDED.status,
-                stripe_customer_id = EXCLUDED.stripe_customer_id,
-                current_period_end = EXCLUDED.current_period_end,
-                updated_at = NOW()
-            """,
-            str(sub.user_id),
-            sub.tier.value,
-            sub.status.value,
-            sub.stripe_subscription_id,
-            sub.stripe_customer_id,
-            sub.current_period_end,
-        )
+        # Try to find existing subscription by any known provider ID
+        existing = None
+        if sub.stripe_subscription_id:
+            existing = await pool.fetchrow(
+                "SELECT id FROM subscriptions WHERE stripe_sub_id = $1",
+                sub.stripe_subscription_id,
+            )
+        if existing is None and sub.paypal_subscription_id:
+            existing = await pool.fetchrow(
+                "SELECT id FROM subscriptions WHERE paypal_sub_id = $1",
+                sub.paypal_subscription_id,
+            )
+        if existing is None:
+            existing = await pool.fetchrow(
+                "SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
+                str(sub.user_id),
+            )
+
+        if existing:
+            await pool.execute(
+                """
+                UPDATE subscriptions
+                SET user_id = $1,
+                    tier = $2,
+                    status = $3,
+                    stripe_sub_id = COALESCE($4, stripe_sub_id),
+                    stripe_customer_id = COALESCE($5, stripe_customer_id),
+                    paypal_sub_id = COALESCE($6, paypal_sub_id),
+                    current_period_end = $7,
+                    updated_at = NOW()
+                WHERE id = $8
+                """,
+                str(sub.user_id),
+                sub.tier.value,
+                sub.status.value,
+                sub.stripe_subscription_id,
+                sub.stripe_customer_id,
+                sub.paypal_subscription_id,
+                sub.current_period_end,
+                existing["id"],
+            )
+        else:
+            await pool.execute(
+                """
+                INSERT INTO subscriptions
+                (user_id, tier, status, stripe_sub_id, stripe_customer_id, paypal_sub_id, current_period_end)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                """,
+                str(sub.user_id),
+                sub.tier.value,
+                sub.status.value,
+                sub.stripe_subscription_id,
+                sub.stripe_customer_id,
+                sub.paypal_subscription_id,
+                sub.current_period_end,
+            )
 
     async def sync_quota_for_subscription(self, sub: Subscription) -> None:
         """Sync quota limits for a subscription without resetting used_queries on update.
@@ -133,11 +174,20 @@ class PostgresSubscriptionRepository:
             stripe_sub_id,
         )
 
+    async def set_subscription_status_by_paypal(self, paypal_sub_id: str, status: str) -> None:
+        """Update subscription status by PayPal subscription ID."""
+        pool = await self._get_pool()
+        await pool.execute(
+            "UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE paypal_sub_id = $2",
+            status,
+            paypal_sub_id,
+        )
+
     async def get_subscription_by_user(self, user_id: str) -> Subscription | None:
         """Fetch the active subscription for a user."""
         pool = await self._get_pool()
         row = await pool.fetchrow(
-            "SELECT user_id, tier, status, stripe_sub_id, stripe_customer_id, current_period_end "
+            "SELECT user_id, tier, status, stripe_sub_id, stripe_customer_id, paypal_sub_id, current_period_end "
             "FROM subscriptions WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1",
             user_id,
         )
@@ -150,5 +200,6 @@ class PostgresSubscriptionRepository:
             status=SubscriptionStatus(row["status"]),
             stripe_subscription_id=row["stripe_sub_id"],
             stripe_customer_id=row["stripe_customer_id"],
+            paypal_subscription_id=row["paypal_sub_id"],
             current_period_end=row["current_period_end"],
         )

@@ -291,6 +291,9 @@ async def main(args: argparse.Namespace) -> None:
             else:
                 print(f"  [Gate] Pipeline selected ({decision.method or 'multi_perspective'}).\n")
 
+        # Retrieve the final preset after potential auto-routing
+        final_preset = get_preset(effective_preset_name)
+
         pipeline = ReasonerPipeline(
             router=router,
             initial_state=initial_state,
@@ -301,6 +304,8 @@ async def main(args: argparse.Namespace) -> None:
             source_type=args.source_type,
             domain=args.domain or None,
             enhance_prompt=args.enhance_prompt,
+            complexity=decision.complexity if not args.force_pipeline else None, # Pass complexity from HyperGate if not forcing pipeline
+            batch_critique_jury=final_preset.batch_critique_jury if final_preset else False,
         )
 
         state = await pipeline.run(problem)

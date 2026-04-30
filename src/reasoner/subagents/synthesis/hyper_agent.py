@@ -125,6 +125,7 @@ class SynthesisHyperAgent:
             claim_labels=clean_labels,
             meta_audit=meta_audit,
             sources=result.get("sources", []),
+            layout_hints=result.get("layout_hints", {}),
             generator_attribution={},
             critic_weighting={},
         )

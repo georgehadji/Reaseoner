@@ -185,7 +185,7 @@ def create_neuro_router(config: Optional[NeuroConfig] = None) -> APIRouter:
     if config is None:
         config = load_config()
 
-    router = APIRouter(prefix="/neuro")
+    router = APIRouter(prefix="/api/neuro")
     reasoner = create_resilient_reasoning(config.reasoning)
     embedder = create_resilient_embedding(config.embedding)
     tenants = TenantManager(config)

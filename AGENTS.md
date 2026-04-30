@@ -1,4 +1,3 @@
-<!-- From: E:\Documents\Vibe-Coding\Reasoner\AGENTS.md -->
 # AGENTS.md — Reasoner (Reasoner Pipeline v2.2)
 
 > This file is written for AI coding agents. It assumes you know nothing about this project.
@@ -8,7 +7,7 @@
 
 ## 1. Project Overview
 
-**Reasoner** (also called Reasoner) is a production-grade AI reasoning orchestrator written in Python with a Next.js frontend. It decomposes complex problems into structured multi-phase pipelines, leverages multiple LLMs from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling.
+**Reasoner** is a production-grade AI reasoning orchestrator written in Python with a Next.js frontend. It decomposes complex problems into structured multi-phase pipelines, leverages multiple LLMs from diverse training ecosystems in parallel, applies independent critique, stress-tests solutions, and synthesizes actionable recommendations with epistemic labeling.
 
 - **Version:** 2.1.0 (Python package), v2.2 (project)
 - **Python:** 3.12+
@@ -57,13 +56,14 @@ It is not a chatbot. It is a **reasoning orchestrator** that treats reasoning as
 | Icons | lucide-react |
 | Animation | framer-motion |
 | Charts | recharts |
+| 3D Graphics | three.js, @types/three |
 | Payments | `@stripe/react-stripe-js` |
 | Auth | `@supabase/supabase-js` |
 | Error Tracking | `@sentry/nextjs` |
 | Testing | Vitest v4, @testing-library/react, @playwright/test |
 | Linting | ESLint 9 flat config (`eslint.config.mjs`) |
 
-**Critical frontend note:** Tailwind CSS v4 does **NOT** use a `tailwind.config.ts` file. Configuration is CSS-native via `@import "tailwindcss" in `globals.css` and the `@tailwindcss/postcss` PostCSS plugin. Do **not** create a `tailwind.config.ts`.
+**Critical frontend note:** Tailwind CSS v4 does **NOT** use a `tailwind.config.ts` file. Configuration is CSS-native via `@import "tailwindcss"` in `globals.css` and the `@tailwindcss/postcss` PostCSS plugin. However, a legacy `tailwind.config.js` (v3-style) still exists in `ui-next/` for backward compatibility — do not delete it without verifying nothing depends on it, but prefer CSS-native configuration for new work.
 
 ---
 
@@ -86,17 +86,20 @@ Reasoner/
 ├── parsing.py              # Backward-compat parsing shim
 ├── scraper.py              # Backward-compat scraper shim
 ├── gate_agent.py           # Legacy GateAgent + HyperGateAgent lazy import
+├── Dockerfile              # Multi-stage backend build (non-root user, healthcheck)
+├── docker-entrypoint.sh    # Backend container entrypoint (env-driven worker count)
 ├── requirements.txt        # Python dependencies (no pyproject.toml / setup.py / setup.cfg)
 ├── pytest.ini              # Test configuration
 ├── alembic.ini             # Alembic migration configuration
 ├── .env / .env.example     # Environment variables (NEVER commit .env)
 ├── docker-compose.yml      # Full production stack (Caddy, backend, frontend, Postgres, Redis, SearXNG)
 ├── docker-compose.searxng.yml   # SearXNG-only container setup
+├── Caddyfile               # Caddy reverse proxy configuration
 ├── kill_servers.py         # Utility to kill running backend/frontend processes
 ├── kill_servers.bat        # Windows batch equivalent
 ├── push_to_github.py       # Git push helper
 ├── push_to_github.bat      # Windows batch equivalent
-├── tests/                  # 140+ pytest files
+├── tests/                  # 147 pytest files
 ├── src/reasoner/           # Main Python package
 ├── ui-next/                # Next.js frontend
 ├── cache/                  # Run-related cache
@@ -125,6 +128,7 @@ src/reasoner/
 │   ├── settings.py                # Pydantic-settings from .env (ONLY env reader)
 │   ├── temperatures.py            # Per-phase temperature maps
 │   ├── search.py                  # Discovery client for web search
+│   ├── rerank.py                  # Cohere rerank integration via OpenRouter
 │   ├── memory.py                  # Memory abstractions
 │   ├── perspectives.py            # Perspective definitions
 │   ├── health_validator.py        # Startup health checks
@@ -140,12 +144,13 @@ src/reasoner/
 │   ├── saas.py                    # SaaS domain models (User, QuotaResult, tiers)
 │   └── __init__.py
 ├── application/                   # Application layer (CQRS + Event Bus + Mixins)
-│   ├── commands/                  # Command handlers
+│   ├── commands/                  # Command handlers (placeholder structure)
 │   ├── event_bus/                 # In-memory event bus with backpressure handling
 │   ├── flows/                     # Pipeline flows
 │   ├── handlers/                  # Event handlers
-│   ├── mixins/                    # Method-specific mixins (13 mixins)
+│   ├── mixins/                    # Method-specific mixins (14 mixins)
 │   │   ├── article_pipeline.py
+│   │   ├── brainstorming_mixin.py
 │   │   ├── coding_pipeline.py
 │   │   ├── cognitive_mixin.py
 │   │   ├── debate_mixin.py
@@ -158,15 +163,16 @@ src/reasoner/
 │   │   ├── search_mixin.py
 │   │   ├── writing_mixin.py
 │   │   └── _protocol.py
-│   ├── queries/                   # Query handlers
+│   ├── queries/                   # Query handlers (placeholder structure)
 │   └── services/                  # Application services
+│       ├── renderers/             # Output renderers
 │       ├── audit_service.py
 │       ├── auth_service.py
 │       ├── billing_service.py
 │       ├── preset_service.py
 │       ├── quota_service.py
 │       └── search_service.py
-├── phases/                        # 17 reasoning method implementations
+├── phases/                        # Reasoning method implementations
 │   ├── multi_perspective.py
 │   ├── debate.py
 │   ├── jury.py
@@ -184,6 +190,17 @@ src/reasoner/
 │   ├── pot.py
 │   ├── self_discover.py
 │   ├── writing.py
+│   ├── brainstorming.py
+│   ├── coding.py
+│   ├── vs_behavioral_audit.py
+│   ├── vs_calibration.py
+│   ├── vs_claim_extraction.py
+│   ├── vs_conflict_surfacing.py
+│   ├── vs_coverage_audit.py
+│   ├── vs_decomposition.py
+│   ├── vs_generation.py
+│   ├── vs_probe_generation.py
+│   ├── vs_verification_routing.py
 │   ├── _shared.py
 │   └── _universal.py
 ├── infrastructure/                # Infrastructure layer
@@ -192,6 +209,10 @@ src/reasoner/
 │   │   ├── ports.py               # BaseLLMProvider, LLMResponse, LLMConfig, Message
 │   │   ├── registry.py            # Model registry (_REGISTRY with 70+ entries)
 │   │   ├── router.py              # ProviderRouter
+│   │   ├── exceptions.py          # LLM-specific exceptions
+│   │   ├── executor.py            # Async execution utilities
+│   │   ├── image_generation.py    # Image generation adapter
+│   │   ├── utils.py               # LLM utilities
 │   │   ├── providers/             # Provider adapters
 │   │   │   └── openai_compat.py
 │   │   └── extraction/            # JSON extraction utilities
@@ -201,6 +222,9 @@ src/reasoner/
 │   │   ├── postgres_store.py
 │   │   ├── snapshots.py
 │   │   ├── auth_store.py
+│   │   ├── cached_quota_repo.py
+│   │   ├── quota_repo_postgres.py
+│   │   ├── subscription_repo.py
 │   │   └── __init__.py
 │   ├── redis/                     # Redis client, RunStateManager
 │   ├── auth/                      # Infrastructure auth implementations
@@ -219,10 +243,13 @@ src/reasoner/
 │   ├── streaming.py               # SSE streaming utilities
 │   ├── middleware.py              # Custom middleware (security, audit, memory, timeout)
 │   ├── auth_deps.py               # Auth dependency injection
+│   ├── client_ip.py               # Client IP extraction with proxy support
+│   ├── dependencies.py            # FastAPI shared dependencies
+│   ├── sentry.py                  # Sentry initialization
+│   ├── run_state.py               # Run state management endpoints
 │   ├── cache.py
 │   ├── csrf.py
 │   ├── history.py
-│   ├── run_state.py
 │   └── routes/                    # REST/SSE route modules
 │       ├── context.py
 │       ├── history.py
@@ -279,6 +306,8 @@ src/reasoner/
 │   ├── generated_tests/           # Auto-generated pytest files
 │   └── README.md
 ├── security/                      # URL validation, security utilities
+├── quality/                       # Quality criteria and monitoring
+├── shared/                        # Shared utilities
 ├── vs_vertical_configs/           # Vertical solution configs
 ├── utils/                         # json_safe.py and general utilities
 ├── logs/                          # Runtime log storage
@@ -303,42 +332,65 @@ src/reasoner/
 ui-next/src/
 ├── app/                           # Next.js App Router
 │   ├── layout.tsx
-│   ├── page.tsx                   # Main application UI (large client component)
+│   ├── page.tsx                   # Re-exports LandingPage
 │   ├── globals.css                # Tailwind v4 import + CSS custom properties
-│   ├── providers.tsx              # next-themes ThemeProvider
+│   ├── providers.tsx              # next-themes ThemeProvider + AuthProvider
 │   ├── error.tsx                  # Error boundary
-│   └── api/                       # API route handlers (proxies to FastAPI)
-│       ├── run/route.ts
-│       ├── run-followup/route.ts
-│       ├── stop/route.ts
-│       ├── presets/route.ts
-│       ├── search/route.ts
-│       ├── calculate/route.ts
-│       ├── stocks/route.ts
-│       ├── weather/route.ts
-│       ├── upload/route.ts
-│       ├── generate-image/route.ts
-│       ├── estimate/route.ts
-│       ├── feedback/route.ts
-│       ├── cache/route.ts
-│       ├── csrf/route.ts
-│       ├── billing/               # Stripe checkout session routes
-│       └── neuro/                 # Neuro memory routes
-│           ├── health/route.ts
-│           ├── learn/route.ts
-│           ├── recall/route.ts
-│           └── sessions/route.ts
+│   ├── globals.css.test.ts        # CSS tests
+│   ├── about/
+│   ├── api/                       # API route handlers (proxies to FastAPI)
+│   │   ├── run/route.ts
+│   │   ├── run-followup/route.ts
+│   │   ├── stop/route.ts
+│   │   ├── presets/route.ts
+│   │   ├── search/route.ts
+│   │   ├── calculate/route.ts
+│   │   ├── stocks/route.ts
+│   │   ├── weather/route.ts
+│   │   ├── upload/route.ts
+│   │   ├── generate-image/route.ts
+│   │   ├── estimate/route.ts
+│   │   ├── feedback/route.ts
+│   │   ├── cache/route.ts
+│   │   ├── csrf/route.ts
+│   │   ├── billing/               # Stripe checkout session routes
+│   │   └── neuro/                 # Neuro memory routes
+│   │       ├── health/route.ts
+│   │       ├── learn/route.ts
+│   │       ├── recall/route.ts
+│   │       └── sessions/route.ts
+│   ├── auth/
+│   ├── chat/
+│   ├── contact/
+│   ├── cookies/
+│   ├── dashboard/
+│   ├── faq/
+│   ├── forgot-password/
+│   ├── help/
+│   ├── landing/
+│   ├── login/
+│   ├── pricing/
+│   ├── privacy/
+│   ├── reset-password/
+│   ├── security/
+│   ├── settings/
+│   ├── signup/
+│   └── terms/
 ├── components/
+│   ├── brand/                     # Branding components
 │   ├── chat/                      # ChatFeed, ChatMessage, MarkdownRenderer, Composer, CodeBlock, ErrorMessage, ManifestationVisuals, TypewriterMarkdown
+│   ├── controls/                  # Control UI components
+│   ├── fx/                        # Visual effects components
+│   ├── landing/                   # Landing page sections
 │   ├── layout/                    # Sidebar, PhaseTimeline, ShortcutModal, CommandPalette, NeuroPanel, Composer
 │   ├── phases/                    # PhaseRenderer, PhaseCard, ClassificationCard, CritiqueCard, SynthesisCard
 │   ├── ui/                        # Button, Badge, Spinner, ThemeToggle, Tooltip
 │   │   └── index.ts
 │   └── widgets/                   # WidgetRenderer, CalculationWidget, StockWidget, WeatherWidget
-├── hooks/                         # usePipelineStream, useWebSocketPipeline, useKeyboardShortcuts, useConversationHistory, useServerStatus, useScrollAnchor, useFeatureFlags, usePresets
-├── lib/                           # api-client, config, db (IndexedDB), types, utils, security-server, security-client, server-config, sse-reader, markdown, animation-cache, method-hints, conversation-history
+├── hooks/                         # usePipelineStream, useWebSocketPipeline, useKeyboardShortcuts, useConversationHistory, useServerStatus, useScrollAnchor, useFeatureFlags, usePresets (with .test.ts files)
+├── lib/                           # api-client, config, db (IndexedDB), types, utils, security-server, security-client, server-config, sse-reader, markdown, animation-cache, method-hints, conversation-history (with .test.ts files)
 ├── stores/
-│   └── app-store.ts               # Zustand store with persistence
+│   └── app-store.ts               # Zustand store with persistence (with .test.ts files)
 └── proxy.ts
 ```
 
@@ -384,7 +436,8 @@ alembic revision --autogenerate -m "description"
 cd ui-next
 npm install
 npm run dev          # Development server (http://localhost:3000)
-npm run build        # Production build
+npm run build        # Production build (standalone output)
+npm run start        # Start production server
 npm run lint         # ESLint (flat config)
 ```
 
@@ -425,9 +478,9 @@ docker compose -f docker-compose.searxng.yml up -d
 - **Components:** PascalCase files, default export for page components
 - **Hooks:** `useCamelCase`
 - **Styling:** Tailwind CSS v4 utility classes
-- **Accent colors:** Preserve the `--method-accent-rgb` CSS custom property when adjusting gradients or glass panels
 - **UI blocks:** Document new helper UI blocks in the same file rather than scattering markup elsewhere
 - **ESLint:** Uses ESLint 9 flat config (`eslint.config.mjs`) extending `eslint-config-next/core-web-vitals` and `eslint-config-next/typescript`
+- **Testing:** Co-locate `.test.ts` files next to the source files they test (e.g., `src/hooks/useX.test.ts`, `src/lib/utils.test.ts`)
 
 ---
 
@@ -435,7 +488,7 @@ docker compose -f docker-compose.searxng.yml up -d
 
 - **Framework:** pytest with pytest-asyncio, pytest-timeout
 - **Location:** `tests/` directory at repo root
-- **Count:** 140+ test files
+- **Count:** 147 test files
 - **Naming:** `test_*.py` files, `Test…` classes
 - **Configuration:** `pytest.ini` sets `testpaths = tests` and `pythonpath = src`
 - **Markers:**
@@ -448,7 +501,7 @@ docker compose -f docker-compose.searxng.yml up -d
   - `sample_pipeline_state`, `sample_llm_messages`, `sample_llm_config`, `mock_llm_response`
   - `sample_widget_params`, `sample_domain_events`
   - `searxng_container` (session-scoped Docker compose fixture), `searxng_client`
-  - `run_state_store`, `temp_event_store`
+  - `run_state_store`
   - `event_loop_policy` (Windows-compatible selector event loop)
   - `writable_temp_dirs` (session-scoped autouse)
   - `clear_token_cache` (async autouse to prevent stale cache hits)
@@ -499,6 +552,8 @@ Copy `.env.example` to `.env` and fill in:
 | `CORS_ORIGINS` | Comma-separated allowed frontend origins |
 | `REASONER_API_URL` | Frontend proxy target (default http://localhost:8003) |
 | `TRUSTED_PROXIES` | Comma-separated IPs for X-Forwarded-For parsing (optional) |
+| `OPENROUTER_HTTP_REFERER` | OpenRouter analytics header for rank tracking (optional) |
+| `OPENROUTER_APP_TITLE` | OpenRouter analytics header for rank tracking (optional) |
 
 **Rate Limiting & Resilience**
 | Variable | Purpose |
@@ -514,6 +569,7 @@ Copy `.env.example` to `.env` and fill in:
 |----------|---------|
 | `SEARXNG_URL` | SearXNG instance URL (default: http://localhost:8888) |
 | `COHERE_RERANK_ENABLED` | Enable Cohere reranking via OpenRouter |
+| `COHERE_RERANK_MODEL` | Rerank model ID (default: cohere/rerank-4-fast) |
 | `DOCUMENT_SEMANTIC_RETRIEVAL_ENABLED` | Opt-in semantic chunking for uploaded files |
 | `DOCUMENT_CHUNK_SIZE` / `DOCUMENT_CHUNK_OVERLAP` / `DOCUMENT_MAX_CHUNKS_PER_FILE` | Chunking params |
 
@@ -538,6 +594,11 @@ Copy `.env.example` to `.env` and fill in:
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Stripe API and webhook secrets |
 | `STRIPE_PRO_PRICE_ID` / `STRIPE_ENTERPRISE_PRICE_ID` | Product price IDs |
 | `APP_URL` | Frontend URL for checkout redirects (default http://localhost:3000) |
+
+**Monitoring**
+| Variable | Purpose |
+|----------|---------|
+| `SENTRY_TRACES_SAMPLE_RATE` | Sentry tracing sample rate (0.0 = no traces, 1.0 = all traces, default 0.1) |
 
 **Git Integration (Optional)**
 | Variable | Purpose |
@@ -573,7 +634,7 @@ Copy `.env.example` to `.env` and fill in:
 1. **Event Sourcing** — Pipeline state derived from domain events stored in SQLite/PostgreSQL
 2. **CQRS** — Separate command and query handlers in `application/`
 3. **Hexagonal Architecture** — Domain depends on protocols (Widget, Phase), not concrete implementations
-4. **Mixin Pattern** — Method-specific behaviors composed via 13 mixins; explicit `PipelineMixinProtocol` contract
+4. **Mixin Pattern** — Method-specific behaviors composed via 14 mixins; explicit `PipelineMixinProtocol` contract
 5. **Provider Router with Fallbacks** — Cross-lab diversity with automatic fallback on failure; `_REGISTRY` maps 70+ model IDs
 6. **HyperGate Pre-Routing** — 6 parallel sub-agents detect language, complexity, directness, web need, and optimal method
 7. **Token Optimization** — Phase-specific budgets (`PHASE_TOKEN_BUDGETS`), context compression (`ContextCompressor`), token-aware caching
@@ -594,10 +655,11 @@ Copy `.env.example` to `.env` and fill in:
 
 ---
 
-## 11. Reasoning Methods (17)
+## 11. Reasoning Methods
 
-The pipeline supports 17 reasoning methodologies. Each method has its own phase module and renderer:
+The pipeline supports multiple reasoning methodologies. Each method has its own phase module and renderer:
 
+**Core Methods**
 1. **Multi-Perspective** — Parallel constructive/destructive/systemic/minimalist analysis
 2. **Debate** — Adversarial reasoning with opening, rebuttal, judge phases
 3. **Jury** — Expert panel with generator, critic, verifier roles
@@ -615,6 +677,11 @@ The pipeline supports 17 reasoning methodologies. Each method has its own phase 
 15. **PoT** — Program-of-Thoughts
 16. **Self-Discover** — Dynamic reasoning module composition
 17. **Writing** — Creative writing with hallucination guards
+18. **Brainstorming** — Divergent idea generation
+19. **Coding** — Code generation with verification
+
+**Vertical Solution (VS) Phases**
+- `vs_behavioral_audit.py`, `vs_calibration.py`, `vs_claim_extraction.py`, `vs_conflict_surfacing.py`, `vs_coverage_audit.py`, `vs_decomposition.py`, `vs_generation.py`, `vs_probe_generation.py`, `vs_verification_routing.py`
 
 ---
 
@@ -643,8 +710,9 @@ python main.py --list-models       # Show all model IDs grouped by ecosystem
   - `loop1-static-healing` — introspection engine + test generation + coverage gating (60% fail, 80% warn)
   - `loop2-runtime-healing` — circuit breaker + health checks + smoke tests
   - `loop3-evolutionary-healing` — failure patterns, spec drift, optimization proposals
-  - `searxng-integration` — SearXNG integration tests
-  - `healing-verification` — artifact verification
+  - `searxng-integration` — SearXNG integration tests (starts SearXNG container, runs `-m searxng`)
+  - `healing-verification` — artifact verification, healing summary generation
+- **Artifacts:** introspection reports, generated tests, coverage reports, evolutionary reports, healing summaries (retention 7–90 days)
 
 ---
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 from reasoner.core.constants import (
     DEFAULT_MAX_TOKENS,
@@ -50,16 +50,13 @@ class ProviderRouter:
     """
 
     def __init__(
-        self,
-        primary: BaseLLMProvider,
-        routing_table: dict[str, BaseLLMProvider] | None = None,
-        fallback_table: dict[str, BaseLLMProvider] | None = None,
-        verbose: bool = False,
-    ) -> None:
+        self, primary: BaseLLMProvider, routing_table: dict[str, BaseLLMProvider] | None = None, fallback_table: dict[str, BaseLLMProvider] | None = None, verbose: bool = False, cascading_routing: dict[str, list[str]] | None = None
+        ) -> None:
         self.primary = primary
         self.routing_table: dict[str, BaseLLMProvider] = routing_table or {}
         # Explicit per-role fallbacks. Roles absent here fall back to primary automatically.
         self.fallback_table: dict[str, BaseLLMProvider] = fallback_table or {}
+        self.cascading_routing: dict[str, list[str]] = cascading_routing or {}
         self.verbose = verbose
 
     def get(self, role: str) -> BaseLLMProvider:
@@ -88,7 +85,8 @@ class ProviderRouter:
         max_tokens: int = DEFAULT_MAX_TOKENS,
         temperature: float = DEFAULT_TEMPERATURE,
         timeout_seconds: float | None = None,
-    ) -> tuple[str | DegradedLLMResponse, dict[str, Any]]:
+        stream: bool = False,
+    ) -> tuple[str | DegradedLLMResponse, dict[str, Any]] | AsyncIterator[str | DegradedLLMResponse]:
         """
         Call LLM for role. On LLMError or timeout, tries a fallback provider:
           1. Explicit fallback from fallback_table (if defined and different)
@@ -96,8 +94,8 @@ class ProviderRouter:
           3. Re-raises original error if no fallback available
 
         Returns:
-            Tuple of (response_text, metadata_dict)
-            metadata includes: input tokens, output tokens, cost (if available)
+            Tuple of (response_text, metadata_dict) if not streaming.
+            AsyncIterator of (response_chunk | DegradedLLMResponse) if streaming.
         """
         assigned = self.get(role)
         effective_timeout = self._timeout_for_role(role, timeout_seconds)
@@ -116,96 +114,107 @@ class ProviderRouter:
             (p for p in candidates if p.model != assigned.model), None
         )
 
-        actual_provider = assigned
-        try:
-            response = await _call_with_circuit(
-                assigned, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
-            )
-            if not response or not response.strip():
-                raise LLMError(f"Empty response from {assigned.model} for role={role}")
-        except asyncio.TimeoutError:
-            if fallback is None:
-                logger.error(
-                    "Role '%s' provider '%s' timed out after %.0fs — no fallback available; returning degraded response",
-                    role, assigned.model, effective_timeout,
-                )
-                return DegradedLLMResponse(
-                    text="",
-                    error=f"{assigned.model} timed out — no fallback",
-                    metadata={"model": assigned.model},
-                ), {}
-            logger.warning(
-                "Role '%s' provider '%s' timed out after %.0fs — retrying with fallback '%s'",
-                role, assigned.model, effective_timeout, fallback.model,
-            )
+        async def _execute_call(provider: BaseLLMProvider, is_fallback: bool = False):
+            actual_provider = provider
             try:
                 response = await _call_with_circuit(
-                    fallback, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
+                    provider, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
                 )
-            except Exception:
-                logger.error(
-                    "Role '%s' fallback '%s' also failed; returning degraded response",
-                    role, fallback.model,
+                if not response or not response.strip():
+                    raise LLMError(f"Empty response from {provider.model} for role={role}")
+                return response, self._build_metadata(actual_provider, response)
+            except asyncio.TimeoutError:
+                if is_fallback:
+                    logger.error(
+                        "Role '%s' fallback '%s' timed out after %.0fs; returning degraded response",
+                        role, provider.model, effective_timeout,
+                    )
+                    return DegradedLLMResponse(
+                        text="",
+                        error=f"{provider.model} timed out",
+                        metadata={"model": provider.model},
+                    ), {}
+                logger.warning(
+                    "Role '%s' provider '%s' timed out after %.0fs — retrying with fallback '%s'",
+                    role, provider.model, effective_timeout, fallback.model if fallback else "N/A",
                 )
-                return DegradedLLMResponse(
-                    text="",
-                    error=f"{assigned.model} and {fallback.model} both failed",
-                    metadata={"model": fallback.model},
-                ), {}
-            actual_provider = fallback
-        except LLMError as exc:
-            if fallback is None:
-                logger.error(
-                    "Role '%s' provider '%s' failed (%s) — no fallback available; returning degraded response",
-                    role, assigned.model, exc,
+                if fallback:
+                    return await _execute_call(fallback, is_fallback=True)
+                else:
+                    return DegradedLLMResponse(
+                        text="",
+                        error=f"{assigned.model} timed out — no fallback",
+                        metadata={"model": assigned.model},
+                    ), {}
+            except LLMError as exc:
+                if is_fallback:
+                    logger.error(
+                        "Role '%s' fallback '%s' failed (%s); returning degraded response",
+                        role, provider.model, exc,
+                    )
+                    return DegradedLLMResponse(
+                        text="",
+                        error=str(exc),
+                        metadata={"model": provider.model},
+                    ), {}
+                logger.warning(
+                    "Role '%s' provider '%s' failed (%s) — retrying with fallback '%s'",
+                    role, provider.model, exc, fallback.model if fallback else "N/A",
                 )
-                return DegradedLLMResponse(
-                    text="",
-                    error=str(exc),
-                    metadata={"model": assigned.model},
-                ), {}
-            logger.warning(
-                "Role '%s' provider '%s' failed (%s) — retrying with fallback '%s'",
-                role, assigned.model, exc, fallback.model,
-            )
+                if fallback:
+                    return await _execute_call(fallback, is_fallback=True)
+                else:
+                    return DegradedLLMResponse(
+                        text="",
+                        error=str(exc),
+                        metadata={"model": assigned.model},
+                    ), {}
+
+        async def _execute_stream(provider: BaseLLMProvider, is_fallback: bool = False):
             try:
-                response = await _call_with_circuit(
-                    fallback, system_prompt, user_prompt, max_tokens, temperature, effective_timeout
-                )
-            except Exception as fallback_exc:
-                logger.error(
-                    "Role '%s' fallback '%s' also failed (%s); returning degraded response",
-                    role, fallback.model, fallback_exc,
-                )
-                return DegradedLLMResponse(
-                    text="",
-                    error=str(fallback_exc),
-                    metadata={"model": fallback.model},
-                ), {}
-            actual_provider = fallback
+                async for chunk in provider.stream_complete_with_retry(
+                    system_prompt, user_prompt, max_tokens, temperature
+                ):
+                    yield chunk
+            except asyncio.TimeoutError:
+                if is_fallback:
+                    yield DegradedLLMResponse(
+                        text="",
+                        error=f"{provider.model} timed out",
+                        metadata={"model": provider.model},
+                    )
+                    return
+                if fallback:
+                    async for chunk in _execute_stream(fallback, is_fallback=True):
+                        yield chunk
+                else:
+                    yield DegradedLLMResponse(
+                        text="",
+                        error=f"{assigned.model} timed out — no fallback",
+                        metadata={"model": assigned.model},
+                    )
+            except LLMError as exc:
+                if is_fallback:
+                    yield DegradedLLMResponse(
+                        text="",
+                        error=str(exc),
+                        metadata={"model": provider.model},
+                    )
+                    return
+                if fallback:
+                    async for chunk in _execute_stream(fallback, is_fallback=True):
+                        yield chunk
+                else:
+                    yield DegradedLLMResponse(
+                        text="",
+                        error=str(exc),
+                        metadata={"model": assigned.model},
+                    )
 
-        # Build metadata with cost tracking
-        metadata: dict[str, Any] = {}
-
-        # Prefer actual token counts from the provider that succeeded
-        input_tokens = getattr(actual_provider, 'last_input_tokens', None)
-        output_tokens = getattr(actual_provider, 'last_output_tokens', None)
-        cost_usd = getattr(actual_provider, 'last_cost_usd', None)
-
-        if input_tokens is not None and input_tokens > 0:
-            metadata["input_tokens"] = input_tokens
-            metadata["output_tokens"] = output_tokens or 0
-            metadata["cost_usd"] = cost_usd or 0.0
+        if stream:
+            return _execute_stream(assigned)
         else:
-            # Fallback: estimate by word count
-            metadata["input_tokens"] = len(system_prompt.split()) + len(user_prompt.split())
-            metadata["output_tokens"] = len(response.split())
-            metadata["cost_usd"] = 0.0  # Unknown when provider doesn't report usage
-
-        # Include the model that actually produced the response
-        metadata["model"] = actual_provider.model
-
-        return response, metadata
+            return await _execute_call(assigned)
 
     def describe(self) -> dict[str, str]:
         result = {"[primary]": self.primary.model}
@@ -223,10 +232,11 @@ class ProviderRouter:
         primary_id: str,
         routing: dict[str, str] | None = None,
         fallback_routing: dict[str, str] | None = None,
+        cascading_routing: dict[str, list[str]] | None = None,
         verbose: bool = False,
     ) -> "ProviderRouter":
         """Build router from model ID strings."""
         primary = build_provider(primary_id)
         table = {role: build_provider(mid) for role, mid in (routing or {}).items()}
         fallback_table = {role: build_provider(mid) for role, mid in (fallback_routing or {}).items()}
-        return cls(primary=primary, routing_table=table, fallback_table=fallback_table, verbose=verbose)
+        return cls(primary=primary, routing_table=table, fallback_table=fallback_table, cascading_routing=cascading_routing, verbose=verbose)

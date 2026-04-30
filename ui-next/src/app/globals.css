@@ -549,6 +549,30 @@
     background: rgba(128, 128, 128, 0.40);
   }
 
+  /* Thicker gray scrollbar for chat and main content areas */
+  .scrollbar-gray {
+    scrollbar-width: auto;
+    scrollbar-color: rgba(128, 128, 128, 0.35) transparent;
+  }
+
+  .scrollbar-gray::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-gray::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-gray::-webkit-scrollbar-thumb {
+    background: rgba(128, 128, 128, 0.35);
+    border-radius: 4px;
+  }
+
+  .scrollbar-gray::-webkit-scrollbar-thumb:hover {
+    background: rgba(128, 128, 128, 0.55);
+  }
+
   /* Accessibility */
   .skip-link {
     position: absolute;

@@ -27,7 +27,10 @@ class BillingService:
         return await self._port.create_portal_session(user_id, return_url)
 
     async def handle_webhook(self, event: dict) -> None:
-        """Idempotent webhook processing with subscription persistence."""
+        """Idempotent webhook processing with subscription persistence.
+
+        Handles both Stripe and PayPal webhook events.
+        """
         sub = await self._port.sync_subscription(event)
 
         # Persist to database
@@ -40,7 +43,50 @@ class BillingService:
         )
 
         event_type = event.get("type", "")
+        # PayPal events use "event_type" key
+        if not event_type:
+            event_type = event.get("event_type", "")
 
+        # --- PayPal events ---
+        if event_type.startswith("BILLING.SUBSCRIPTION."):
+            if event_type == "BILLING.SUBSCRIPTION.CANCELLED":
+                if sub.paypal_subscription_id:
+                    await repo.set_subscription_status_by_paypal(
+                        sub.paypal_subscription_id,
+                        "cancelled",
+                    )
+                    await repo.sync_quota_for_subscription(sub)
+                return
+
+            if event_type == "BILLING.SUBSCRIPTION.SUSPENDED":
+                if sub.paypal_subscription_id:
+                    await repo.set_subscription_status_by_paypal(
+                        sub.paypal_subscription_id,
+                        "past_due",
+                    )
+                return
+
+            if event_type == "BILLING.SUBSCRIPTION.PAYMENT.FAILED":
+                if sub.paypal_subscription_id:
+                    await repo.set_subscription_status_by_paypal(
+                        sub.paypal_subscription_id,
+                        "past_due",
+                    )
+                return
+
+            if event_type == "BILLING.SUBSCRIPTION.ACTIVATED":
+                await repo.upsert_subscription(sub)
+                await repo.sync_quota_for_subscription(sub)
+                logger.info(
+                    "PayPal subscription synced for user %s: tier=%s status=%s",
+                    sub.user_id, sub.tier.value, sub.status.value
+                )
+                return
+
+            logger.debug("Unhandled PayPal event type: %s", event_type)
+            return
+
+        # --- Stripe events ---
         if event_type == "customer.subscription.deleted":
             # Downgrade to free — update subscription status
             if sub.stripe_subscription_id:
@@ -74,9 +120,9 @@ class BillingService:
             await repo.upsert_subscription(sub)
             await repo.sync_quota_for_subscription(sub)
             logger.info(
-                "Subscription synced for user %s: tier=%s status=%s",
+                "Stripe subscription synced for user %s: tier=%s status=%s",
                 sub.user_id, sub.tier.value, sub.status.value
             )
             return
 
-        logger.debug("Unhandled Stripe event type: %s", event_type)
+        logger.debug("Unhandled event type: %s", event_type)

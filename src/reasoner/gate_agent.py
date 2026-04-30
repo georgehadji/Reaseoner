@@ -36,6 +36,7 @@ class GateDecision(BaseModel):
     method: str | None = None
     confidence: float = Field(ge=0.0, le=1.0)
     reasoning: str | None = None
+    complexity: str | None = None
 
 
 # Internal opaque taxonomy. The LLM sees only the letters (A-L), never the real method names.

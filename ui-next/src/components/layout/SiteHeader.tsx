@@ -23,9 +23,11 @@ export function SiteHeader() {
   return (
     <header
       className={cn(
-        'fixed top-0 left-0 right-0 z-50 transition-all duration-300',
+        'fixed top-0 left-0 right-0 z-50',
+        'border-b border-transparent backdrop-blur-xl saturate-[1.3]',
+        'transition-[background-color,border-color,box-shadow] duration-300',
         scrolled
-          ? 'glass shadow-[var(--shadow-lg)]'
+          ? 'bg-[rgba(10,15,22,0.70)] border-[rgba(128,128,128,0.11)] shadow-[var(--shadow-lg)]'
           : 'bg-transparent'
       )}
     >

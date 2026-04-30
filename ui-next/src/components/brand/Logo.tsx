@@ -74,6 +74,7 @@ export function Logo({
 export function LogoMark({
   size = 32,
   color = '#A0A0A0',
+  className,
   }: {
   size?: number;
   color?: string;

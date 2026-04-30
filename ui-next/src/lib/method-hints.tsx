@@ -205,4 +205,15 @@ export const METHOD_HINTS_DATA: Record<MethodId, MethodHintData> = {
       </>
     ),
   },
+  brainstorming: {
+    title: 'Brainstorming',
+    desc: 'Generate, cluster, and refine creative ideas using structured divergent and convergent thinking.',
+    detail: (
+      <>
+        <b>How it works:</b> Generates a large quantity of diverse ideas → clusters them by theme → evaluates each for novelty, feasibility, and impact → refines the most promising into actionable concepts.
+        <br />
+        <b>Best input:</b> Creative challenges, product feature ideation, marketing angles, or any problem where you need fresh perspectives.
+      </>
+    ),
+  },
 };

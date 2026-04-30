@@ -1,0 +1,276 @@
+
+ Fix Plan: Research/Article Pipeline Source Retrieval & Quality Cascade Failures                     │
+│  ═══════════════════════════════════════════════════════════════════════════════                     │
+│                                                                                                      │
+│  Problem Summary                                                                                     │
+│                                                                                                      │
+│  A pipeline run on "Current situation in Iran" produced a generic, unverified article despite runni  │
+│  ng through the full Research/Article pipeline (Decompose → Retrieve → Extract Claims → Verify → Sy  │
+│  nthesize → Pre-Mortem → Critic → Assemble). The root cause is a silent source retrieval failure th  │
+│  at collapsed the entire evidence-based reasoning stack.                                             │
+│                                                                                                      │
+│  Identified Bugs                                                                                     │
+│                                                                                                      │
+│   #   Bug                             Location                       Impact                          │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   1   Perplexity client drops resul   core/search.py + article_pip   Zero sources retrieved          │
+│       ts with empty URLs — Perplexi   eline.py                                                       │
+│       tySearchClient returns url: "                                                                  │
+│       " when citations are empty (c                                                                  │
+│       ommon via OpenRouter). _phase                                                                  │
+│       _article_retrieve filters the                                                                  │
+│       se out because it requires re                                                                  │
+│       s.get("url").                                                                                  │
+│   2   get_search_client always pref   core/search.py                 No fallback to SearXNG when P   │
+│       ers Perplexity when OPENROUTE                                  erplexity fails                 │
+│       R_API_KEY exists, even if Sea                                                                  │
+│       rXNG is healthy. The searxng_                                                                  │
+│       open check only affects loggi                                                                  │
+│       ng.                                                                                            │
+│   3   No minimum-evidence gate befo   article_pipeline.py            Generic LLM output presented    │
+│       re synthesis — when usable_cl                                  as research                     │
+│       aims is empty, the pipeline f                                                                  │
+│       alls back to "knowledge-only                                                                   │
+│       synthesis" and emits an unver                                                                  │
+│       ified essay.                                                                                   │
+│   4   Pre-mortem serializer shows o   api/serializers.py             Pre-mortem appears to do noth   │
+│       riginal article, not revised                                   ing                             │
+│       — _ser_writing_premortem surf                                                                  │
+│       aces writing_state["article"]                                                                  │
+│       (original draft) instead of w                                                                  │
+│       riting_state["article_revised                                                                  │
+│       "] (post-correction).                                                                          │
+│   5   Duplicate abstract in output    article_pipeline.py            Duplicate abstract in final o   │
+│       — monolithic synthesis or ske                                  utput                           │
+│       leton generation can produce                                                                   │
+│       an "Abstract" section inside                                                                   │
+│       sections[], and _phase_articl                                                                  │
+│       e_assemble prepends the abstr                                                                  │
+│       act field again.                                                                               │
+│   6   All quality metrics show 0.0    article_pipeline.py            Misleading quality display      │
+│       when no claims exist — _calcu                                                                  │
+│       late_metrics returns default                                                                   │
+│       zeros, which is indistinguish                                                                  │
+│       able from "all claims verifie                                                                  │
+│       d." The UI shows "Claim Suppo                                                                  │
+│       rt Ratio: 0.0%" which looks l                                                                  │
+│       ike a score rather than a mis                                                                  │
+│       sing-data indicator.                                                                           │
+│   7   critical=True on PhaseStep is   flows/pipeline_flow.py + pip   Failed critical phases don't    │
+│       dead code — the pipeline exec   eline.py                       stop execution                  │
+│       ution loop never checks the c                                                                  │
+│       ritical flag, so a failed "Ad                                                                  │
+│       versarial Verify" phase doesn                                                                  │
+│       't halt the pipeline.                                                                          │
+│   8   Phase timeout on Journal Revi   article_pipeline.py            Incomplete quality gates        │
+│       ew — _phase_article_critic ha                                                                  │
+│       s no timeout handling and can                                                                  │
+│       exceed the 90s global phase t                                                                  │
+│       imeout.                                                                                        │
+│   9   Deep Read skipped for writing   pipeline.py                    Missing context enrichment      │
+│       method — _phase_deep_read onl                                                                  │
+│       y runs for method == "researc                                                                  │
+│       h" or knowledge-dense heurist                                                                  │
+│       ics, not for the writing meth                                                                  │
+│       od.                                                                                            │
+│                                                                                                      │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────────  │
+│  Implementation Plan                                                                                 │
+│                                                                                                      │
+│  Phase A: Source Retrieval Resilience (Files: core/search.py, article_pipeline.py)                   │
+│                                                                                                      │
+│  A1. Fix Perplexity result URL handling                                                              │
+│                                                                                                      │
+│  • In PerplexitySearchClient.search, when citations is empty, set url to "perplexity://synthetic" o  │
+│    a synthetic marker instead of "".                                                                 │
+│  • In _phase_article_retrieve, relax the if res.get("url") filter to accept Perplexity synthetic UR  │
+│    .                                                                                                 │
+│  • Add source_type: "synthetic" so downstream phases know this is a synthesized answer, not a prima  │
+│    source.                                                                                           │
+│                                                                                                      │
+│  A2. Fix get_search_client to actually fallback                                                      │
+│                                                                                                      │
+│  • Change the logic so that when SearXNG is healthy (searxng_open == False), it tries SearXNG first  │
+│    nd only falls back to Perplexity on failure.                                                      │
+│  • When SearXNG is down (searxng_open == True), use Perplexity but log the reason.                   │
+│  • If Perplexity raises ValueError (init failure) or returns empty results, fall back to SearXNG as  │
+│    ast resort.                                                                                       │
+│                                                                                                      │
+│  A3. Add retrieval retry with relaxed filters                                                        │
+│                                                                                                      │
+│  • In _phase_article_retrieve, when ranked_sources is empty after the first pass, retry with:        │
+│    • Broader queries (drop domain constraint, use state.problem only)                                │
+│    • Relaxed quality filters (temporarily raise _MIN_SNIPPET_LEN to 20 or skip title-based filterin  │
+│    • Different source_type (e.g., try "news" for current-events queries)                             │
+│  • Log each retry attempt and the filter settings used.                                              │
+│                                                                                                      │
+│  A4. Improve retrieval diagnostics                                                                   │
+│                                                                                                      │
+│  • Log the raw result count before filtering, the number filtered out, and the reason (extension, l  │
+│    gth, title pattern, domain blocklist).                                                            │
+│  • Store retrieval diagnostics in state.writing_state["retrieval_diagnostics"] for UI visibility.    │
+│                                                                                                      │
+│  Phase B: Evidence Gate & Pipeline Integrity (Files: article_pipeline.py, pipeline.py, flows/__init  │
+│  __.py)                                                                                              │
+│                                                                                                      │
+│  B1. Add minimum-evidence gate before synthesis                                                      │
+│                                                                                                      │
+│  • In _phase_article_synthesize, before falling back to monolithic synthesis, check:                 │
+│    • len(state.writing_state.get("retrieved_sources", [])) >= ARTICLE_MIN_SOURCE_COUNT               │
+│    • len(usable_claims) > 0                                                                          │
+│  • If both fail, set state.writing_state["article"] to a structured "insufficient evidence" respons  │
+│    instead of a synthetic article:                                                                   │
+│    # Insufficient Evidence                                                                           │
+│    No authoritative sources could be retrieved for this topic.                                       │
+│                                                                                                      │
+│    ## What was attempted                                                                             │
+│  - <list search queries>                                                                             │
+│  - <list fallback attempts>                                                                          │
+│                                                                                                      │
+│    ## Recommendations                                                                                │
+│  - Try a more specific query                                                                         │
+│  - Check search backend connectivity                                                                 │
+│  • Set state.writing_state["insufficient_evidence"] = True so the UI can render a special state.     │
+│  • Skip pre-mortem, critic, and humanize phases when insufficient evidence is detected.              │
+│                                                                                                      │
+│  B2. Implement critical phase halting                                                                │
+│                                                                                                      │
+│  • In PipelineFlow.execute_sequence (new method) or directly in ReasonerPipeline.run, wrap each ste  │
+│    for step in sequence:                                                                             │
+│      await step.fn(state)                                                                            │
+│      if step.critical and _phase_failed(state, step.name):                                           │
+│          state.errors.append(f"Critical phase '{step.name}' failed — halting pipeline.")             │
+│          break                                                                                       │
+│  • Define _phase_failed based on phase-specific failure indicators (e.g., for Adversarial Verify: m  │
+│    rics.claim_support_ratio < ARTICLE_MIN_CLAIM_SUPPORT_RATIO and re-retrieval already attempted).   │
+│  • For the writing flow, mark "Retrieve Sources" and "Adversarial Verify" as critical (already done  │
+│    or Verify; add critical to Retrieve).                                                             │
+│                                                                                                      │
+│  B3. Fix Deep Read for writing/research flows                                                        │
+│                                                                                                      │
+│  • In ReasonerPipeline.run, run _phase_deep_read for the writing method when state.task_type is ANA  │
+│    TICAL or HYBRID, regardless of edu/religious keyword heuristics.                                  │
+│  • OR: merge Deep Read results into the article retrieval phase so vetted context is always availab  │
+│    as a fallback.                                                                                    │
+│                                                                                                      │
+│  Phase C: Pre-Mortem, Abstract Deduplication, Metrics (Files: article_pipeline.py, api/serializers.  │
+│  py)                                                                                                 │
+│                                                                                                      │
+│  C1. Fix pre-mortem serializer to show revised article                                               │
+│                                                                                                      │
+│  • In _ser_writing_premortem, prefer writing.get("article_revised") over writing.get("article").     │
+│  • If article_revised exists, show both original and revised with a diff indicator.                  │
+│                                                                                                      │
+│  C2. Fix pre-mortem correction application                                                           │
+│                                                                                                      │
+│  • In _phase_article_pre_mortem, after _apply_corrections_to_article, verify the article actually c  │
+│    nged by comparing lengths or content hash.                                                        │
+│  • If no change occurred, log a warning and try a stronger revision prompt that explicitly requires  │
+│    ewriting flagged sections.                                                                        │
+│                                                                                                      │
+│  C3. Deduplicate abstract in assembly                                                                │
+│                                                                                                      │
+│  • In _phase_article_assemble, before adding the abstract field, check if any section heading (case  │
+│    nsensitive) matches "abstract", "summary", or "overview".                                         │
+│  • If found, skip adding the separate abstract and log: "Abstract already present in sections — ski  │
+│    ing duplicate."                                                                                   │
+│  • Also deduplicate in _phase_article_synthesize_monolithic: if the reconstructed article text alre  │
+│    y contains an abstract heading, don't prepend another.                                            │
+│                                                                                                      │
+│  C4. Fix quality metrics for zero-claim state                                                        │
+│                                                                                                      │
+│  • In _calculate_metrics, when total == 0, return a sentinel state instead of all zeros:             │
+│    return ArticleMetrics(                                                                            │
+│      total_claims=0,                                                                                 │
+│      verified_claims=0,                                                                              │
+│      weak_claims=0,                                                                                  │
+│      conflicted_claims=0,                                                                            │
+│      unknown_claims=0,                                                                               │
+│      citation_accuracy=-1.0,  # sentinel: not applicable                                             │
+│      contradiction_rate=-1.0,                                                                        │
+│      claim_support_ratio=-1.0,                                                                       │
+│    )                                                                                                 │
+│  • In _phase_article_assemble, when rendering metrics, check for the sentinel and display "N/A (no   │
+│    aims tracked)" instead of 0.0.                                                                    │
+│  • Update the frontend SynthesisCard or PhaseRenderer to handle negative sentinel values.            │
+│                                                                                                      │
+│  Phase D: Timeout & Model Diversity (Files: article_pipeline.py, pipeline.py)                        │
+│                                                                                                      │
+│  D1. Add timeout wrapper to Journal Review                                                           │
+│                                                                                                      │
+│  • Wrap _phase_article_critic in an asyncio.wait_for with a configurable timeout (default 60s).      │
+│  • On timeout, log the timeout, set critic_score = 0, must_revise = False, and append a warning eve  │
+│    . Do not block the pipeline.                                                                      │
+│                                                                                                      │
+│  D2. Enforce cross-model diversity in article phases                                                 │
+│                                                                                                      │
+│  • In preset_registry.py, add explicit routing entries for article-specific roles:                   │
+│    • article_synthesize: different from article_pre_mortem and article_critic                        │
+│    • article_pre_mortem: use a destructive/critical model                                            │
+│    • article_critic: use a scoring/verifier model                                                    │
+│  • Update research-budget and research-premium presets with these mappings.                          │
+│  • In _PHASE_CONFIGS in pipeline.py, ensure article roles have distinct model assignments.           │
+│                                                                                                      │
+│  Phase E: Testing & Validation                                                                       │
+│                                                                                                      │
+│  E1. Add unit tests                                                                                  │
+│                                                                                                      │
+│  • test_perplexity_empty_citations: Verify Perplexity results with empty citations are not dropped.  │
+│  • test_retrieval_zero_sources_gate: Verify pipeline halts or emits insufficient-evidence when no s  │
+│    rces are found.                                                                                   │
+│  • test_critical_phase_halting: Verify pipeline stops after a failed critical phase.                 │
+│  • test_duplicate_abstract_dedup: Verify assembly skips duplicate abstracts.                         │
+│  • test_metrics_sentinel_values: Verify -1.0 sentinels are returned when no claims exist.            │
+│                                                                                                      │
+│  E2. Add integration test                                                                            │
+│                                                                                                      │
+│  • Mock get_search_client to return empty results and verify the pipeline produces an "insufficient  │
+│    vidence" response instead of a synthetic article.                                                 │
+│                                                                                                      │
+│  ──────────────────────────────────────────────────────────────────────────────────────────────────  │
+│  Files Modified                                                                                      │
+│                                                                                                      │
+│   File                                              Changes                                          │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   src/reasoner/core/search.py                       Fix Perplexity URL handling; fix get_search_cl   │
+│                                                     ient fallback logic; add retrieval diagnostics   │
+│   src/reasoner/application/mixins/article_pipelin   Add evidence gate; fix abstract dedup; fix met   │
+│   e.py                                              rics sentinel; add timeout wrapper; improve pr   │
+│                                                     e-mortem correction verification; add retrieva   │
+│                                                     l retry                                          │
+│   src/reasoner/pipeline.py                          Implement critical phase halting; fix Deep Rea   │
+│                                                     d heuristic for writing method                   │
+│   src/reasoner/application/flows/__init__.py        Mark "Retrieve Sources" as critical in writing   │
+│                                                     flow                                             │
+│   src/reasoner/api/serializers.py                   Pre-mortem serializer shows revised article      │
+│   src/reasoner/domain/preset_registry.py            Add article-phase model routing for research p   │
+│                                                     resets                                           │
+│   tests/test_article_pipeline.py (new or existing   Unit tests for evidence gate, retrieval resili   │
+│   )                                                 ence, metrics                                    │
+│                                                                                                      │
+│  Estimated Effort                                                                                    │
+│                                                                                                      │
+│  • Phase A (Search fixes): ~2 hours                                                                  │
+│  • Phase B (Pipeline integrity): ~2.5 hours                                                          │
+│  • Phase C (Pre-mortem, dedup, metrics): ~1.5 hours                                                  │
+│  • Phase D (Timeout, diversity): ~1 hour                                                             │
+│  • Phase E (Tests): ~2 hours                                                                         │
+│  • Total: ~9 hours                                                                                   │
+│                                                                                                      │
+│  Risks & Mitigations                                                                                 │
+│                                                                                                      │
+│   Risk                                              Mitigation                                       │
+│  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
+│   Changing get_search_client breaks other presets   The change only affects the fallback priority;   │
+│                                                     Perplexity still works. Test with both SearXNG   │
+│                                                     -only and Perplexity-only configs.               │
+│   Evidence gate is too aggressive                   Gate only triggers when both sources < min AND   │
+│                                                     claims == 0. For thin but non-zero sources, ex   │
+│                                                     isting re-retrieval logic still applies.         │
+│   Critical phase halting breaks existing behavior   Gate is opt-in via the critical flag, which wa   │
+│                                                     s previously dead code. No existing flows chan   │
+│                                                     ge unless explicitly marked critical.            │
+│   Frontend doesn't handle -1.0 metric sentinels     Update frontend rendering in same PR; fallback   │
+│                                                     to displaying "N/A" for any negative metric va   │
+│                                                     lue.                                             │
+│                                                                                      

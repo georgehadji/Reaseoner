@@ -48,6 +48,15 @@ _CREATIVE_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\b(πες\s+μου|φτιάξε\s+μου|γράψε\s+μου)\s+(μια\s+)?(ιστορία|αφήγηση|ανέκδοτο)\b", re.I),
 ]
 
+# Fast-path patterns for simple factual lookups that can be answered directly
+# by a knowledge model (no web search or multi-phase reasoning needed).
+_FACTUAL_PATTERNS: list[re.Pattern[str]] = [
+    re.compile(r"\b(what\s+is|who\s+is|where\s+is|when\s+is|how\s+many|define|explain)\s+(the\s+)?\w+", re.I),
+    re.compile(r"\b(capital\s+of|president\s+of|invented)\s+\w+", re.I),
+    re.compile(r"\b(ποιο\s+είναι|ποιος\s+είναι|πού\s+είναι|πότε\s+είναι|πόσα|πόσες|πόσους|ορίζω|εξήγησε)\s+(το\s+|η\s+|ο\s+)?\w+", re.I),
+    re.compile(r"\b(πρωτεύουσα\s+της|πρόεδρος\s+της|εφεύρε)\s+\w+", re.I),
+]
+
 # Research indicators — used to detect if a writing request is research-backed.
 _RESEARCH_INDICATORS: list[re.Pattern[str]] = [
     re.compile(r"\b(research\s+(article|paper|essay)|informative\s+(article|essay)|academic\s+(article|essay))\b", re.I),
@@ -138,8 +147,26 @@ class HyperGateAgent:
 
         if len(problem.strip()) < 10:
             return GateDecision(
-                action="direct", confidence=1.0, reasoning="Very short prompt, assumed direct"
+                action="direct", confidence=1.0, reasoning="Very short prompt, assumed direct",
+                complexity="simple"
             )
+
+        # Fast-path: simple factual lookups (e.g., "What is X?")
+        # If it's a short, simple factual question, bypass the pipeline
+        if any(p.search(problem) for p in _FACTUAL_PATTERNS) and len(problem) < 60:
+            decision = GateDecision(
+                action="direct",
+                method=None,
+                confidence=0.95,
+                reasoning="Detected simple factual lookup, assumed direct answer",
+                complexity="simple"
+            )
+            self._cache[problem_hash] = decision
+            logger.info(
+                "HyperGateAgent fast-path: factual-lookup hash=%s action=direct",
+                problem_hash[:16],
+            )
+            return decision
 
         # Fast-path: research-backed writing (articles/essays/blog posts/reports)
         if _WRITING_INTENT.search(problem) or any(p.search(problem) for p in _RESEARCH_INDICATORS):
@@ -148,6 +175,7 @@ class HyperGateAgent:
                 method="writing",
                 confidence=0.92,
                 reasoning="Detected research-backed writing intent (article/essay/blog/report)",
+                complexity="complex"
             )
             self._cache[problem_hash] = decision
             logger.info(
@@ -253,6 +281,7 @@ class HyperGateAgent:
                 method=None,
                 confidence=direct_conf,
                 reasoning=ctx.direct_output.reasoning or "DirectDetector: simple direct query",
+                complexity=complexity
             )
 
         # Step 2 — web search
@@ -262,6 +291,7 @@ class HyperGateAgent:
                 method=None,
                 confidence=web_conf,
                 reasoning=ctx.web_output.reasoning or "WebDetector: real-time data required",
+                complexity=complexity
             )
 
         # Step 3 — pipeline with clear method
@@ -271,6 +301,7 @@ class HyperGateAgent:
                 method=method_name,
                 confidence=method_conf,
                 reasoning=ctx.method_output.reasoning or f"MethodClassifier: {category}",
+                complexity=complexity
             )
 
         # Step 4 — ambiguous but some signal: defer to TieBreaker
@@ -283,6 +314,7 @@ class HyperGateAgent:
             method="multi_perspective",
             confidence=0.0,
             reasoning="All sub-agents failed or returned very low confidence, fallback",
+            complexity=complexity
         )
 
     # ── Phase 2: TieBreaker ──────────────────────────────────────────
@@ -308,4 +340,5 @@ class HyperGateAgent:
             method=out.result.get("method"),
             confidence=out.confidence,
             reasoning=out.reasoning or "TieBreaker resolution",
+            complexity=ctx.complexity
         )

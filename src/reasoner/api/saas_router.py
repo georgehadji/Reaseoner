@@ -186,23 +186,35 @@ async def delete_account(
     repo = PostgresQuotaRepository(dsn, pool_size=2)
     pool = await repo._get_pool()
 
-    # Find active subscription to cancel Stripe billing
+    # Find active subscription to cancel billing
     sub_row = await pool.fetchrow(
-        "SELECT external_subscription_id FROM subscriptions WHERE user_id = $1 AND status = 'active' LIMIT 1",
+        "SELECT stripe_sub_id, paypal_sub_id FROM subscriptions WHERE user_id = $1 AND status = 'active' LIMIT 1",
         str(user.id),
     )
-    if sub_row and sub_row["external_subscription_id"]:
-        try:
-            from reasoner.infrastructure.billing.stripe_adapter import StripeBillingAdapter
-            adapter = StripeBillingAdapter()
-            await adapter.cancel_subscription(sub_row["external_subscription_id"])
-        except Exception as exc:
-            # Log but proceed with deletion — webhook will eventually sync
-            import logging
-            logging.getLogger(__name__).warning(
-                "Failed to cancel Stripe subscription %s for user %s: %s",
-                sub_row["external_subscription_id"], user.id, exc,
-            )
+    if sub_row:
+        if sub_row["stripe_sub_id"]:
+            try:
+                from reasoner.infrastructure.billing.stripe_adapter import StripeBillingAdapter
+                adapter = StripeBillingAdapter()
+                await adapter.cancel_subscription(sub_row["stripe_sub_id"])
+            except Exception as exc:
+                # Log but proceed with deletion — webhook will eventually sync
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to cancel Stripe subscription %s for user %s: %s",
+                    sub_row["stripe_sub_id"], user.id, exc,
+                )
+        if sub_row["paypal_sub_id"]:
+            try:
+                from reasoner.infrastructure.billing.paypal_adapter import PayPalBillingAdapter
+                adapter = PayPalBillingAdapter()
+                await adapter.cancel_subscription(sub_row["paypal_sub_id"])
+            except Exception as exc:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to cancel PayPal subscription %s for user %s: %s",
+                    sub_row["paypal_sub_id"], user.id, exc,
+                )
 
     # Comprehensive deletion: DB + uploads + history + vectors + cache (SEC-009)
     deleted = {"db": False, "uploads": 0, "history": 0, "vectors": 0, "cache": 0}

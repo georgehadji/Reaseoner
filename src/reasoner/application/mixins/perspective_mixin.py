@@ -84,28 +84,55 @@ class PerspectiveMixin(PipelineMixinProtocol):
         def _perspective_name(p) -> str:
             return p.name if hasattr(p, 'name') else str(p)
 
-        tasks = [_get_perspective(_perspective_name(p)) for p in self.perspectives]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        for i, r in enumerate(results):
-            p_name = _perspective_name(self.perspectives[i])
-            if isinstance(r, Exception):
-                msg = f"Perspective '{p_name}' failed: {r}"
-                self._log("PHASE-2", msg, state)
-                state.errors.append(msg)
-            else:
-                if _is_perspective_hallucinated(r):
-                    self._log("PHASE-2", f"Filtering hallucinated perspective '{p_name}'; regenerating once.", state)
-                    try:
-                        replacement = await _get_perspective(p_name)
-                        if _is_perspective_hallucinated(replacement):
-                            self._log("PHASE-2", f"Replacement for '{p_name}' still hallucinated; keeping with penalty.", state)
-                        state.candidates.append(replacement)
-                    except Exception as exc:
-                        self._log("PHASE-2", f"Failed to regenerate perspective '{p_name}': {exc}", state)
-                        state.errors.append(f"Perspective '{p_name}' regeneration failed: {exc}")
+        if self.parallel:
+            tasks = [_get_perspective(_perspective_name(p)) for p in self.perspectives]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            for i, r in enumerate(results):
+                p_name = _perspective_name(self.perspectives[i])
+                if isinstance(r, Exception):
+                    msg = f"Perspective '{p_name}' failed: {r}"
+                    self._log("PHASE-2", msg, state)
+                    state.errors.append(msg)
                 else:
-                    state.candidates.append(r)
+                    if _is_perspective_hallucinated(r):
+                        self._log("PHASE-2", f"Filtering hallucinated perspective '{p_name}'; regenerating once.", state)
+                        try:
+                            replacement = await _get_perspective(p_name)
+                            if _is_perspective_hallucinated(replacement):
+                                self._log("PHASE-2", f"Replacement for '{p_name}' still hallucinated; keeping with penalty.", state)
+                            state.candidates.append(replacement)
+                        except Exception as exc:
+                            self._log("PHASE-2", f"Failed to regenerate perspective '{p_name}': {exc}", state)
+                            state.errors.append(f"Perspective '{p_name}' regeneration failed: {exc}")
+                    else:
+                        state.candidates.append(r)
+        else: # Sequential execution with early stopping
+            self._log("PHASE-2", f"Running perspectives sequentially with top-k={self.top_k} early stopping...", state)
+            for p in self.perspectives:
+                p_name = _perspective_name(p)
+                try:
+                    candidate = await _get_perspective(p_name)
+                    if _is_perspective_hallucinated(candidate):
+                        self._log("PHASE-2", f"Filtering hallucinated perspective '{p_name}'; regenerating once.", state)
+                        try:
+                            replacement = await _get_perspective(p_name)
+                            if _is_perspective_hallucinated(replacement):
+                                self._log("PHASE-2", f"Replacement for '{p_name}' still hallucinated; keeping with penalty.", state)
+                            state.candidates.append(replacement)
+                        except Exception as exc:
+                            self._log("PHASE-2", f"Failed to regenerate perspective '{p_name}': {exc}", state)
+                            state.errors.append(f"Perspective '{p_name}' regeneration failed: {exc}")
+                    else:
+                        state.candidates.append(candidate)
 
+                    # Early stopping: if we have enough candidates, stop generating more.
+                    if len(state.candidates) >= self.top_k:
+                        self._log("PHASE-2", f"Reached top-k={self.top_k} candidates; stopping early.", state)
+                        break
+                except Exception as exc:
+                    msg = f"Perspective '{p_name}' failed: {exc}"
+                    self._log("PHASE-2", msg, state)
+                    state.errors.append(msg)
     async def _phase_3_critique(self, state: PipelineState) -> None:
         from reasoner.pipeline import TOKEN_OPTIMIZATION, USE_PHASE_SUBAGENTS
         self._log("PHASE-3", "Critiquing candidates...", state)

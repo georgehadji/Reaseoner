@@ -6,6 +6,7 @@ import { isEnabled } from '@/hooks/useFeatureFlags';
 import { ChevronDown, Sparkles, Bot, Cpu, Timer, Boxes, ListChecks, ExternalLink } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { TEXT_SIZES, TIMING } from '@/lib/config';
+import { ProfessionalRenderer } from '@/components/ui/ProfessionalRenderer';
 
 interface SubagentInfo {
   name: string;
@@ -36,6 +37,10 @@ interface SynthesisCardProps {
   duration?: number;
   highlights?: Array<{ label: string; value: number }> | null;
   sources?: SourceItem[] | null;
+  layoutHints?: {
+    primary_theme_color?: string;
+    important_sections?: string[];
+  } | null;
 }
 
 function formatModelLabel(model: string) {
@@ -94,6 +99,7 @@ export function SynthesisCard({
   duration,
   highlights,
   sources,
+  layoutHints,
 }: SynthesisCardProps) {
   const [open, setOpen] = useState(defaultOpen);
 
@@ -241,7 +247,7 @@ export function SynthesisCard({
               </div>
             </div>
           )}
-          {children}
+          <ProfessionalRenderer content={children as string} layoutHints={layoutHints || undefined} />
         </div>
       </div>
     </div>

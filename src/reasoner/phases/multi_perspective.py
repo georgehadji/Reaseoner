@@ -56,11 +56,14 @@ def stress_test_prompt(state: PipelineState) -> str:
         {"perspective": c.perspective.value, "one_liner": c.content[:TRUNCATION.ASSUMPTION]}
         for c in state.top_candidates
     ]
+    task_type_str = state.task_type.value if hasattr(state.task_type, 'value') else str(state.task_type)
     return (
         f'{get_language_instruction(state)}\n\n'
+        f'Problem Domain: {_wrap_user_input(state.problem[:TRUNCATION.API_STORAGE])}\n'
+        f'Task Type: {task_type_str}\n\n'
         f'Test these solutions under optimal, constraint_violation, and adversarial scenarios:\n'
         f'{json.dumps(top_candidates_summary, indent=2)}\n\n'
-        f'Describe concrete real-world failure mechanics (e.g., supply-chain collapse, regulatory shutdown, market crash). '
+        f'CRITICAL INSTRUCTION: Scenarios MUST be highly specific to the Problem Domain and Task Type. Do NOT generate generic business risks (like supply-chain collapse) unless they directly apply to the specific problem. Describe concrete failure mechanics relevant to the domain.\n'
         f'Do NOT describe LLM processing errors like truncation, formatting issues, length limits, or off-topic responses. '
         f'Output JSON: {{"stress_tests": [{{"scenario": "<name>", "survival_rate": <0.0-1.0>, "failure_mode": "<desc>"}}]}}'
     )

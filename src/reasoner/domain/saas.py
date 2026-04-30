@@ -52,6 +52,7 @@ class Subscription:
     stripe_subscription_id: Optional[str] = None
     current_period_end: Optional[datetime] = None
     stripe_customer_id: Optional[str] = None  # NEW: Store Stripe customer ID (Enhancement 4.4)
+    paypal_subscription_id: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

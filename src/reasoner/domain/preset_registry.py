@@ -54,6 +54,58 @@ _PRESET_CONFIGS: list[dict] = [
         ],
     },
     {
+        "id": "multi-perspective-ultra-budget",
+        "name": "Multi-Perspective (Ultra-Budget)",
+        "description": "Minimal 5-phase pipeline: fusion, context vetting, 1 perspective, critique, synthesis. No prompt enhancement, no stress test, no deep read. Uses cheapest models (Ministral-3B, Gemini Flash Lite). Designed for maximum cost savings and speed on simple problems.",
+        "primary_id": "ministral-3b",
+        "routing": {
+            "fusion": "ministral-3b",
+            "context_vetting": "ministral-3b",
+            "perspective": "ministral-3b",
+            "constructive": "ministral-3b",
+            "destructive": "ministral-3b", # Still needed for method type, but only 1 perspective will run due to top_k=1
+            "systemic": "ministral-3b",   # Still needed for method type
+            "minimalist": "ministral-3b", # Still needed for method type
+            "scoring": "gemini-flash-lite",
+            "synthesis": "gemini-flash-lite"
+        },
+        "fallback_routing": {
+            "fusion": "glm-4-air",
+            "context_vetting": "glm-4-air",
+            "perspective": "glm-4-air",
+            "constructive": "glm-4-air",
+            "destructive": "glm-4-air",
+            "systemic": "glm-4-air",
+            "minimalist": "glm-4-air",
+            "scoring": "qwen3-plus",
+            "synthesis": "qwen3-plus"
+        },
+        "notes": [
+            "Fusion phase: Ministral-3B (Mistral) for classification + decomposition.",
+            "Context vetting: Ministral-3B (Mistral) for initial RAG query.",
+            "Perspective: Ministral-3B (Mistral) for single perspective generation.",
+            "Scoring: Gemini Flash Lite (Google) for critique — independent lab for bias reduction.",
+            "Synthesis: Gemini Flash Lite (Google) for final output.",
+            "top_k=1 ensures only one perspective runs, saving 3 calls.",
+            "parallel_perspectives=False ensures sequential execution (if top_k > 1 logic allows).",
+            "enhance_prompt=False, skip_stress_test=True, skip_deep_read=True further reduce calls.",
+            "Full run estimated at <$0.01 total.",
+        ],
+        "top_k": 1,
+        "parallel_perspectives": False,
+        "enhance_prompt": False,
+        "skip_stress_test": True,
+        "skip_deep_read": True,
+        "batch_critique_jury": True,
+        "cascading_routing": {
+            "fusion": ["ministral-3b", "glm-4-air"],
+            "context_vetting": ["ministral-3b", "glm-4-air"],
+            "perspective": ["ministral-3b", "glm-4-air"],
+            "scoring": ["gemini-flash-lite", "qwen3-plus"],
+            "synthesis": ["gemini-flash-lite", "qwen3-plus"],
+        },
+    },
+    {
         "id": "multi-perspective-premium",
         "name": "Multi-Perspective (Premium)",
         "description": "Best available model per phase. Perplexity Sonar fact-checks candidates in Phase 3. Gemini Pro and GLM-5.1 dual-check synthesis. Cross-ecosystem for maximum epistemic diversity.",
@@ -281,7 +333,14 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "ministral-3b",
             "scoring": "qwen3.5-flash",
             "stress_testing": "mistral-small",
-            "synthesis": "qwen3-max"
+            "synthesis": "qwen3-max",
+            # Article pipeline: cross-model diversity
+            "article_decompose": "deepseek-v3",
+            "article_synthesize": "qwen3-max",
+            "article_pre_mortem": "mistral-small",
+            "article_critic": "qwen3.5-flash",
+            "article_revise": "gemini-flash-lite",
+            "article_humanize": "ministral-3b",
         },
         "fallback_routing": {
             "prompt_enhancement": "glm-4-air",
@@ -293,7 +352,10 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "deepseek-v3",
             "scoring": "qwen3-plus",
             "stress_testing": "qwen3-plus",
-            "synthesis": "glm-4-air"
+            "synthesis": "glm-4-air",
+            "article_synthesize": "glm-4-air",
+            "article_pre_mortem": "deepseek-v3",
+            "article_critic": "qwen3-plus",
         },
         "notes": [
             "DeepSeek for iterative search reasoning",
@@ -319,7 +381,14 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "gemini-flash",
             "scoring": "sonar-pro",
             "stress_testing": "deepseek-r1t2-chimera",
-            "synthesis": "mimo-v2-pro"
+            "synthesis": "mimo-v2-pro",
+            # Article pipeline: cross-model diversity
+            "article_decompose": "gemini-pro",
+            "article_synthesize": "mimo-v2-pro",
+            "article_pre_mortem": "deepseek-r1t2-chimera",
+            "article_critic": "sonar-pro",
+            "article_revise": "claude-sonnet",
+            "article_humanize": "gemini-flash",
         },
         "fallback_routing": {
             "prompt_enhancement": "claude-sonnet",
@@ -331,7 +400,10 @@ _PRESET_CONFIGS: list[dict] = [
             "minimalist": "deepseek-r1",
             "scoring": "qwen3-plus",
             "stress_testing": "qwen3-plus",
-            "synthesis": "gpt-5"
+            "synthesis": "gpt-5",
+            "article_synthesize": "gpt-5",
+            "article_pre_mortem": "claude-sonnet",
+            "article_critic": "qwen3-plus",
         },
         "required_tier": "pro",
         "notes": [

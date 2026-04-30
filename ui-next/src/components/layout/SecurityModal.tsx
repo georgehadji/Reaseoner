@@ -28,12 +28,12 @@ export function SecurityModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
             </div>
             <div>
               <h3 className="text-lg font-bold text-[var(--text)]">Enterprise Security & Trust</h3>
-              <p className="text-sm text-[var(--text-muted)]">Advanced safeguards for mission-critical reasoning.</p>
+              <p className="text-sm text-[var(--text-2)]">Advanced safeguards for mission-critical reasoning.</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-2 text-[var(--text-subtle)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+            className="rounded-lg p-2 text-[var(--text-2)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
           >
             <X className="h-5 w-5" />
           </button>
@@ -43,44 +43,44 @@ export function SecurityModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           {/* Column 1 */}
           <div className="space-y-6">
             <section className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-muted)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-2)]">
                 <Lock className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-[var(--text)] text-sm mb-1 uppercase tracking-wider text-[var(--text-subtle)] text-[10px]">Compliance</h4>
+                <h4 className="font-semibold text-[var(--text-2)] mb-1 uppercase tracking-wider text-[10px]">Compliance</h4>
                 <h5 className="font-bold text-[var(--text)] text-sm mb-1">Certified SOC 2 Type II Ready</h5>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
                   Independently audited privacy and security standards. Designed for full compliance to protect enterprise-grade workloads.
                 </p>
               </div>
             </section>
 
             <section className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-muted)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-2)]">
                 <Database className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-[var(--text)] text-sm mb-1 uppercase tracking-wider text-[var(--text-subtle)] text-[10px]">Data Privacy</h4>
+                <h4 className="font-semibold text-[var(--text-2)] mb-1 uppercase tracking-wider text-[10px]">Data Privacy</h4>
                 <h5 className="font-bold text-[var(--text)] text-sm mb-1">Data Privacy</h5>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
                   Zero-Training Guarantee. We never train LLMs on your data. Full GDPR and HIPAA compliance.
                   <br />
-                  <span className="italic text-[var(--text-subtle)] text-[11px]">We never train our LLMs on enterprise data.</span>
+                  <span className="italic text-[var(--text-muted)] text-[11px]">We never train our LLMs on enterprise data.</span>
                 </p>
               </div>
             </section>
 
             <section className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-muted)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-2)]">
                 <Server className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-[var(--text)] text-sm mb-1 uppercase tracking-wider text-[var(--text-subtle)] text-[10px]">Encryption</h4>
+                <h4 className="font-semibold text-[var(--text-2)] mb-1 uppercase tracking-wider text-[10px]">Encryption</h4>
                 <h5 className="font-bold text-[var(--text)] text-sm mb-1">Encryption</h5>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
                   E2EE in transit and at rest using AES-256-GCM. 
                   <br />
-                  <span className="italic text-[var(--text-subtle)] text-[11px]">All data is encrypted in transit and at rest.</span>
+                  <span className="italic text-[var(--text-muted)] text-[11px]">All data is encrypted in transit and at rest.</span>
                 </p>
               </div>
             </section>
@@ -89,39 +89,39 @@ export function SecurityModal({ isOpen, onClose }: { isOpen: boolean; onClose: (
           {/* Column 2 */}
           <div className="space-y-6">
             <section className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-muted)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-2)]">
                 <Users className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-[var(--text)] text-sm mb-1 uppercase tracking-wider text-[var(--text-subtle)] text-[10px]">Access Control</h4>
+                <h4 className="font-semibold text-[var(--text-2)] mb-1 uppercase tracking-wider text-[10px]">Access Control</h4>
                 <h5 className="font-bold text-[var(--text)] text-sm mb-1">SSO & SAML Support</h5>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
                   Integrate with Okta, Azure AD, and Google Workspace. Enforce RBAC (Role-Based Access Control) for your team.
                 </p>
               </div>
             </section>
 
             <section className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-muted)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-2)]">
                 <History className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-[var(--text)] text-sm mb-1 uppercase tracking-wider text-[var(--text-subtle)] text-[10px]">Governance</h4>
+                <h4 className="font-semibold text-[var(--text-2)] mb-1 uppercase tracking-wider text-[10px]">Governance</h4>
                 <h5 className="font-bold text-[var(--text)] text-sm mb-1">Audit Logs & Retention</h5>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
                   Comprehensive audit trails for all actions. Configurable data retention policies to meet legal requirements.
                 </p>
               </div>
             </section>
 
             <section className="flex gap-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-muted)]">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[var(--surface-2)] text-[var(--text-2)]">
                 <Globe className="h-5 w-5" />
               </div>
               <div>
-                <h4 className="font-semibold text-[var(--text)] text-sm mb-1 uppercase tracking-wider text-[var(--text-subtle)] text-[10px]">Network</h4>
+                <h4 className="font-semibold text-[var(--text-2)] mb-1 uppercase tracking-wider text-[10px]">Network</h4>
                 <h5 className="font-bold text-[var(--text)] text-sm mb-1">Zero-Trust Architecture</h5>
-                <p className="text-[12px] text-[var(--text-muted)] leading-relaxed">
+                <p className="text-[12px] text-[var(--text-2)] leading-relaxed">
                   All inter-component communication is authenticated and encrypted via internal PKI. No plaintext data on the wire.
                 </p>
               </div>

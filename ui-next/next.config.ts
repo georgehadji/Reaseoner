@@ -52,6 +52,7 @@ function buildCsp(): string {
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  transpilePackages: ['three', '@react-three/fiber', '@react-three/drei', '@react-three/postprocessing', 'postprocessing'],
   turbopack: {
     root: path.resolve(__dirname),
   },

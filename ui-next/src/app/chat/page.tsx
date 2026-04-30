@@ -1070,12 +1070,10 @@ export default function ChatPage() {
 
         <div
           ref={scrollContainerRef}
-          className="relative flex-1 overflow-y-auto scroll-smooth"
+          className="relative flex-1 overflow-y-auto scroll-smooth scrollbar-gray"
           style={{
             contain: 'layout paint',
             overscrollBehavior: 'contain',
-            scrollbarWidth: 'thin',
-            scrollbarColor: 'rgba(59,130,246,0.15) transparent',
           }}
         >
           {hasMessages ? (

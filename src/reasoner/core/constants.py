@@ -74,10 +74,8 @@ HYPERGATE_MAX_TOKENS_TIEBREAK: int = 200
 # ═════════════════════════════════════════════════════════════════════
 
 PHASE_TOKEN_BUDGETS: dict[str, int] = {
-    # Phase 0: Simple classification - minimal output
-    "classification": 256,
-    # Phase 1: Decomposition - structured but bounded
-    "decomposition": 1024,
+    # Phase Fusion: Combined classification and decomposition
+    "fusion": 1536,
     # Phase 2: Perspective analysis - moderate detail
     "perspective": 1536,
     "constructive": 1536,

@@ -251,7 +251,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
                     {keptIdeas.map((idea, ii) => (
                       <div key={ii} className="flex items-center gap-2 py-1 border-t border-white/5">
                         <span className={`text-xs flex-1 ${phaseTextClass}`}>{String(idea.title ?? '')}</span>
-                        <span className="text-xs opacity-50">N:{idea.novelty ?? '—'} F:{idea.feasibility ?? '—'} I:{idea.impact ?? '—'}</span>
+                        <span className="text-xs opacity-50">N:{String(idea.novelty ?? '—')} F:{String(idea.feasibility ?? '—')} I:{String(idea.impact ?? '—')}</span>
                       </div>
                     ))}
                   </div>
@@ -268,7 +268,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
                 return (
                   <div key={di} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 space-y-2">
                     <p className={`text-sm font-semibold ${phaseTextClass}`}>{String(dev.title ?? '')}</p>
-                    {dev.use_case && <p className={`text-xs opacity-80 ${phaseTextClass}`}>{String(dev.use_case)}</p>}
+                    {!!dev.use_case && <p className={`text-xs opacity-80 ${phaseTextClass}`}>{String(dev.use_case)}</p>}
                     {steps.length > 0 && (
                       <ol className={`text-xs space-y-1 list-decimal list-inside opacity-80 ${phaseTextClass}`}>
                         {steps.map((s, si) => <li key={si}>{s}</li>)}

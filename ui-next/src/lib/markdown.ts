@@ -439,7 +439,19 @@ export function buildMarkdownFromPhase(
     }
     if (Array.isArray(ds.negated_commitments) && ds.negated_commitments.length) {
       append('**Negated Commitments**\n');
-      (ds.negated_commitments as string[]).forEach((n) => append(`- ${n}\n`));
+      (ds.negated_commitments as any[]).forEach((n) => {
+        if (typeof n === 'string') {
+          append(`- ${n}\n`);
+        } else if (n && typeof n === 'object') {
+          const comm = n.commitment || n.text || '';
+          const neg = n.negation || n.counter || '';
+          if (comm && neg) {
+            append(`- **${comm}**: ${neg}\n`);
+          } else {
+            append(`- ${comm || neg}\n`);
+          }
+        }
+      });
       append('\n');
     }
     if (Array.isArray(ds.irreconcilable) && ds.irreconcilable.length) {
@@ -790,18 +802,26 @@ export function buildMarkdownFromPhase(
       });
       append('\n');
     }
-    if (Array.isArray(ws.retrieved_sources) && ws.retrieved_sources.length) {
-      append(`**Retrieved Sources:** ${ws.retrieved_sources.length}\n\n`);
+    if (Array.isArray(ws.retrieved_sources)) {
+      if (ws.retrieved_sources.length) {
+        append(`**Retrieved Sources:** ${ws.retrieved_sources.length}\n\n`);
+      } else {
+        append(`**Retrieved Sources:** 0\n\n`);
+      }
     }
     // CoVE states
-    if (Array.isArray(ws.cove_draft_claims) && ws.cove_draft_claims.length) {
-      append(`**CoVE Draft Claims:** ${ws.cove_draft_claims.length}\n`);
-      (ws.cove_draft_claims as Array<Record<string, any>>).slice(0, 5).forEach((c, i) => {
-        const text = typeof c.text === 'string' ? c.text : '';
-        append(`  ${i + 1}. ${text}\n`);
-      });
-      if (ws.cove_draft_claims.length > 5) append(`  ... and ${ws.cove_draft_claims.length - 5} more\n`);
-      append('\n');
+    if (Array.isArray(ws.cove_draft_claims)) {
+      if (ws.cove_draft_claims.length) {
+        append(`**CoVE Draft Claims:** ${ws.cove_draft_claims.length}\n`);
+        (ws.cove_draft_claims as Array<Record<string, any>>).slice(0, 5).forEach((c, i) => {
+          const text = typeof c.text === 'string' ? c.text : '';
+          append(`  ${i + 1}. ${text}\n`);
+        });
+        if (ws.cove_draft_claims.length > 5) append(`  ... and ${ws.cove_draft_claims.length - 5} more\n`);
+        append('\n');
+      } else if ('cove_draft_claims' in ws) {
+        append('*Skipped (no sources retrieved)*\n\n');
+      }
     }
     if (Array.isArray(ws.cove_verification_questions) && ws.cove_verification_questions.length) {
       append('**CoVE Verification Questions**\n');
@@ -826,16 +846,20 @@ export function buildMarkdownFromPhase(
       (ws.cove_changes_made as string[]).forEach((c) => append(`- ${c}\n`));
       append('\n');
     }
-    if (Array.isArray(ws.claims) && ws.claims.length) {
-      append(`**Extracted Claims:** ${ws.claims.length}\n`);
-      (ws.claims as Array<Record<string, any>>).slice(0, 5).forEach((c, i) => {
-        const text = typeof c.text === 'string' ? c.text : '';
-        const status = typeof c.status === 'string' ? c.status : '';
-        const icon = status === 'verified' ? '✅' : status === 'weak' ? '⚠️' : status === 'rejected' ? '❌' : '';
-        append(`  ${i + 1}. ${icon} ${text}\n`);
-      });
-      if (ws.claims.length > 5) append(`  ... and ${ws.claims.length - 5} more\n`);
-      append('\n');
+    if (Array.isArray(ws.claims)) {
+      if (ws.claims.length) {
+        append(`**Extracted Claims:** ${ws.claims.length}\n`);
+        (ws.claims as Array<Record<string, any>>).slice(0, 5).forEach((c, i) => {
+          const text = typeof c.text === 'string' ? c.text : '';
+          const status = typeof c.status === 'string' ? c.status : '';
+          const icon = status === 'verified' ? '✅' : status === 'weak' ? '⚠️' : status === 'rejected' ? '❌' : '';
+          append(`  ${i + 1}. ${icon} ${text}\n`);
+        });
+        if (ws.claims.length > 5) append(`  ... and ${ws.claims.length - 5} more\n`);
+        append('\n');
+      } else if ('claims' in ws) {
+        append('*Skipped (no claims to verify)*\n\n');
+      }
     }
     if (Array.isArray(ws.verifications) && ws.verifications.length) {
       append('**Verification Results**\n');
@@ -873,6 +897,22 @@ export function buildMarkdownFromPhase(
     if (typeof ws.article === 'string' && ws.article.trim()) {
       append('**Article Draft**\n');
       append(ws.article + '\n\n');
+    } else if (Array.isArray(ws.sections) && ws.sections.length) {
+      append('**Article Draft**\n');
+      (ws.sections as Array<Record<string, any>>).forEach((sec) => {
+        const heading = typeof sec.heading === 'string' ? sec.heading : '';
+        const content = typeof sec.content === 'string' ? sec.content : '';
+        if (heading) append(`### ${heading}\n\n`);
+        if (content) append(`${content}\n\n`);
+      });
+    } else if (Array.isArray(ws.sot_sections) && ws.sot_sections.length) {
+      append('**Article Draft (SoT)**\n');
+      (ws.sot_sections as Array<Record<string, any>>).forEach((sec) => {
+        const heading = typeof sec.heading === 'string' ? sec.heading : '';
+        const content = typeof sec.content === 'string' ? sec.content : '';
+        if (heading) append(`### ${heading}\n\n`);
+        if (content) append(`${content}\n\n`);
+      });
     }
     if (typeof ws.abstract === 'string' && ws.abstract.trim()) {
       append('**Abstract**\n');

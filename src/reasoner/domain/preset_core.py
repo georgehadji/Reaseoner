@@ -17,16 +17,20 @@ if TYPE_CHECKING:
 # When adding a new perspective, add its routing_key here.
 _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     # Phase roles
+    "fusion",
     "classification",
     "decomposition",
     "scoring",
     "stress_testing",
     "synthesis",
+    "context_vetting",
+    "deep_read",
     # Default perspective roles (must match PerspectiveDefinition.routing_key values)
     "constructive",
     "destructive",
     "systemic",
     "minimalist",
+    "perspective",
     # Delphi expert roles (Sprint 3 — B5)
     "expert_1",
     "expert_2",
@@ -216,6 +220,14 @@ class PipelinePreset:
     # Method-specific runtime config injected into state before phase execution.
     # Currently used by the brainstorming method (VS rounds, k, threshold, etc.).
     brainstorming_config: dict = field(default_factory=dict)
+    # New fields for dynamic pipeline behavior based on preset
+    top_k: int = field(default=2)
+    parallel_perspectives: bool = field(default=True)
+    enhance_prompt: bool = field(default=False)
+    skip_stress_test: bool = field(default=False)
+    skip_deep_read: bool = field(default=False)
+    batch_critique_jury: bool = field(default=False) # New field for batching jury critique
+    cascading_routing: dict[str, list[str]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         """Validate routing keys and model IDs at construction time."""
@@ -258,6 +270,8 @@ class PipelinePreset:
             primary_id=self.primary_id,
             routing=self.routing,
             fallback_routing=self.fallback_routing,
+            cascading_routing=self.cascading_routing,
+            verbose=True # Always verbose when built from a preset
         )
 
     def check_keys(self) -> dict[str, bool]:

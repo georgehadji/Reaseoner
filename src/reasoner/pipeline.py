@@ -172,10 +172,12 @@ class ReasonerPipeline(
         "expert_4": PhaseConfig(role="expert_4", temperature=PHASE_TEMPERATURES["generator"]),
     }
 
-    def __init__(self, router: ProviderRouter, preset_name: str | None = None, initial_state: PipelineState | None = None, **kwargs) -> None:
+    def __init__(self, router: ProviderRouter, preset_name: str | None = None, initial_state: PipelineState | None = None, complexity: str | None = None, batch_critique_jury: bool = False, **kwargs) -> None:
         self.router = router
         self.preset_name = preset_name
         self.initial_state = initial_state
+        if self.initial_state and complexity:
+            self.initial_state.complexity = complexity
         self.verbose = kwargs.get('verbose', True)
         self.parallel = kwargs.get('parallel_perspectives', True)
         self.top_k = kwargs.get('top_k', 2)
@@ -183,6 +185,7 @@ class ReasonerPipeline(
         self.domain = kwargs.get('domain', None)  # For domain-specific search
         self.enhance_prompt = kwargs.get('enhance_prompt', False)
         self.attachments = kwargs.get('attachments', [])
+        self.batch_critique_jury = batch_critique_jury
         self.phase_configs = self._PHASE_CONFIGS.copy()
         self.perspectives = list(DEFAULT_PERSPECTIVES)
         self._executor = LLMExecutor(
@@ -190,6 +193,7 @@ class ReasonerPipeline(
             phase_configs=self.phase_configs,
             token_cache=token_cache,
             caching_enabled=TOKEN_OPTIMIZATION["caching"],
+            cascading_routing=self.router.cascading_routing, # Pass cascading routing
         )
 
     def _log(self, phase: str, message: str, state: PipelineState) -> None:
@@ -344,14 +348,11 @@ class ReasonerPipeline(
             await self._phase_enhance_prompt(state)
         elif not state.enhanced_problem:
             state.enhanced_problem = state.problem
-        if not state.task_type: # Only classify if not already done
-            await self._phase_0_classify(state)
-        else:
-            pass # Skipping _phase_0_classify (task_type already set).
-        if not state.decomposition: # Only decompose if not already done
-            await self._phase_1_decompose(state)
-        else:
-            pass # Skipping _phase_1_decompose (decomposition already set).
+        
+        # Phase Fusion: Combine classification and decomposition
+        if not state.task_type or not state.decomposition:
+            await self._phase_fusion(state)
+        # else: task_type and decomposition are already set (e.g., from a resumed state)
 
         # --- DYNAMIC METHOD BRANCHING (detect early to control universal phases) ---
         method = self._get_method_from_preset()
@@ -379,12 +380,18 @@ class ReasonerPipeline(
             state.task_type in (TaskType.TECHNICAL, TaskType.HYBRID, TaskType.ANALYTICAL)
             and any(kw in state.problem.lower() for kw in _edu_keywords | _historical_religious_keywords)
         )
+        # Also run deep read for analytical/hybrid writing tasks (e.g., research articles)
+        # even when they don't match the narrow edu/religious keyword heuristics.
+        _is_analytical_writing = (
+            method == "writing"
+            and state.task_type in (TaskType.ANALYTICAL, TaskType.HYBRID)
+        )
         
-        # Only universally run deep read for 'research' or knowledge dense tasks
+        # Only universally run deep read for 'research', analytical writing, or knowledge dense tasks
         # AND explicitly skip methods that have it registered in their flow.
         _methods_with_explicit_deep_read = {"debate"} 
         if method not in _methods_with_explicit_deep_read:
-            if method == "research" or (method != "brainstorming" and _is_knowledge_dense):
+            if method == "research" or _is_analytical_writing or (method != "brainstorming" and _is_knowledge_dense):
                 await self._phase_deep_read(state)
         
         # --- CROSS-LANGUAGE TRANSLATION (Optional) ---
@@ -400,6 +407,10 @@ class ReasonerPipeline(
         sequence = flow.get_sequence(method)
         for step in sequence:
             await step.fn(state)
+            if step.critical and self._is_critical_phase_failed(state, step.name):
+                state.errors.append(f"Critical phase '{step.name}' failed — halting pipeline.")
+                self._log("ORCHESTRATOR", f"Critical phase '{step.name}' failed — halting remaining phases.", state)
+                break
 
         # --- UNIVERSAL END PHASE ---
         await self._phase_synthesis(state)
@@ -442,6 +453,40 @@ class ReasonerPipeline(
         # For now, the stricter system prompt handles this; the length/fusion guards catch
         # the most common corruption vectors.
         return True
+
+    def _is_critical_phase_failed(self, state: PipelineState, phase_name: str) -> bool:
+        """Determine whether a critical phase has failed and the pipeline should halt."""
+        # Writing flow: Retrieve Sources failed if no sources retrieved
+        if phase_name == "Retrieve Sources":
+            sources = state.writing_state.get("retrieved_sources", [])
+            if not sources:
+                return True
+            # Also fail if insufficient evidence gate was triggered
+            if state.writing_state.get("insufficient_evidence"):
+                return True
+            return False
+
+        # Writing flow: Adversarial Verify failed if claim support is too low
+        # and re-retrieval was already attempted
+        if phase_name == "Adversarial Verify":
+            metrics = state.writing_state.get("metrics", {})
+            support_ratio = metrics.get("claim_support_ratio", 0.0)
+            re_retrieval_done = state.writing_state.get("re_retrieval_done", False)
+            if support_ratio < ARTICLE_MIN_CLAIM_SUPPORT_RATIO and re_retrieval_done:
+                return True
+            # Also fail if no claims were extracted at all
+            if metrics.get("total_claims", 0) == 0 and not state.writing_state.get("retrieved_sources"):
+                return True
+            return False
+
+        # Coding flow: Security Review failed if critical issues found
+        if phase_name == "Security Review":
+            coding = state.coding_state or {}
+            critical_count = coding.get("critical_count", 0)
+            return critical_count > 0
+
+        # Default: don't halt
+        return False
 
     @timed
     async def _phase_enhance_prompt(self, state: PipelineState):
@@ -491,6 +536,42 @@ class ReasonerPipeline(
         except Exception as exc:
             state.enhanced_problem = state.problem
             self._log("PROMPT-ENHANCE", f"Enhancement failed ({exc}); using original prompt.", state)
+
+    @timed
+    async def _phase_fusion(self, state: PipelineState):
+        self._log("PHASE-FUSION", "Classifying task and decomposing problem...", state)
+        from reasoner.phases._shared import detect_language
+        problem = state.enhanced_problem or state.problem
+        lang = detect_language(problem)
+
+        raw, _ = await self._call_llm_cached(
+            role="fusion",
+            system_prompt=phases.FUSION_SYSTEM,
+            user_prompt=phases.fusion_prompt(state, lang),
+            state=state,
+            max_tokens=get_token_budget("fusion") if TOKEN_OPTIMIZATION["dynamic_budgets"] else DEFAULT_MAX_TOKENS
+        )
+        data = extract_json(raw)
+
+        # Populate state from fused output
+        state.task_type = TaskType.coerce(data.get("task_type"))
+        detected_lang = data.get("language") or lang
+        if detected_lang == "English" and lang != "English":
+            detected_lang = lang
+        state.language = detected_lang
+
+        # It's possible for 'decomposition' to be empty if the LLM hallucinated,
+        # so ensure it's a dict with default empty lists to prevent downstream errors.
+        state.decomposition = {
+            "causal_chain": data.get("causal_chain", []),
+            "assumptions": data.get("assumptions", []),
+            "failure_modes": data.get("failure_modes", []),
+            "critical_sources": data.get("critical_sources", []),
+            # Add other decomposition fields if any, with empty defaults
+        }
+
+        self._log("PHASE-FUSION", f"Task type: {state.task_type.value}, Language: {state.language}", state)
+        self._log("PHASE-FUSION", f"Decomposition complete with {len(state.decomposition.get('causal_chain', []))} steps.", state)
 
     @timed
     async def _phase_0_classify(self, state: PipelineState):
@@ -738,7 +819,8 @@ class ReasonerPipeline(
                 assumption_failure_impact=meta_audit_data.get("assumption_failure_impact", ""),
                 non_obvious_insight=meta_audit_data.get("non_obvious_insight", "")
             ),
-            sources=_coerce_sources(json_data.get("sources", []))
+            sources=_coerce_sources(json_data.get("sources", [])),
+            layout_hints=json_data.get("layout_hints", {})
         )
 
     @timed

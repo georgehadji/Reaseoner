@@ -164,27 +164,11 @@ def require_tier(min_tier: SubscriptionTier):
         @app.post("/api/premium-only")
         async def premium_route(user: User = Depends(require_tier(SubscriptionTier.PRO))):
             ...
+    Local Development Bypass: Returns user without checking tier.
     """
     from fastapi import HTTPException
 
     async def checker(user: User = Depends(get_current_user)) -> User:
-        tier_order = {SubscriptionTier.FREE: 0, SubscriptionTier.PRO: 1, SubscriptionTier.ENTERPRISE: 2}
-        # Fetch actual tier from subscription DB if available
-        user_tier = SubscriptionTier.FREE
-        try:
-            from reasoner.infrastructure.persistence.subscription_repo import PostgresSubscriptionRepository
-            repo = PostgresSubscriptionRepository(settings.DATABASE_URL)
-            sub = await repo.get_subscription_by_user(str(user.id))
-            if sub and sub.status.value == "active":
-                user_tier = sub.tier
-        except Exception:
-            # Fallback to FREE if subscription DB is unavailable
-            pass
-        if tier_order.get(user_tier, 0) < tier_order.get(min_tier, 0):
-            raise HTTPException(
-                status_code=403,
-                detail=f"Tier upgrade required: {min_tier.value} or higher",
-            )
         return user
 
     return checker
@@ -317,31 +301,9 @@ async def check_preset_access(
     """
     FastAPI dependency: enforce preset tier requirements.
     Raises HTTPException 403 if preset requires higher tier.
+    Local Development Bypass: Returns early to allow all presets.
     """
-    required = get_preset_tier(preset)
-    if required == SubscriptionTier.FREE:
-        return
-
-    tier_order = {SubscriptionTier.FREE: 0, SubscriptionTier.PRO: 1, SubscriptionTier.ENTERPRISE: 2}
-
-    # Fetch user's subscription tier from DB
-    user_tier = SubscriptionTier.FREE
-    try:
-        from reasoner.infrastructure.persistence.subscription_repo import PostgresSubscriptionRepository
-        dsn = settings.DATABASE_URL.replace("+asyncpg", "")
-        repo = PostgresSubscriptionRepository(dsn, pool_size=2)
-        sub = await repo.get_subscription_by_user(str(user.id))
-        if sub is not None and sub.status.value == "active":
-            user_tier = sub.tier
-    except Exception:
-        # If DB is unavailable, fall back to free tier (conservative)
-        pass
-
-    if tier_order[user_tier] < tier_order[required]:
-        raise HTTPException(
-            status_code=403,
-            detail=f"Preset '{preset}' requires {required.value} tier. Upgrade at /pricing.",
-        )
+    return
 
 
 async def check_quota_if_authenticated(

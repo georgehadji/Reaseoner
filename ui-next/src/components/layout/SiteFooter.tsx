@@ -27,7 +27,7 @@ export function SiteFooter() {
               <Logo showWordmark size={22} />
               <SecurityBadge />
             </div>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-[var(--text-muted)]">
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-[var(--text)]">
               Advanced Reasoning Architecture — multi-method pipelines with verified, auditable outputs.
             </p>
           </div>
@@ -35,7 +35,7 @@ export function SiteFooter() {
           {/* Links */}
           {Object.entries(LINKS).map(([group, items]) => (
             <div key={group}>
-              <div className="mb-4 text-xs font-semibold uppercase tracking-widest text-[var(--text-subtle)]">
+              <div className="mb-4 text-xs font-semibold uppercase tracking-widest text-[var(--text)]">
                 {group}
               </div>
               <ul className="flex flex-col gap-2.5">
@@ -43,7 +43,7 @@ export function SiteFooter() {
                   <li key={href}>
                     <Link
                       href={href}
-                      className="text-sm text-[var(--text-muted)] transition-colors duration-200 hover:text-[var(--text)]"
+                      className="text-sm text-[var(--text)] transition-colors duration-200 hover:text-[var(--text)]"
                     >
                       {label}
                     </Link>
@@ -54,7 +54,7 @@ export function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[var(--border)] pt-8 text-xs text-[var(--text-subtle)] sm:flex-row">
+        <div className="mt-12 flex flex-col items-center justify-between gap-4 border-t border-[var(--border)] pt-8 text-xs text-[var(--text-2)] sm:flex-row">
           <p>© {new Date().getFullYear()} Reasoner. All rights reserved.</p>
           <p>Built for critical decisions.</p>
         </div>

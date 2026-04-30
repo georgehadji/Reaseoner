@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { BlobBackground } from '@/components/layout/BlobBackground';
+import { NeuralConstellation } from '@/components/fx/NeuralConstellation';
 import { ArrowRight } from 'lucide-react';
 
 const FEATURES = [
@@ -43,14 +44,37 @@ export default function LandingPage() {
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[var(--bg)] text-[var(--text)]">
-      {/* Soft blob background */}
+      {/* Soft blob background for page body */}
       <BlobBackground />
 
       <SiteHeader />
 
+      {/* Scroll fade mask — content fades as it reaches the header */}
+      <div
+        className="pointer-events-none fixed top-0 left-0 right-0 z-40 h-24"
+        style={{
+          background: 'linear-gradient(to bottom, var(--bg) 0%, transparent 100%)',
+        }}
+        aria-hidden="true"
+      />
+
       <main id="main-content" className="relative z-10">
         {/* ── Hero ────────────────────────────────────────── */}
-        <section className="flex min-h-[90vh] flex-col items-center justify-center px-6 pb-20 pt-28 text-center">
+        <section className="relative flex min-h-[90vh] flex-col items-center justify-center overflow-hidden px-6 pb-20 pt-28 text-center">
+          {/* 3D neural constellation background */}
+          <NeuralConstellation className="absolute inset-0 z-0" />
+
+          {/* Vignette overlay for text readability */}
+          <div
+            className="pointer-events-none absolute inset-0 z-[1]"
+            style={{
+              background:
+                'radial-gradient(ellipse 70% 55% at 50% 45%, transparent 0%, var(--bg) 75%)',
+            }}
+          />
+
+          {/* Content */}
+          <div className="relative z-10">
           <p
             className="animate-fade-up mb-6 text-sm font-medium tracking-widest uppercase text-[var(--text-muted)]"
             style={{ animationDelay: '0ms' }}
@@ -74,7 +98,7 @@ export default function LandingPage() {
               transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.22 }}
               style={{
                 marginLeft: '0.3em',
-                textShadow: '0 0 40px rgba(59,130,246,0.45), 0 0 100px rgba(6,182,212,0.25)',
+                textShadow: '0 0 40px rgba(224,224,224,0.35), 0 0 100px rgba(160,160,160,0.18)',
               }}
             >
               certainty.
@@ -119,6 +143,7 @@ export default function LandingPage() {
                 {cap}
               </span>
             ))}
+          </div>
           </div>
         </section>
 

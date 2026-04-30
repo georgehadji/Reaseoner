@@ -240,6 +240,12 @@ class DialecticalMixin(PipelineMixinProtocol):
             system_prompt=phases.ANALOGICAL_TRANSFER_SYSTEM,
             user_prompt=phases.analogical_transfer_prompt(state), state=state)
         data = extract_json(raw)
+        
+        if isinstance(data, str):
+            self._log("ANALOGICAL", f"Transfer parse error: expected dict, got string", state)
+            state.errors.append("Analogical transfer: parse error, got string instead of JSON object.")
+            data = {"transferred_solution": data} # Fallback to using the raw text as the solution
+
         state.analogical_state["transferred_solution"] = data.get("transferred_solution", "") or ""
         state.analogical_state["transfer_steps"] = data.get("transfer_steps", [])
         state.analogical_state["adaptations_required"] = data.get("adaptations_required", [])

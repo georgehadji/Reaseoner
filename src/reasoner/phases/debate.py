@@ -3,10 +3,10 @@ import json
 from reasoner.models import PipelineState
 from reasoner.phases._shared import get_language_instruction, _wrap_user_input
 
-DEBATE_OPENING_SYSTEM = "You are an expert debater. Your objective is to present a compelling, evidence-based opening argument for your assigned side. Focus on making strong claims, supported by logic and any provided context. Do NOT describe the debate process or your role; execute your role as a debater. Output ONLY valid JSON."
+DEBATE_OPENING_SYSTEM = "You are an expert debater. Your objective is to present a compelling, evidence-based opening argument for your assigned stance. Focus on making strong claims, supported by logic and any provided context. Do NOT describe the debate process or your role; execute your role as a debater. Output ONLY valid JSON."
 
-def debate_opening_prompt(state: PipelineState, side: str) -> str:
-    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nYou are Side {side}. Present your opening statement.\n\nOutput JSON: {{"side": "{side}", "content": "<your statement>", "key_claims": ["<claim 1>"]}}'
+def debate_opening_prompt(state: PipelineState, side: str, stance: str) -> str:
+    return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nYou are Side {side}. Your assigned stance is: {stance}.\nPresent your opening statement defending this specific stance.\n\nOutput JSON: {{"side": "{side}", "stance": "{stance}", "content": "<your statement>", "key_claims": ["<claim 1>"]}}'
 
 DEBATE_REBUTTAL_SYSTEM = "You are an expert debater. Your objective is to rigorously attack your opponent's opening statement, exposing its weaknesses, logical fallacies, or lack of evidence. Simultaneously, you must defend your own key claims from potential attacks. CRITICAL RULE: Do NOT be neutral or conciliatory. Your tone must be adversarial. Do NOT describe the debate process or your role; execute your role as a debater. Output ONLY valid JSON."
 

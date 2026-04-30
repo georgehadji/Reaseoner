@@ -21,11 +21,24 @@ class DebateMixin(PipelineMixinProtocol):
 
     async def _phase_debate_opening(self, state: PipelineState) -> None:
         self._log("DEBATE", "Round 1: Opening Statements", state)
-        async def _get_opening(side: str):
-            raw, _ = await self._call_llm_cached(role="constructive" if side=="A" else "destructive", system_prompt=phases.DEBATE_OPENING_SYSTEM, user_prompt=phases.debate_opening_prompt(state, side), state=state)
+        
+        # Extract stances from decomposition if available to create a meaningful debate
+        stance_a = "In favor of the primary premise or proposing a proactive solution."
+        stance_b = "Opposed to the primary premise or proposing a cautious/alternative approach."
+        
+        if state.decomposition and state.decomposition.sub_problems:
+             # Use the first sub-problem to anchor the debate if nothing else is available
+             stance_a = f"Propose a solution prioritizing: {state.decomposition.sub_problems[0].description}"
+             if len(state.decomposition.sub_problems) > 1:
+                 stance_b = f"Propose an alternative solution prioritizing: {state.decomposition.sub_problems[1].description}"
+             else:
+                 stance_b = "Argue against the proactive solution, prioritizing caution and risk mitigation."
+
+        async def _get_opening(side: str, stance: str):
+            raw, _ = await self._call_llm_cached(role="constructive" if side=="A" else "destructive", system_prompt=phases.DEBATE_OPENING_SYSTEM, user_prompt=phases.debate_opening_prompt(state, side, stance), state=state)
             return extract_json(raw)
         
-        results = await asyncio.gather(_get_opening("A"), _get_opening("B"), return_exceptions=True)
+        results = await asyncio.gather(_get_opening("A", stance_a), _get_opening("B", stance_b), return_exceptions=True)
         statements = []
         for side, r in zip(["A", "B"], results):
             if isinstance(r, Exception):
@@ -40,17 +53,33 @@ class DebateMixin(PipelineMixinProtocol):
         self._log("DEBATE", "Round 2: Rebuttals", state)
         # Guard: opening phase may have produced fewer than 2 statements if one side failed.
         # Abort the rebuttal round rather than crash with IndexError.
-        opening_statements = state.debate_rounds[0]['statements'] if state.debate_rounds else []
+        opening_statements = state.debate_rounds[0].get('statements', []) if state.debate_rounds else []
         if len(opening_statements) < 2:
             msg = f"Debate rebuttal skipped: only {len(opening_statements)} opening statement(s) available"
             self._log("DEBATE", msg, state)
             state.errors.append(msg)
             return
-        statement_a = opening_statements[0].get('content', '')
-        statement_b = opening_statements[1].get('content', '')
+            
+        statement_a = opening_statements[0].get('content', '') if opening_statements[0] else ''
+        statement_b = opening_statements[1].get('content', '') if len(opening_statements) > 1 and opening_statements[1] else ''
+        
+        if not statement_a or not statement_b:
+            msg = "Debate rebuttal skipped: missing content in one or both opening statements."
+            self._log("DEBATE", msg, state)
+            state.errors.append(msg)
+            return
+
         async def _get_rebuttal(side: str, opponent_statement: str):
-            raw, _ = await self._call_llm_cached(role="constructive" if side=="A" else "destructive", system_prompt=phases.DEBATE_REBUTTAL_SYSTEM, user_prompt=phases.debate_rebuttal_prompt(state, side, opponent_statement), state=state)
-            return extract_json(raw)
+            try:
+                raw, _ = await self._call_llm_cached(role="constructive" if side=="A" else "destructive", system_prompt=phases.DEBATE_REBUTTAL_SYSTEM, user_prompt=phases.debate_rebuttal_prompt(state, side, opponent_statement), state=state)
+                data = extract_json(raw)
+                # Ensure the returned dict has the necessary keys
+                if "rebuttal_content" not in data:
+                    self._log("DEBATE", f"Warning: 'rebuttal_content' missing in Side {side}'s response.", state)
+                return data
+            except Exception as e:
+                self._log("DEBATE", f"Error during rebuttal extraction for Side {side}: {e}", state)
+                return None
         
         results = await asyncio.gather(_get_rebuttal("A", statement_b), _get_rebuttal("B", statement_a), return_exceptions=True)
         rebuttals = []
@@ -59,9 +88,19 @@ class DebateMixin(PipelineMixinProtocol):
                 msg = f"Debate rebuttal '{side}' failed: {r}"
                 self._log("DEBATE", msg, state)
                 state.errors.append(msg)
+            elif r is None:
+                msg = f"Debate rebuttal '{side}' returned empty data."
+                self._log("DEBATE", msg, state)
+                state.errors.append(msg)
             else:
+                # Force side assignment to prevent hallucinations
+                r["side"] = side
                 rebuttals.append(r)
-        state.debate_rounds.append({"round": 2, "type": "rebuttal", "rebuttals": rebuttals})
+        
+        if rebuttals:
+            state.debate_rounds.append({"round": 2, "type": "rebuttal", "rebuttals": rebuttals})
+        else:
+            self._log("DEBATE", "No valid rebuttals generated. Skipping appending round 2.", state)
 
     async def _phase_debate_judge(self, state: PipelineState) -> None:
         self._log("DEBATE", "Round 3: Judging", state)

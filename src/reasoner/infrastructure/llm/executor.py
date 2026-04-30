@@ -6,11 +6,14 @@ Responsible for:
   - Token-aware cache lookup and storage
   - Router delegation (ProviderRouter.call)
   - Cost and token accumulation into PipelineState
+  - Prompt compression for code-heavy contexts
+  - Quality-gated cascading with fail-fast heuristics
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, AsyncIterator
 
 from reasoner.core.constants import (
@@ -22,6 +25,9 @@ from reasoner.infrastructure.llm.router import ProviderRouter
 from reasoner.models import PipelineState
 
 logger = logging.getLogger(__name__)
+
+# Regex for fenced code blocks inside prompts
+_CODE_FENCE_RE = re.compile(r"```(\w+)?\n(.*?)\n```", re.DOTALL)
 
 
 class LLMExecutor:
@@ -40,12 +46,16 @@ class LLMExecutor:
         token_cache: Any | None,
         caching_enabled: bool,
         cascading_routing: dict[str, list[str]] | None = None,
+        cascading_quality_check: bool = True,
+        prompt_compression: bool = False,
     ) -> None:
         self.router = router
         self.phase_configs = phase_configs
         self._token_cache = token_cache
         self._caching_enabled = caching_enabled
         self.cascading_routing = cascading_routing or {}
+        self.cascading_quality_check = cascading_quality_check
+        self.prompt_compression = prompt_compression
 
     async def execute(
         self,
@@ -65,16 +75,36 @@ class LLMExecutor:
         - Accumulates token usage and cost into state after every call.
         - Stores the response in cache on a miss.
         """
-        # ── Temperature resolution ────────────────────────────────────────
+        # ── Temperature resolution (with retry-aware strategy) ──────────
         if "temperature" not in kwargs:
             lookup = phase_key or role
+            cfg = None
             if lookup in self.phase_configs:
-                kwargs["temperature"] = self.phase_configs[lookup].temperature
+                cfg = self.phase_configs[lookup]
             else:
-                for cfg in self.phase_configs.values():
-                    if cfg.role == role:
-                        kwargs["temperature"] = cfg.temperature
+                for c in self.phase_configs.values():
+                    if c.role == role:
+                        cfg = c
                         break
+
+            if cfg:
+                base_temp = cfg.temperature
+                strategy = getattr(cfg, "temperature_strategy", None)
+                attempt = kwargs.get("_retry_attempt", 0)
+
+                if strategy and strategy.value != "fixed":
+                    from reasoner.core.protocol import TemperatureStrategy
+                    if strategy == TemperatureStrategy.ESCALATE:
+                        kwargs["temperature"] = min(base_temp + 0.1 * attempt, 1.0)
+                    elif strategy == TemperatureStrategy.DEESCALATE:
+                        kwargs["temperature"] = max(base_temp - 0.05 * attempt, 0.0)
+                    elif strategy == TemperatureStrategy.SWEEP:
+                        sweep_values = [0.1, 0.5, 0.9]
+                        kwargs["temperature"] = sweep_values[min(attempt, len(sweep_values) - 1)]
+                    else:
+                        kwargs["temperature"] = base_temp
+                else:
+                    kwargs["temperature"] = base_temp
 
         # ── Cache lookup ──────────────────────────────────────────────────
         # Caching for streaming is complex. For now, disable caching for streaming calls.
@@ -107,7 +137,25 @@ class LLMExecutor:
                     "output": estimated_output,
                     "total": estimated_input + estimated_output,
                 }
+                # Emit Prometheus cache metrics
+                try:
+                    from reasoner.api.metrics import CACHE_HITS, TOKEN_SAVINGS_USD
+                    CACHE_HITS.labels(phase=role, model=model_id_for_cache).inc()
+                    TOKEN_SAVINGS_USD.inc(estimated_output * 0.000001)
+                except Exception:
+                    pass  # Metrics are best-effort
                 return cached_response, {**token_meta, "cost_usd": 0.0, "model": model_id_for_cache, "cached": True}
+            else:
+                # Emit cache miss metric
+                try:
+                    from reasoner.api.metrics import CACHE_MISSES
+                    CACHE_MISSES.labels(phase=role, model=model_id_for_cache).inc()
+                except Exception:
+                    pass
+
+        # ── Prompt compression (code blocks) ──────────────────────────────
+        if self.prompt_compression:
+            user_prompt = self._compress_prompt_code_blocks(user_prompt, role)
 
         # ── LLM call (with cascading logic if configured) ──────────────────────
         # Defensive: ensure max_tokens is always set before reaching the provider.
@@ -144,6 +192,16 @@ class LLMExecutor:
                             json.loads(raw)
                         except json.JSONDecodeError:
                             raise RuntimeError(f"Malformed JSON from {model_id} for role={role}")
+
+                    # ── Quality gate (fail-fast heuristics) ─────────────────────
+                    if self.cascading_quality_check:
+                        from reasoner.quality.quick_check import QuickQualityCheck
+                        ok, reason = QuickQualityCheck.check_all(role, raw)
+                        if not ok:
+                            logger.warning(
+                                f"[CASCADING] Model '{model_id}' response failed quick quality check: {reason}"
+                            )
+                            raise RuntimeError(f"Quality check failed: {reason}")
 
                     logger.info(f"[CASCADING] Model '{model_id}' succeeded for role '{role}'.")
                     if self._token_cache and self._caching_enabled:
@@ -325,3 +383,59 @@ class LLMExecutor:
                 state.cost_state._phase_models_by_key[tracking_key] = []
             if model not in state.cost_state._phase_models_by_key[tracking_key]:
                 state.cost_state._phase_models_by_key[tracking_key].append(model)
+
+    # Map common markdown language tags to file extensions
+    _LANG_TO_EXT: ClassVar[dict[str, str]] = {
+        "python": "py",
+        "javascript": "js",
+        "typescript": "ts",
+        "rust": "rs",
+        "go": "go",
+        "shell": "sh",
+        "bash": "sh",
+        "java": "java",
+        "c": "c",
+        "cpp": "cpp",
+        "csharp": "cs",
+        "ruby": "rb",
+        "php": "php",
+        "swift": "swift",
+        "kotlin": "kt",
+        "scala": "scala",
+        "r": "r",
+        "sql": "sql",
+        "html": "html",
+        "css": "css",
+        "json": "json",
+        "yaml": "yaml",
+        "xml": "xml",
+    }
+
+    @classmethod
+    def _compress_prompt_code_blocks(cls, prompt: str, role: str) -> str:
+        """Compress fenced code blocks inside a prompt to save tokens.
+
+        Only compresses for roles that typically carry large code context.
+        Uses the existing ContextCompressor from reasoner.neuro.compression.
+        """
+        # Skip compression for roles that don't typically have code
+        code_heavy_roles = {
+            "coding_spec", "coding_generate", "coding_review",
+            "coding_tests", "coding_assemble", "primary",
+            "context_vetting", "deep_read",
+        }
+        if role not in code_heavy_roles:
+            return prompt
+
+        from reasoner.neuro.compression import smart_compress
+
+        def _replace_block(match: re.Match) -> str:
+            lang = match.group(1) or ""
+            code = match.group(2)
+            # Normalize markdown language tag to file extension
+            ext = cls._LANG_TO_EXT.get(lang.lower(), lang)
+            # Use minimal compression (remove comments/blank lines)
+            compressed = smart_compress(code, ext=ext, level="minimal")
+            return f"```{lang}\n{compressed}\n```"
+
+        return _CODE_FENCE_RE.sub(_replace_block, prompt)

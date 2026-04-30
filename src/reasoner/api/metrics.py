@@ -105,6 +105,31 @@ REASONER_CACHE_ENTRIES = Gauge(
     "Number of cache entries",
 )
 
+CACHE_HITS = Counter(
+    "reasoner_cache_hits_total",
+    "Token cache hits",
+    ["phase", "model"],
+)
+
+CACHE_MISSES = Counter(
+    "reasoner_cache_misses_total",
+    "Token cache misses",
+    ["phase", "model"],
+)
+
+TOKEN_SAVINGS_USD = Counter(
+    "reasoner_token_savings_usd",
+    "Estimated cost savings from cache",
+)
+
+# Phase latency histograms
+PHASE_DURATION = Histogram(
+    "reasoner_phase_duration_seconds",
+    "Phase execution time",
+    ["phase", "method", "preset"],
+    buckets=[0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0, 120.0, 300.0],
+)
+
 # Circuit breaker metrics
 REASONER_CIRCUIT_BREAKER_STATE = Gauge(
     "reasoner_circuit_breaker_state",

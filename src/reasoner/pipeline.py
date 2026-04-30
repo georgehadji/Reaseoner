@@ -43,6 +43,7 @@ from reasoner.parsing import ParseError, extract_json, safe_list, safe_float, _p
 from reasoner.llm import LLMError, ProviderRouter
 from reasoner.infrastructure.llm.executor import LLMExecutor
 from reasoner.core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
+from reasoner.core.protocol import TemperatureStrategy
 from reasoner.core.temperatures import PHASE_TEMPERATURES
 from reasoner.core.constants import (
     ARTICLE_MIN_SOURCE_COUNT,
@@ -124,20 +125,20 @@ class ReasonerPipeline(
     Routes execution to method-specific pipelines based on the selected preset.
     """
     _PHASE_CONFIGS: dict[str, PhaseConfig] = {
-        "classification": PhaseConfig(role="classification", temperature=PHASE_TEMPERATURES["classification"]),
-        "decomposition": PhaseConfig(role="decomposition", temperature=PHASE_TEMPERATURES["decomposition"]),
-        "perspective": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["perspective"]),
+        "classification": PhaseConfig(role="classification", temperature=PHASE_TEMPERATURES["classification"], temperature_strategy=TemperatureStrategy.DEESCALATE),
+        "decomposition": PhaseConfig(role="decomposition", temperature=PHASE_TEMPERATURES["decomposition"], temperature_strategy=TemperatureStrategy.DEESCALATE),
+        "perspective": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["perspective"], temperature_strategy=TemperatureStrategy.ESCALATE),
         "constructive": PhaseConfig(role="constructive", temperature=PHASE_TEMPERATURES["perspective"]),
         "destructive": PhaseConfig(role="destructive", temperature=PHASE_TEMPERATURES["perspective"]),
         "systemic": PhaseConfig(role="systemic", temperature=PHASE_TEMPERATURES["perspective"]),
         "minimalist": PhaseConfig(role="minimalist", temperature=PHASE_TEMPERATURES["perspective"]),
-        "scoring": PhaseConfig(role="scoring", temperature=PHASE_TEMPERATURES["scoring"]),
+        "scoring": PhaseConfig(role="scoring", temperature=PHASE_TEMPERATURES["scoring"], temperature_strategy=TemperatureStrategy.DEESCALATE),
         "stress_testing": PhaseConfig(role="stress_testing", temperature=PHASE_TEMPERATURES["stress_testing"]),
         "synthesis": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
         "generator": PhaseConfig(role="generator_1", temperature=PHASE_TEMPERATURES["generator"]),
         "critic": PhaseConfig(role="critic_1", temperature=PHASE_TEMPERATURES["critic"]),
         "verifier": PhaseConfig(role="verifier", temperature=PHASE_TEMPERATURES["verifier"]),
-        "meta_evaluator": PhaseConfig(role="meta_evaluator", temperature=PHASE_TEMPERATURES["meta_evaluator"]),
+        "meta_evaluator": PhaseConfig(role="meta_evaluator", temperature=PHASE_TEMPERATURES["meta_evaluator"], temperature_strategy=TemperatureStrategy.DEESCALATE),
         "context_vetting": PhaseConfig(role="context_vetting", temperature=PHASE_TEMPERATURES["context_vetting"]),
         "recovery_path": PhaseConfig(role="recovery_path", temperature=PHASE_TEMPERATURES["recovery_path"]),
         "primary": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
@@ -194,7 +195,9 @@ class ReasonerPipeline(
             phase_configs=self.phase_configs,
             token_cache=token_cache,
             caching_enabled=TOKEN_OPTIMIZATION["caching"],
-            cascading_routing=self.router.cascading_routing, # Pass cascading routing
+            cascading_routing=self.router.cascading_routing,
+            cascading_quality_check=True,
+            prompt_compression=TOKEN_OPTIMIZATION["neuro_compression"],
         )
 
     def _log(self, phase: str, message: str, state: PipelineState) -> None:
@@ -290,6 +293,40 @@ class ReasonerPipeline(
             if hint:
                 user_prompt = f"{user_prompt}\n\n[Quality Note: {hint}]"
         return await self._executor.execute(role, system_prompt, user_prompt, state, phase_key, **kwargs)
+
+    async def _call_llm_stream(
+        self,
+        role: str,
+        system_prompt: str,
+        user_prompt: str,
+        state: PipelineState,
+        phase_key: str | None = None,
+        **kwargs
+    ):
+        """Yield LLM tokens as they arrive. No caching during stream.
+
+        After the stream ends, tokens are accumulated into state.
+        Usage inside a phase:
+            chunks = []
+            async for chunk in self._call_llm_stream(role, sys, user, state):
+                chunks.append(chunk)
+                yield chunk  # forward to SSE
+            full_response = "".join(chunks)
+        """
+        from reasoner.infrastructure.llm.ports import DegradedLLMResponse
+
+        hints = getattr(state, "quality_hints", {})
+        if hints:
+            hint = hints.get(role) or hints.get(phase_key or "") or ""
+            if hint:
+                user_prompt = f"{user_prompt}\n\n[Quality Note: {hint}]"
+
+        async for chunk in self._executor.execute_stream(
+            role, system_prompt, user_prompt, state, phase_key, **kwargs
+        ):
+            if isinstance(chunk, DegradedLLMResponse):
+                raise RuntimeError(chunk.error)
+            yield chunk
 
     def _get_method_from_preset(self) -> str:
         """Determines the reasoning method from the preset name."""

@@ -36,6 +36,7 @@ class CacheEntry:
     access_count: int = 0
     last_accessed: float = field(default_factory=time.time)
     semantic_embedding: Optional[List[float]] = None  # For semantic matching
+    raw_prompt: str = ""  # Stored for Jaccard semantic matching
 
 
 @dataclass
@@ -125,16 +126,31 @@ class TokenAwareCache:
         """Estimate token count (rough: 1 token ≈ 4 chars)."""
         return len(text) // 4
     
+    @staticmethod
+    def _jaccard_similarity(text_a: str, text_b: str) -> float:
+        """Compute Jaccard similarity between two texts using word sets."""
+        words_a = set(text_a.lower().split())
+        words_b = set(text_b.lower().split())
+        if not words_a or not words_b:
+            return 0.0
+        intersection = len(words_a & words_b)
+        union = len(words_a | words_b)
+        return intersection / union if union > 0 else 0.0
+
     async def get(
         self,
         problem: str,
         phase: str,
         model_id: str,
         prompt: str,
+        semantic_threshold: float = 0.85,
     ) -> Optional[str]:
         """
         Get cached response.
-        
+
+        Checks exact match first, then falls back to Jaccard semantic similarity
+        for near-miss prompts within the same problem group.
+
         Returns:
             Cached response if hit, None otherwise
         """
@@ -142,17 +158,17 @@ class TokenAwareCache:
             await self._ensure_loaded()
             key = self._compute_key(problem, phase, model_id, prompt)
             prompt_hash = self._compute_prompt_hash(prompt)
-            
+
             # Check exact match first
             if key in self._entries:
                 entry = self._entries[key]
-                
+
                 # Check TTL
                 if time.monotonic() - entry.created_at > entry.ttl_seconds:
                     await self._evict(key)
                     self._stats.misses += 1
                     return None
-                
+
                 # Exact prompt match
                 if entry.prompt_hash == prompt_hash:
                     entry.access_count += 1
@@ -160,24 +176,31 @@ class TokenAwareCache:
                     self._stats.hits += 1
                     self._stats.total_tokens_saved += entry.tokens_used
                     return entry.response
-            
+
             # Check semantic similarity (same phase + similar problem)
             problem_hash = self._compute_problem_hash(problem)
-            for entry_key, entry in self._entries.items():
+            for entry in self._entries.values():
                 if entry.phase != phase or entry.model_id != model_id:
                     continue
-                
+
                 # Same problem group = high chance of cache hit
                 if entry.problem_hash == problem_hash:
-                    # For now, use exact match (semantic embedding requires ML model)
-                    # Future: compute cosine similarity of embeddings
+                    # Try exact match on prompt hash first (fast path)
                     if entry.prompt_hash == prompt_hash:
                         entry.access_count += 1
                         entry.last_accessed = time.monotonic()
                         self._stats.hits += 1
                         self._stats.total_tokens_saved += entry.tokens_used
                         return entry.response
-            
+
+                    # Jaccard semantic similarity on raw prompts
+                    if entry.raw_prompt and self._jaccard_similarity(prompt, entry.raw_prompt) >= semantic_threshold:
+                        entry.access_count += 1
+                        entry.last_accessed = time.monotonic()
+                        self._stats.hits += 1
+                        self._stats.total_tokens_saved += entry.tokens_used
+                        return entry.response
+
             self._stats.misses += 1
             return None
     
@@ -212,6 +235,7 @@ class TokenAwareCache:
                 created_at=time.monotonic(),
                 last_accessed=time.monotonic(),
                 ttl_seconds=ttl_seconds or self.ttl_seconds,
+                raw_prompt=prompt,
             )
             
             # Subtract old entry's token count on overwrite to prevent counter leak

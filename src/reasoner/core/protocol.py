@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field, replace
+from enum import Enum
 from typing import Any, Protocol, runtime_checkable, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -18,6 +19,14 @@ if TYPE_CHECKING:
 
 
 from reasoner.core.constants import DEFAULT_MAX_TOKENS
+
+
+class TemperatureStrategy(Enum):
+    """How temperature should adapt on retry."""
+    FIXED = "fixed"           # Always use configured temperature
+    ESCALATE = "escalate"     # Increase by 0.1 per retry (creative phases)
+    DEESCALATE = "deescalate" # Decrease by 0.05 per retry (structured phases)
+    SWEEP = "sweep"           # Try 0.1, 0.5, 0.9 across retries
 
 
 @dataclass(frozen=True)
@@ -30,6 +39,7 @@ class PhaseConfig:
     temperature: float = 1.0
     timeout_seconds: float | None = None  # None = no timeout
     role: str = "primary"                 # ProviderRouter lookup key
+    temperature_strategy: TemperatureStrategy = TemperatureStrategy.FIXED
 
     def with_overrides(self, **kwargs: Any) -> "PhaseConfig":
         """Return a new PhaseConfig with selected fields replaced."""

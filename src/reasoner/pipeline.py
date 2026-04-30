@@ -365,6 +365,8 @@ class ReasonerPipeline(
         # Run deep read for research method, OR for technical/hybrid problems
         # that ask for learning resources, frameworks, or tutorials.
         # Never run for brainstorming — VS generation works from the raw problem.
+        # NOTE: If a method (like 'debate') explicitly registers 'deep_read' in its
+        # PipelineFlow (in flows/__init__.py), we skip it here to avoid running it twice.
         _edu_keywords = {"learn", "tutorial", "framework", "steps", "how to", "getting started",
                          "βήματα", "μάθω", "εκμάθηση", "οδηγός", "resources"}
         _historical_religious_keywords = {
@@ -377,8 +379,13 @@ class ReasonerPipeline(
             state.task_type in (TaskType.TECHNICAL, TaskType.HYBRID, TaskType.ANALYTICAL)
             and any(kw in state.problem.lower() for kw in _edu_keywords | _historical_religious_keywords)
         )
-        if method == "research" or (method != "brainstorming" and _is_knowledge_dense):
-            await self._phase_deep_read(state)
+        
+        # Only universally run deep read for 'research' or knowledge dense tasks
+        # AND explicitly skip methods that have it registered in their flow.
+        _methods_with_explicit_deep_read = {"debate"} 
+        if method not in _methods_with_explicit_deep_read:
+            if method == "research" or (method != "brainstorming" and _is_knowledge_dense):
+                await self._phase_deep_read(state)
         
         # --- CROSS-LANGUAGE TRANSLATION (Optional) ---
         if self.preset_name and ("cross-language" in self.preset_name or "cross_language" in self.preset_name):

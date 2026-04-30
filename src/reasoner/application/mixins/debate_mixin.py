@@ -26,13 +26,15 @@ class DebateMixin(PipelineMixinProtocol):
         stance_a = "In favor of the primary premise or proposing a proactive solution."
         stance_b = "Opposed to the primary premise or proposing a cautious/alternative approach."
         
-        if state.decomposition and state.decomposition.sub_problems:
-             # Use the first sub-problem to anchor the debate if nothing else is available
-             stance_a = f"Propose a solution prioritizing: {state.decomposition.sub_problems[0].description}"
-             if len(state.decomposition.sub_problems) > 1:
-                 stance_b = f"Propose an alternative solution prioritizing: {state.decomposition.sub_problems[1].description}"
-             else:
-                 stance_b = "Argue against the proactive solution, prioritizing caution and risk mitigation."
+        if state.decomposition:
+             sub_problems = state.decomposition.get("sub_problems", []) if isinstance(state.decomposition, dict) else getattr(state.decomposition, "sub_problems", [])
+             if sub_problems:
+                 # Use the first sub-problem to anchor the debate if nothing else is available
+                 stance_a = f"Propose a solution prioritizing: {sub_problems[0].description if hasattr(sub_problems[0], 'description') else sub_problems[0].get('description', '')}"
+                 if len(sub_problems) > 1:
+                     stance_b = f"Propose an alternative solution prioritizing: {sub_problems[1].description if hasattr(sub_problems[1], 'description') else sub_problems[1].get('description', '')}"
+                 else:
+                     stance_b = "Argue against the proactive solution, prioritizing caution and risk mitigation."
 
         async def _get_opening(side: str, stance: str):
             raw, _ = await self._call_llm_cached(role="constructive" if side=="A" else "destructive", system_prompt=phases.DEBATE_OPENING_SYSTEM, user_prompt=phases.debate_opening_prompt(state, side, stance), state=state)

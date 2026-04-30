@@ -1248,34 +1248,96 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         corrections: list[dict],
         source: str = "critic",
     ) -> None:
-        """Call the article_revise LLM role to apply corrections to the current article draft."""
+        """Call the article_revise LLM role to apply corrections to the current article draft.
+
+        Verifies the article actually changed by comparing content hash. If no change
+        occurred, logs a warning and retries with a stronger revision prompt that
+        explicitly requires rewriting flagged sections.
+        """
         article = state.writing_state.get("article", "")
         if not article or not corrections:
             return
+
+        import hashlib
+
+        def _content_hash(text: str) -> str:
+            return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
+
+        original_hash = _content_hash(article)
 
         corrections_text = "\n".join(
             f"- [{c.get('action', 'revise')}] {c.get('issue', '')} → {c.get('suggestion', '')}"
             for c in corrections
         )
-        user_prompt = (
-            f"{phases.get_language_instruction(state)}\n\n"
-            f"Apply the following corrections to the article.\n\n"
-            f"CORRECTIONS ({source}):\n{corrections_text}\n\n"
-            f"ARTICLE:\n{article}\n\n"
-            f"Output ONLY the full revised article text."
-        )
-        try:
+
+        async def _try_revise(stronger: bool = False) -> str:
+            if stronger:
+                user_prompt = (
+                    f"{phases.get_language_instruction(state)}\n\n"
+                    f"CRITICAL: The previous revision attempt did NOT change the article. "
+                    f"You MUST rewrite every flagged section explicitly.\n\n"
+                    f"CORRECTIONS ({source}):\n{corrections_text}\n\n"
+                    f"ARTICLE:\n{article}\n\n"
+                    f"Instructions:\n"
+                    f"1. For each correction, locate the relevant section and rewrite it.\n"
+                    f"2. Do NOT return the original text unchanged.\n"
+                    f"3. Output ONLY the full revised article text."
+                )
+                system_prompt = (
+                    "You are an expert editor. You MUST apply every correction by rewriting "
+                    "the affected sections. Returning the original text unchanged is a failure."
+                )
+            else:
+                user_prompt = (
+                    f"{phases.get_language_instruction(state)}\n\n"
+                    f"Apply the following corrections to the article.\n\n"
+                    f"CORRECTIONS ({source}):\n{corrections_text}\n\n"
+                    f"ARTICLE:\n{article}\n\n"
+                    f"Output ONLY the full revised article text."
+                )
+                system_prompt = _REVISER_SYSTEM
+
             revised, _ = await self._call_llm_cached(
                 role="article_revise",
-                system_prompt=_REVISER_SYSTEM,
+                system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 state=state,
             )
-            revised = revised.strip()
+            return revised.strip()
+
+        try:
+            revised = await _try_revise(stronger=False)
             if revised and len(revised) >= len(article) * 0.5:
-                state.writing_state["article"] = revised
-                state.writing_state["article_revised"] = revised
-                self._log("ARTICLE", f"Reviser ({source}) applied {len(corrections)} corrections", state)
+                revised_hash = _content_hash(revised)
+                if revised_hash == original_hash:
+                    self._log(
+                        "ARTICLE",
+                        f"Reviser ({source}) returned unchanged article — retrying with stronger prompt",
+                        state,
+                    )
+                    revised = await _try_revise(stronger=True)
+                    if revised and len(revised) >= len(article) * 0.5:
+                        revised_hash = _content_hash(revised)
+                        if revised_hash == original_hash:
+                            self._log(
+                                "ARTICLE",
+                                f"Reviser ({source}) still unchanged after strong prompt — keeping original",
+                                state,
+                            )
+                            state.pending_events.append({
+                                "type": "phase_warning",
+                                "message": f"Reviser ({source}) failed to apply corrections — article unchanged after retry.",
+                            })
+                            return
+                        state.writing_state["article"] = revised
+                        state.writing_state["article_revised"] = revised
+                        self._log("ARTICLE", f"Reviser ({source}) applied {len(corrections)} corrections on retry", state)
+                    else:
+                        self._log("ARTICLE", f"Reviser ({source}) returned short/empty response on retry — keeping original", state)
+                else:
+                    state.writing_state["article"] = revised
+                    state.writing_state["article_revised"] = revised
+                    self._log("ARTICLE", f"Reviser ({source}) applied {len(corrections)} corrections", state)
             else:
                 self._log("ARTICLE", f"Reviser ({source}) returned short/empty response — keeping original", state)
         except Exception as exc:

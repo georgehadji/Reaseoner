@@ -46,6 +46,7 @@ from reasoner.core import PhaseConfig, make_phase_result, DEFAULT_PERSPECTIVES
 from reasoner.core.temperatures import PHASE_TEMPERATURES
 from reasoner.core.constants import (
     ARTICLE_MIN_SOURCE_COUNT,
+    ARTICLE_MIN_CLAIM_SUPPORT_RATIO,
     PHASE_TOKEN_BUDGETS,
     get_token_budget,
     DEFAULT_MAX_TOKENS,

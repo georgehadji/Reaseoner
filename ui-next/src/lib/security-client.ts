@@ -2,6 +2,7 @@
 
 import { CSRF_COOKIE, CSRF_HEADER } from './security-constants';
 import { getAuthToken } from './auth';
+import { reportError } from './error-reporting';
 
 export function getCsrfToken(): string | null {
   const match = document.cookie.match(new RegExp('(^| )' + CSRF_COOKIE + '=([^;]+)'));
@@ -58,6 +59,18 @@ export async function fetchWithCsrf(url: string, options: RequestInit = {}): Pro
         return fetch(url, { ...options, headers });
       }
     }
+  }
+
+  // Capture API errors for observability (excluding expected auth/rate-limit cases)
+  if (!resp.ok && resp.status >= 500) {
+    const bodyText = await resp.clone().text().catch(() => '');
+    reportError(
+      `API ${resp.status} ${resp.statusText}: ${options.method || 'GET'} ${url}`,
+      {
+        source: 'api',
+        silent: true,
+      },
+    ).catch(() => {});
   }
 
   return resp;

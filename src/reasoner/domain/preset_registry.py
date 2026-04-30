@@ -1414,6 +1414,8 @@ _PRESET_CONFIGS: list[dict] = [
             "article_pre_mortem": "mistral-small",
             "article_critic": "qwen3-max",
             "article_assemble": "kimi-k2-6",
+            "article_revise": "kimi-k2-6",
+            "article_humanize": "kimi-k2-6",
         },
         "fallback_routing": {
             "article_decompose": "glm-4-air",
@@ -1428,6 +1430,8 @@ _PRESET_CONFIGS: list[dict] = [
             "article_pre_mortem": "mistral-large-3",
             "article_critic": "mistral-large-3",
             "article_assemble": "deepseek-v3",
+            "article_revise": "deepseek-v3",
+            "article_humanize": "deepseek-v3",
         },
         "notes": [
             "DeepSeek V3: decompose + sot_skeleton + cove_verify — reasoning backbone for article structure",
@@ -1458,6 +1462,8 @@ _PRESET_CONFIGS: list[dict] = [
             "article_pre_mortem": "gemini-pro",
             "article_critic": "gemini-pro",
             "article_assemble": "glm-5.1",
+            "article_revise": "glm-5.1",
+            "article_humanize": "glm-5.1",
         },
         "fallback_routing": {
             "article_decompose": "gpt-5",
@@ -1472,6 +1478,8 @@ _PRESET_CONFIGS: list[dict] = [
             "article_pre_mortem": "claude-sonnet",
             "article_critic": "claude-sonnet",
             "article_assemble": "claude-sonnet",
+            "article_revise": "claude-sonnet",
+            "article_humanize": "claude-sonnet",
         },
         "notes": [
             "MiMo V2 Pro for decomposition, synthesis, pre-mortem, and critique.",

@@ -235,6 +235,8 @@ def article_sot_solve_prompt(state, section: dict, claims_json: str) -> str:
         f'Section: {section_heading}\n\n'
         f'Relevant Claims (use ONLY these):\n{claims_json}\n\n'
         f'Write this section. Rules:\n'
+        f'- SCOPE CONSTRAINT: Write ONLY about "{section_heading}". Do NOT include content that belongs in other sections.\n'
+        f'- If the provided claims do not directly support "{section_heading}", state the gap explicitly rather than importing off-topic content.\n'
         f'- Use ONLY the provided claims\n'
         f'- Inline [Source: URL] citations\n'
         f'- Do not invent new facts\n'

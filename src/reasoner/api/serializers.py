@@ -65,12 +65,31 @@ def _ser_1(state: PipelineState) -> dict:
 
 def _ser_1_5(state: PipelineState) -> dict:
     """Deep Read serializer."""
-    # vetted_context is intentionally hidden from the user — it is an internal
-    # pipeline artifact.  Only web_discovery_results (raw search output) is
-    # surfaced, when present.
+    # Fallback to web_discovery_results if vetted_context is empty
+    raw = _get_v(state, "vetted_context", [])
+    if not raw:
+        raw = _get_v(state, "web_discovery_results", [])
+        
+    # Return vetted results that contain deep read extractions
+    clean = []
+    for r in raw:
+        item = {
+            "url": r.get("url"),
+            "title": r.get("title"),
+            "date": r.get("date") or r.get("published"),
+            "summary": r.get("summary", ""),
+            "key_facts": r.get("key_facts", []),
+            "relevant_quotes": r.get("relevant_quotes", []),
+            "extraction_success": r.get("extraction_success", False),
+        }
+        if item["url"] and item["title"]:
+            clean.append(item)
+
     return {
-        "web_discovery_results": _get_v(state, 'web_discovery_results', []),
-        "tokens": state.phase_tokens.get("Phase 1.5: Deep Read", {"input": 0, "output": 0}),
+        "vetted_context": clean,
+        "tokens": state.phase_tokens.get(
+            "Phase 1.5: Deep Read", {"input": 0, "output": 0}
+        ),
     }
 
 def _ser_2(state: PipelineState) -> dict:
@@ -185,6 +204,18 @@ def _ser_2(state: PipelineState) -> dict:
         return {
             "delphi_state": {"round1_estimates": delphi["round1_estimates"]},
             "tokens": next((v for k, v in state.phase_tokens.items() if k.startswith("Phase 2:")), {"input": 0, "output": 0}),
+        }
+
+    # ── Research Phase 2: deep web search results ────────────────────────────
+    research_results = _get_v(state, 'web_discovery_results', [])
+    if research_results and getattr(state, 'method', None) == "research":
+        clean = [r for r in research_results if r.get("url") and r.get("title")][:20]
+        return {
+            "web_discovery_results": clean,
+            "tokens": next(
+                (v for k, v in state.phase_tokens.items() if k.startswith("Phase 2:")),
+                {"input": 0, "output": 0},
+            ),
         }
 
     # ── Brainstorming Phase 2: raw VS idea pool ───────────────────────────────
@@ -357,6 +388,29 @@ def _ser_3(state: PipelineState) -> dict:
         return {
             "sot_state": {"solutions": sot["solutions"]},
             "tokens": state.phase_tokens.get("Phase 3: Solve", {"input": 0, "output": 0}),
+        }
+
+    critic_scores = _get_v(state, 'critic_scores', [])
+    if critic_scores:
+        return {
+            "critic_scores": [
+                {
+                    "critic_id": cs.critic_id,
+                    "critic_model": cs.critic_model,
+                    "candidate_scores": {
+                        gid: {
+                            "factuality": ds.factuality,
+                            "reasoning": ds.reasoning,
+                            "completeness": ds.completeness,
+                            "helpfulness": ds.helpfulness,
+                            "total": ds.total,
+                        } for gid, ds in cs.candidate_scores.items()
+                    },
+                    "ranking": cs.ranking,
+                    "dissenting_note": cs.dissenting_note,
+                } for cs in critic_scores
+            ],
+            "tokens": state.phase_tokens.get("Phase 3: Critic Pool", {"input": 0, "output": 0}),
         }
 
     tot = _get_v(state, 'tot_state', {})
@@ -706,7 +760,73 @@ def _ser_4(state: PipelineState) -> dict:
 
     return result
 
+
+def _ser_writing_premortem(state: PipelineState) -> dict:
+    """Serializer dedicated to the article Pre-Mortem phase (4.25)."""
+    writing = _get_v(state, 'writing_state', {})
+    pm = writing.get("pre_mortem", {}) if writing else {}
+    return {
+        "writing_state": {
+            "pre_mortem": {
+                "failure_narrative": pm.get("failure_narrative", ""),
+                "root_causes": pm.get("root_causes", []),
+                "weak_sections": pm.get("weak_sections", []),
+                "challenged_claims": pm.get("challenged_claims", []),
+                "missing_counterarguments": pm.get("missing_counterarguments", []),
+                "overgeneralizations": pm.get("overgeneralizations", []),
+                "early_warnings": pm.get("early_warnings", []),
+            },
+            # surface the current article draft alongside so the UI can show both
+            "article": writing.get("article", "") if writing else "",
+        },
+        "tokens": state.phase_tokens.get("Phase 4.25: Pre-Mortem", {"input": 0, "output": 0}),
+    }
+
+
+def _ser_writing_critic(state: PipelineState) -> dict:
+    """Serializer dedicated to the article Journal Review phase (4.5)."""
+    writing = _get_v(state, 'writing_state', {})
+    return {
+        "writing_state": {
+            "critic_corrections": writing.get("critic_corrections", []) if writing else [],
+            "critic_score": writing.get("critic_score", 0) if writing else 0,
+            "must_revise": writing.get("must_revise", False) if writing else False,
+            "article_revised": writing.get("article_revised", "") if writing else "",
+            "article": writing.get("article", "") if writing else "",
+        },
+        "tokens": state.phase_tokens.get("Phase 4.5: Journal Review", {"input": 0, "output": 0}),
+    }
+
+
 def _ser_5(state: PipelineState) -> dict:
+    # ── Writing flow — Humanize (check first: most recent state wins) ──
+    writing = _get_v(state, 'writing_state', {})
+    if writing and writing.get("humanized_article"):
+        return {
+            "writing_state": {
+                "humanized_article": writing["humanized_article"],
+                "ai_tells_found": writing.get("ai_tells_found", []),
+                "humanize_skipped": writing.get("humanize_skipped", False),
+                "humanize_skip_reason": writing.get("humanize_skip_reason", ""),
+            },
+            "tokens": state.phase_tokens.get("Phase 5.5: Humanize", {"input": 0, "output": 0}),
+        }
+
+    # ── Writing flow — Final Assembly ──
+    if writing and writing.get("final_article"):
+        return {
+            "writing_state": {
+                "final_article": writing["final_article"],
+                "title": writing.get("title", ""),
+                "sources_cited": writing.get("sources_cited", []),
+                "claim_traceability": writing.get("claim_traceability", []),
+                "metrics": writing.get("metrics", {}),
+                "humanize_skipped": writing.get("humanize_skipped", False),
+                "humanize_skip_reason": writing.get("humanize_skip_reason", ""),
+            },
+            "tokens": state.phase_tokens.get("Phase 5: Final Assembly", {"input": 0, "output": 0}),
+        }
+
     # ── Method-specific Phase 5 data ──
     cove = _get_v(state, 'cove_state', {})
     if cove and cove.get("revised_answer"):
@@ -806,36 +926,63 @@ def _ser_5(state: PipelineState) -> dict:
             "tokens": state.phase_tokens.get("Phase 5: Final Assembly", {"input": 0, "output": 0}),
         }
 
+    return {}
+
+
+def _ser_synthesis(state: PipelineState) -> dict:
+    """Universal Synthesis serializer."""
     # ── Default (Synthesis) ──
     # Check final_solution first so the Synthesis phase shows the clean synthesized
     # output.  writing_state.final_article is the fallback for Final Assembly.
-    fs = _get_v(state, 'final_solution')
+    fs = _get_v(state, "final_solution")
     if fs is not None:
-        meta = _get_v(fs, 'meta_audit', {})
+        meta = _get_v(fs, "meta_audit", {})
 
         # Action blueprint handling
-        raw_bp = _get_v(fs, 'action_blueprint', [])
+        raw_bp = _get_v(fs, "action_blueprint", [])
         clean_bp = []
         for step in (raw_bp if isinstance(raw_bp, list) else []):
             if isinstance(step, dict):
                 # Only accept dicts that have at least one expected key or a non-empty action
-                if not any(k in step for k in ("step", "action", "time_horizon", "go_criteria", "fallback")):
+                if not any(
+                    k in step
+                    for k in (
+                        "step",
+                        "action",
+                        "time_horizon",
+                        "go_criteria",
+                        "fallback",
+                    )
+                ):
                     continue
                 entry = {
-                    "step": _get_v(step, 'step', ''),
-                    "action": _get_v(step, 'action', ''),
-                    "time_horizon": _get_v(step, 'time_horizon', ''),
-                    "go_criteria": _get_v(step, 'go_criteria', ''),
-                    "fallback": _get_v(step, 'fallback', '')
+                    "step": _get_v(step, "step", ""),
+                    "action": _get_v(step, "action", ""),
+                    "time_horizon": _get_v(step, "time_horizon", ""),
+                    "go_criteria": _get_v(step, "go_criteria", ""),
+                    "fallback": _get_v(step, "fallback", ""),
                 }
                 if entry["step"] or entry["action"]:
                     clean_bp.append(entry)
             elif step is not None and str(step).strip():
-                clean_bp.append({"step": "", "action": str(step).strip(), "time_horizon": "", "go_criteria": "", "fallback": ""})
+                clean_bp.append(
+                    {
+                        "step": "",
+                        "action": str(step).strip(),
+                        "time_horizon": "",
+                        "go_criteria": "",
+                        "fallback": "",
+                    }
+                )
 
         # Claim labels handling
-        raw_labels = _get_v(fs, 'claim_labels', {})
-        clean_labels = {k: (v.value if hasattr(v, 'value') else str(v)) for k, v in (raw_labels.items() if isinstance(raw_labels, dict) else {})}
+        raw_labels = _get_v(fs, "claim_labels", {})
+        clean_labels = {
+            k: (v.value if hasattr(v, "value") else str(v))
+            for k, v in (
+                raw_labels.items() if isinstance(raw_labels, dict) else {}
+            )
+        }
 
         # Aggregate tokens across all phases
         total_input = sum(t.get("input", 0) for t in state.phase_tokens.values())
@@ -845,25 +992,29 @@ def _ser_5(state: PipelineState) -> dict:
         meta_audit: dict[str, Any] = {}
         if meta:
             meta_audit = {
-                "most_dangerous_assumption": _get_v(meta, 'most_dangerous_assumption', ''),
-                "dominant_bias": _get_v(meta, 'dominant_bias', ''),
-                "remaining_uncertainty": _get_v(meta, 'remaining_uncertainty', ''),
-                "assumption_failure_impact": _get_v(meta, 'assumption_failure_impact', ''),
-                "non_obvious_insight": _get_v(meta, 'non_obvious_insight', ''),
+                "most_dangerous_assumption": _get_v(
+                    meta, "most_dangerous_assumption", ""
+                ),
+                "dominant_bias": _get_v(meta, "dominant_bias", ""),
+                "remaining_uncertainty": _get_v(meta, "remaining_uncertainty", ""),
+                "assumption_failure_impact": _get_v(
+                    meta, "assumption_failure_impact", ""
+                ),
+                "non_obvious_insight": _get_v(meta, "non_obvious_insight", ""),
             }
 
         result = {
-            "core_solution": _get_v(fs, 'core_solution', ''),
-            "critical_insights": _get_v(fs, 'critical_insights', []),
+            "core_solution": _get_v(fs, "core_solution", ""),
+            "critical_insights": _get_v(fs, "critical_insights", []),
             "action_blueprint": clean_bp,
-            "open_questions": _get_v(fs, 'open_questions', []),
+            "open_questions": _get_v(fs, "open_questions", []),
             "claim_labels": clean_labels,
             "meta_audit": meta_audit,
-            "tokens": {"input": total_input, "output": total_output}
+            "tokens": {"input": total_input, "output": total_output},
         }
 
         # Cross-language metadata
-        cross_lang = _get_v(state, 'cross_language_state', {})
+        cross_lang = _get_v(state, "cross_language_state", {})
         if cross_lang and cross_lang.get("source_language"):
             result["cross_language"] = {
                 "source_language": cross_lang["source_language"],
@@ -873,7 +1024,19 @@ def _ser_5(state: PipelineState) -> dict:
 
         return result
 
-    writing = _get_v(state, 'writing_state', {})
+    writing = _get_v(state, "writing_state", {})
+    if writing and writing.get("humanized_article"):
+        return {
+            "writing_state": {
+                "final_article": writing["humanized_article"],
+                "ai_tells_found": writing.get("ai_tells_found", []),
+                "metrics": writing.get("metrics", {}),
+                "cove_changes_made": writing.get("cove_changes_made", []),
+            },
+            "tokens": state.phase_tokens.get(
+                "Phase 5.5: Humanize", {"input": 0, "output": 0}
+            ),
+        }
     if writing and writing.get("final_article"):
         return {
             "writing_state": {
@@ -890,7 +1053,9 @@ def _ser_5(state: PipelineState) -> dict:
                 "pre_mortem": writing.get("pre_mortem", {}),
                 "cove_changes_made": writing.get("cove_changes_made", []),
             },
-            "tokens": state.phase_tokens.get("Phase 5: Final Assembly", {"input": 0, "output": 0}),
+            "tokens": state.phase_tokens.get(
+                "Phase 5: Final Assembly", {"input": 0, "output": 0}
+            ),
         }
 
     return {}

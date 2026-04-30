@@ -80,6 +80,8 @@ _KNOWN_ROUTING_ROLES: frozenset[str] = frozenset({
     "article_pre_mortem",
     "article_critic",
     "article_assemble",
+    "article_revise",
+    "article_humanize",
     # Coding Pipeline roles (production code generation)
     "coding_spec",
     "coding_generate",

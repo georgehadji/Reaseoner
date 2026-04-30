@@ -156,6 +156,8 @@ class ReasonerPipeline(
         "article_pre_mortem": PhaseConfig(role="destructive", temperature=PHASE_TEMPERATURES["perspective"]),
         "article_critic": PhaseConfig(role="critic_1", temperature=PHASE_TEMPERATURES["critic"]),
         "article_assemble": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
+        "article_revise": PhaseConfig(role="synthesis", temperature=PHASE_TEMPERATURES["synthesis"]),
+        "article_humanize": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
         "article_sot_skeleton": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
         "article_sot_solve": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["primary"]),
         "coding_spec": PhaseConfig(role="primary", temperature=PHASE_TEMPERATURES["decomposition"]),

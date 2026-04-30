@@ -199,6 +199,12 @@ _CRITIC_SYSTEM = (
     "Force revisions or deletions. Output actionable corrections. Output JSON only."
 )
 
+_REVISER_SYSTEM = (
+    "You are an expert editor. You receive an article draft and a list of corrections from a reviewer. "
+    "Apply every correction faithfully: revise flagged sentences, delete hallucinated claims, and add missing "
+    "caveats. Preserve the author's voice and structure. Output ONLY the revised article text, no JSON wrapper."
+)
+
 
 def _extract_markdown_links(text: str) -> list[dict[str, str]]:
     """Extract markdown links in order of first appearance."""
@@ -272,6 +278,20 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         state.writing_state["unknowns"] = data.get("unknowns", [])
         state.writing_state["topic"] = data.get("topic", state.problem)
         self._log("ARTICLE", f"Decomposed into {len(subquestions)} subquestions", state)
+
+        # Detect whether the topic requires entity-specific data (financials, metrics, team, etc.)
+        # that may not be publicly available — flag to constrain downstream verdicts
+        entity_signals = [
+            r"\b(startup|company|firm|fund|investment\s+case|invest\s+in|should\s+(we|i)\s+invest)\b",
+            r"\b(revenue|valuation|runway|burn\s+rate|cap\s+table|financials|arr|mrr|ebitda)\b",
+            r"\b(team|founder|cto|ceo|headcount|employees)\b",
+            r"\b(Series\s+[A-D]|seed\s+round|pre-seed|vc\s+fund)\b",
+        ]
+        problem_lower = state.problem.lower()
+        needs_entity_data = any(re.search(p, problem_lower) for p in entity_signals)
+        state.writing_state["needs_entity_data"] = needs_entity_data
+        if needs_entity_data:
+            self._log("ARTICLE", "Entity-specific data required — synthesis will block unsupported verdicts", state)
 
     def _decomposer_prompt(self, state: PipelineState) -> str:
         doc_type = state.writing_state.get("document_type", "article")
@@ -423,6 +443,27 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         state.writing_state["retrieved_sources"] = ranked_sources
         self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources from {len(all_sources)} unique hits", state)
 
+        if not ranked_sources and state.vetted_context:
+            self._log("ARTICLE", "No sources from search — using Phase 3 vetted context as fallback", state)
+            fallback = [
+                {
+                    "title": r.get("title", ""),
+                    "url": r.get("url", ""),
+                    "date": r.get("date", r.get("published", "")),
+                    "authority_score": r.get("freshness_score", 0.5),
+                    "excerpt": (r.get("snippet") or r.get("content", ""))[:800],
+                    "source_type": "website",
+                    "query_id": "VETTED_FALLBACK",
+                    "query_text": state.problem,
+                }
+                for r in state.vetted_context
+                if r.get("url")
+            ]
+            ranked_sources = fallback[:ARTICLE_MAX_SOURCE_COUNT]
+            state.web_discovery_results = ranked_sources
+            state.writing_state["retrieved_sources"] = ranked_sources
+            self._log("ARTICLE", f"Vetted context fallback: {len(ranked_sources)} sources available", state)
+
         if not ranked_sources:
             self._log("ARTICLE", "No sources found — falling back to knowledge-only synthesis", state)
         elif len(ranked_sources) < ARTICLE_MIN_SOURCE_COUNT:
@@ -440,6 +481,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         sources = state.writing_state.get("retrieved_sources", [])
         if not sources:
             self._log("ARTICLE", "No sources to extract claims from", state)
+            state.pending_events.append({"type": "phase_warning", "message": "Skipped: no sources available from Phase 6 (Retrieve Sources)."})
             return
 
         if len(sources) > ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION:
@@ -566,6 +608,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         sources = state.writing_state.get("retrieved_sources", [])
         if not claims:
             self._log("ARTICLE", "No claims to verify", state)
+            state.pending_events.append({"type": "phase_warning", "message": "Skipped: no claims extracted from Phase 7 (Extract Claims)."})
             return
 
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
@@ -643,13 +686,15 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             f'Claims:\n{claims_json}\n\n'
             f'Sources:\n{sources_json}\n\n'
             f'Act as a hostile reviewer. For EACH claim:\n'
-            f'1. Check if source ACTUALLY supports the claim\n'
-            f'2. Detect contradictions across sources\n'
-            f'3. Downgrade weak or general claims\n'
-            f'4. Be skeptical — reward rejections\n\n'
+            f'1. Check if the claim\'s own source ACTUALLY supports the claim (not just mentions the topic)\n'
+            f'2. Cross-source check: identify numerical values (percentages, market sizes, growth rates, dates) '
+            f'that appear in MULTIPLE sources — flag any where different sources report conflicting numbers for the same metric\n'
+            f'3. Downgrade claims citing only general/market-overview sources when entity-specific data is needed\n'
+            f'4. Mark as CONFLICTED if any two sources give inconsistent figures for the same statistic\n'
+            f'5. Be skeptical — reward rejections over false acceptances\n\n'
             f'Output JSON: {{"claims": [{{'
             f'"claim_id": "C1", "status": "VERIFIED|WEAK|CONFLICTED|UNKNOWN", '
-            f'"supporting_sources": ["url"], "contradictions": ["text"], "notes": "..."'
+            f'"supporting_sources": ["url"], "contradictions": ["description of conflict between sources"], "notes": "..."'
             f'}}]}}'
         )
 
@@ -697,6 +742,11 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
         if not usable_claims:
             self._log("ARTICLE", "No usable claims — falling back to knowledge-only synthesis", state)
+            if not state.writing_state.get("retrieved_sources"):
+                state.pending_events.append({
+                    "type": "phase_warning",
+                    "message": "No sources or verified claims available. Output will rely on model knowledge only — treat as unverified.",
+                })
             await self._phase_article_synthesize_monolithic(state, "[]")
             return
 
@@ -848,6 +898,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
     def _synthesizer_prompt(self, state: PipelineState, claims_json: str) -> str:
         has_claims = claims_json.strip() not in ("[]", "", "null")
+        needs_entity_data = state.writing_state.get("needs_entity_data", False)
         if has_claims:
             evidence_section = (
                 f'Verified Claims (use ONLY these):\n{claims_json}\n\n'
@@ -867,9 +918,20 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 f'- Write with authority but epistemic honesty\n'
                 f'- Note in gaps_noted that no sources were available\n\n'
             )
+        entity_constraint = ""
+        if needs_entity_data:
+            entity_constraint = (
+                f'CRITICAL DATA CONSTRAINT: This topic requires entity-specific data '
+                f'(financials, team, metrics, cap table, runway, etc.). '
+                f'If verified claims do not include direct data from the specific entity, '
+                f'you MUST NOT issue a specific investment recommendation, verdict, or rating. '
+                f'Instead, state explicitly what data is missing and why a verdict cannot be made responsibly. '
+                f'Use language like "insufficient entity-specific data to assess" rather than filling gaps with inference.\n\n'
+            )
         return (
             f'{phases.get_language_instruction(state)}\n\n'
             f'Topic: {state.problem}\n\n'
+            f'{entity_constraint}'
             f'{evidence_section}'
             f'Output JSON: {{'
             f'"title": "...", '
@@ -902,6 +964,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         claims = state.writing_state.get("claims", [])
         if not article:
             self._log("ARTICLE", "No article for pre-mortem", state)
+            state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
             return
 
         if len(claims) > 20:
@@ -948,6 +1011,15 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             state,
         )
 
+        # Build correction list from pre-mortem findings and apply them
+        pm_corrections = []
+        for claim in data.get("challenged_claims", []):
+            pm_corrections.append({"issue": claim, "action": "add_caveat", "suggestion": f"Add uncertainty caveat: {claim}"})
+        for og in data.get("overgeneralizations", []):
+            pm_corrections.append({"issue": og, "action": "revise", "suggestion": f"Narrow claim: {og}"})
+        if pm_corrections:
+            await self._apply_corrections_to_article(state, pm_corrections, source="pre_mortem")
+
     # ── Phase 4.5: Final Critic ────────────────────────────────────────────
 
     async def _phase_article_critic(self, state: PipelineState) -> None:
@@ -956,6 +1028,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         claims = state.writing_state.get("claims", [])
         if not article:
             self._log("ARTICLE", "No article to review", state)
+            state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
             return
 
         raw, _ = await self._call_llm_cached(
@@ -976,12 +1049,10 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         state.writing_state["critic_score"] = data.get("overall_score", 0)
         state.writing_state["must_revise"] = data.get("must_revise", False)
 
-        # Apply forced deletions (corrections with action="delete")
-        deletions = [c for c in corrections if c.get("action") == "delete"]
-        if deletions:
-            self._log("ARTICLE", f"Critic forced {len(deletions)} deletions", state)
-
         self._log("ARTICLE", f"Critic review complete: score={data.get('overall_score', 0)}, must_revise={data.get('must_revise', False)}", state)
+
+        if corrections:
+            await self._apply_corrections_to_article(state, corrections, source="critic")
 
     def _critic_prompt(self, state: PipelineState, article: str, claims: list[dict]) -> str:
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
@@ -1022,6 +1093,47 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             f'"must_revise": true|false'
             f'}}'
         )
+
+    # ── Revision helper ────────────────────────────────────────────────────
+
+    async def _apply_corrections_to_article(
+        self,
+        state: PipelineState,
+        corrections: list[dict],
+        source: str = "critic",
+    ) -> None:
+        """Call the article_revise LLM role to apply corrections to the current article draft."""
+        article = state.writing_state.get("article", "")
+        if not article or not corrections:
+            return
+
+        corrections_text = "\n".join(
+            f"- [{c.get('action', 'revise')}] {c.get('issue', '')} → {c.get('suggestion', '')}"
+            for c in corrections
+        )
+        user_prompt = (
+            f"{phases.get_language_instruction(state)}\n\n"
+            f"Apply the following corrections to the article.\n\n"
+            f"CORRECTIONS ({source}):\n{corrections_text}\n\n"
+            f"ARTICLE:\n{article}\n\n"
+            f"Output ONLY the full revised article text."
+        )
+        try:
+            revised, _ = await self._call_llm_cached(
+                role="article_revise",
+                system_prompt=_REVISER_SYSTEM,
+                user_prompt=user_prompt,
+                state=state,
+            )
+            revised = revised.strip()
+            if revised and len(revised) >= len(article) * 0.5:
+                state.writing_state["article"] = revised
+                state.writing_state["article_revised"] = revised
+                self._log("ARTICLE", f"Reviser ({source}) applied {len(corrections)} corrections", state)
+            else:
+                self._log("ARTICLE", f"Reviser ({source}) returned short/empty response — keeping original", state)
+        except Exception as exc:
+            self._log("ARTICLE", f"Reviser ({source}) failed: {exc} — keeping original", state)
 
     # ── Phase 5: Final Assembly ────────────────────────────────────────────
 
@@ -1169,11 +1281,14 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         ai_tells = data.get("ai_tells", [])
 
         if not humanized or len(humanized) < len(article) * 0.5:
-            self._log("ARTICLE", "Humanize returned empty or truncated — keeping original", state)
+            skip_reason = "empty_response" if not humanized else "truncated_below_threshold"
+            self._log("ARTICLE", f"Humanize returned {skip_reason} — keeping original", state)
+            state.writing_state["humanize_skipped"] = True
+            state.writing_state["humanize_skip_reason"] = skip_reason
             return
 
         state.writing_state["ai_tells_found"] = ai_tells
-        state.writing_state["final_article"] = humanized
+        state.writing_state["humanized_article"] = humanized
 
         # Update the candidate with the humanized version
         if state.candidates:

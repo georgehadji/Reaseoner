@@ -2,6 +2,7 @@
 
 import { useAppStore } from '@/stores/app-store';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { SiteHeader } from '@/components/layout/SiteHeader';
 import { SiteFooter } from '@/components/layout/SiteFooter';
 import { BlobBackground } from '@/components/layout/BlobBackground';
@@ -57,12 +58,27 @@ export default function LandingPage() {
             Enterprise-Grade Reasoning
           </p>
 
-          <h1
-            className="animate-fade-up max-w-5xl text-[clamp(3rem,7vw,6rem)] font-semibold leading-[1.05] tracking-[-0.03em] text-[var(--text)]"
-            style={{ animationDelay: '80ms' }}
-          >
-            Think with{' '}
-            <span className="gradient-text">certainty.</span>
+          <h1 className="max-w-5xl text-[clamp(3rem,7vw,6rem)] leading-[1.05] tracking-[-0.03em]">
+            <motion.span
+              className="inline-block font-medium text-[var(--text-muted)] opacity-60"
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 0.6, y: 0 }}
+              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
+            >
+              Think with
+            </motion.span>
+            <motion.span
+              className="inline-block font-light text-[var(--text)]"
+              initial={{ opacity: 0, y: 28 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.22 }}
+              style={{
+                marginLeft: '0.3em',
+                textShadow: '0 0 40px rgba(59,130,246,0.45), 0 0 100px rgba(6,182,212,0.25)',
+              }}
+            >
+              certainty.
+            </motion.span>
           </h1>
 
           <p

@@ -76,11 +76,12 @@ class DebateMixin(PipelineMixinProtocol):
         side_a_claims = []
         side_b_claims = []
         for rd in state.debate_rounds:
-            if rd.get("phase") == "rebuttal":
-                if rd.get("side") == "A":
-                    side_a_claims.append(rd.get("content", "")[:TRUNCATION.CONTENT])
-                elif rd.get("side") == "B":
-                    side_b_claims.append(rd.get("content", "")[:TRUNCATION.CONTENT])
+            if rd.get("type") == "rebuttal":
+                for rebuttal_entry in rd.get("rebuttals", []):
+                    if rebuttal_entry.get("side") == "A":
+                        side_a_claims.append(rebuttal_entry.get("rebuttal_content", "")[:TRUNCATION.CONTENT])
+                    elif rebuttal_entry.get("side") == "B":
+                        side_b_claims.append(rebuttal_entry.get("rebuttal_content", "")[:TRUNCATION.CONTENT])
         tasks = [
             self._call_llm_cached(
                 role="constructive",

@@ -39,9 +39,10 @@ def build_default_flow_registry(pipeline: ReasonerPipeline) -> PipelineFlow:
 
     # ── Debate ─────────────────────────────────────────────────────────
     flow.register("debate", [
-        PhaseStep(2, "Opening Statements",  pipeline._phase_debate_opening,    _ser_2),
-        PhaseStep(3, "Rebuttals",           pipeline._phase_debate_rebuttal,   _ser_3),
-        PhaseStep(4, "Cross-Examination",   pipeline._phase_debate_cross_examine, _ser_4),
+        PhaseStep(1.5, "Deep Read",           pipeline._phase_deep_read,         _ser_1_5),
+        PhaseStep(2,   "Opening Statements",  pipeline._phase_debate_opening,    _ser_2),
+        PhaseStep(3,   "Rebuttals",           pipeline._phase_debate_rebuttal,   _ser_3),
+        PhaseStep(4,   "Cross-Examination",   pipeline._phase_debate_cross_examine, _ser_4),
     ])
 
     # ── Jury / Orchestrated ────────────────────────────────────────────

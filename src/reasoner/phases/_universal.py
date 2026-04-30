@@ -143,7 +143,7 @@ CRITICAL VETTING RULES:
 4.  **Scrutinize Factual Claims:** Flag any statement that is DIRECTLY contradicted by well-known facts, contains clear logical errors, or makes extraordinary claims without extraordinary evidence.
 5.  **Be Skeptical of Speculation:** Flag any content that is clearly marked as opinion, speculation, or forward-looking statements without a strong evidentiary basis.
 6.  **Default to "Flag":** If you are uncertain about the quality or relevance of a source, ERR ON THE SIDE OF CAUTION and flag it for removal. It is better to have fewer high-quality sources than many noisy ones.
-7.  If the text is a high-quality, relevant, and factual source, return an empty list for its flags.
+7.  If the text is a high-quality, relevant, and factual source, return an empty list for its flags."""
 
 def cot_detection_prompt(state: PipelineState, retrieved_text: str) -> str:
     return f'{get_language_instruction(state)}\n\nProblem: {_wrap_user_input(state.problem)}\n\nReview the following retrieved text. Identify ONLY statements that are clearly factually incorrect, unsubstantiated, or overly speculative. Do NOT flag minor simplifications or educational summaries. If no clear issues are found, return an empty list.\n\nRetrieved Text:\n{retrieved_text}\n\nOutput JSON: {{"flags": [{{"statement": "<problematic statement>", "reasoning": "<why it\'s problematic>"}}]}}'

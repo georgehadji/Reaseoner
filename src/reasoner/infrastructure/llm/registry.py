@@ -56,8 +56,8 @@ _MODEL_WHITELIST: dict[str, dict[str, Any]] = {
     "mistral-medium":   {"model": "mistralai/mistral-medium-3.1"},
     "mistral-small":    {"model": "mistralai/mistral-small-3.2-24b-instruct"},
     "codestral":        {"model": "mistralai/codestral-2501"},
-    "ministral-8b":     {"model": "mistralai/ministral-8b"},
-    "ministral-3b":     {"model": "mistralai/ministral-8b"},
+    "ministral-8b":     {"model": "mistralai/mistral-small-3.2-24b-instruct"},
+    "ministral-3b":     {"model": "mistralai/mistral-small-3.2-24b-instruct"},
     # DeepSeek
     "deepseek-v3":      {"model": "deepseek/deepseek-v3.2"},
     "deepseek-v3.1-nex-n1": {"model": "nex-agi/deepseek-v3.1-nex-n1"},

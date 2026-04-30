@@ -33,7 +33,7 @@ def critique_prompt(state: PipelineState) -> str:
         f'Problem: {_wrap_user_input(state.problem)}\n\n'
         f'Evaluate these candidates:\n{json.dumps(candidates_summary, indent=2)}\n\n'
         f'Score each candidate on ALL four dimensions (0-10 each). '
-        f'Provide a "steel_man" (strongest counter-argument) for each.\n\n'
+        f'Provide a "steel_man" (strongest charitable interpretation — best case FOR each candidate) for each.\n\n'
         f'CRITICAL SCORING: If a candidate states confident claims that are factually wrong or unsubstantiated, '
         f'apply a confidence_vs_accuracy_penalty (0.0-10.0). Reward honest uncertainty over false confidence.\n\n'
         f'Output JSON (ALL fields required for EVERY score entry):\n'
@@ -44,7 +44,7 @@ def critique_prompt(state: PipelineState) -> str:
         f'"failure_resilience": <0-10>, '
         f'"feasibility": <0-10>, '
         f'"confidence_vs_accuracy_penalty": <0.0-10.0>, '
-        f'"steel_man": "<strongest counter-argument>", '
+        f'"steel_man": "<strongest charitable interpretation of this candidate — best case FOR it>", '
         f'"bias_flags": ["<bias if any>"]'
         f'}}]}}'
     )

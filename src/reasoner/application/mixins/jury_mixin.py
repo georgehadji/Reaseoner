@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 
-from reasoner.models import PipelineState, GenerationCandidate, CriticScore, VerificationResult, MetaEvaluation, ClaimLabel
+from reasoner.models import PipelineState, GenerationCandidate, CriticScore, CriticDimensionScore, VerificationResult, MetaEvaluation, ClaimLabel
 from reasoner.parsing import ParseError, extract_json
 
 import reasoner.phases as phases
@@ -52,8 +52,19 @@ class JuryMixin(PipelineMixinProtocol):
                 role=critic_id,
                 system_prompt=phases.JURY_CRITIC_SYSTEM,
                 user_prompt=phases.jury_critic_prompt(state),
-                state=state) # Critics should be focused
+                state=state)
             data = extract_json(raw)
+            # Instantiate nested CriticDimensionScore objects
+            candidate_scores = {}
+            for gen_id, dims in data.get('candidate_scores', {}).items():
+                candidate_scores[gen_id] = CriticDimensionScore(
+                    factuality=float(dims.get('factuality') or 0),
+                    reasoning=float(dims.get('reasoning') or 0),
+                    completeness=float(dims.get('completeness') or 0),
+                    helpfulness=float(dims.get('helpfulness') or 0),
+                    confidence_vs_accuracy_penalty=float(dims.get('confidence_vs_accuracy_penalty') or 0.0)
+                )
+            data['candidate_scores'] = candidate_scores
             return CriticScore(**data)
 
         # Get critics from preset (simplified for now, assume roles exist)
@@ -76,9 +87,10 @@ class JuryMixin(PipelineMixinProtocol):
         for critic_score in state.critic_scores:
             for gen_id, scores in critic_score.candidate_scores.items():
                 # Check the confidence_vs_accuracy_penalty
-                if scores.get("confidence_vs_accuracy_penalty", 0.0) > 5.0: # Threshold
+                if scores.confidence_vs_accuracy_penalty > 5.0: # Threshold
                     candidate_to_check = next((gc for gc in state.generation_candidates if gc.generator_id == gen_id), None)
                     if candidate_to_check:
+
                         self._log("JURY_CRITIQUE", f"High penalty for Jury candidate {gen_id}. Triggering recovery path.", state)
                         await self._run_recovery_path(state, candidate_to_check)
 
@@ -145,23 +157,14 @@ class JuryMixin(PipelineMixinProtocol):
         reliability: dict[str, float] = {}
         if state.meta_evaluation:
             reliability = state.meta_evaluation.critic_reliability or {}
+        
         generator_scores: dict[str, float] = {}
-        for crit_score in state.scores:
-            crit_id = (
-                crit_score.perspective.value
-                if hasattr(crit_score.perspective, "value")
-                else str(crit_score.perspective)
-            )
-            weight = reliability.get(crit_id, 1.0)
-            for cand in state.candidates:
-                gen_id = (
-                    cand.perspective.value
-                    if hasattr(cand.perspective, "value")
-                    else str(cand.perspective)
-                )
-                generator_scores[gen_id] = generator_scores.get(gen_id, 0.0) + (
-                    crit_score.logical_consistency * weight
-                )
+        for cs in state.critic_scores:
+            weight = reliability.get(cs.critic_id, 1.0)
+            for gen_id, dims in cs.candidate_scores.items():
+                # Weighted score based on Avg (total)
+                generator_scores[gen_id] = generator_scores.get(gen_id, 0.0) + (dims.total * weight)
+        
         state.jury_weighted_ranking = sorted(
             generator_scores.keys(),
             key=lambda gid: generator_scores[gid],

@@ -93,10 +93,11 @@ def parse_status() -> tuple[list[str], list[str]]:
     source_files: list[str] = []
     runtime_files: list[str] = []
 
-    for line in result.stdout.strip().split("\n"):
-        if not line:
+    for raw_line in result.stdout.split("\n"):
+        line = raw_line.rstrip("\r\n")
+        if not line or len(line) < 4:
             continue
-        # Format: "XY path" or "XY path -> new_path"
+        # Format: "XY path" or "XY path -> new_path" (always exactly 2 status chars + space)
         status = line[:2]
         rest = line[3:]
         # Handle renames
@@ -104,11 +105,14 @@ def parse_status() -> tuple[list[str], list[str]]:
             path = rest.split(" -> ")[-1]
         else:
             path = rest
+        path = path.strip()
+        if not path:
+            continue
 
         if is_runtime_artifact(path):
-            runtime_files.append(f"{status} {path}")
+            runtime_files.append(f"{status}\t{path}")
         else:
-            source_files.append(f"{status} {path}")
+            source_files.append(f"{status}\t{path}")
 
     return source_files, runtime_files
 
@@ -151,16 +155,20 @@ def main() -> int:
 
     # Display categorized status
     print()
+    def _fmt(entry: str) -> str:
+        parts = entry.split("\t", 1)
+        return f"{parts[0]} {parts[1]}" if len(parts) == 2 else entry
+
     if source_files:
         print(color(f"Source code files ({len(source_files)}):", BOLD + GREEN))
         for f in source_files:
-            print(f"  {color(f, GREEN)}")
+            print(f"  {color(_fmt(f), GREEN)}")
 
     if runtime_files:
         skip_msg = " (skipped — use --all to include)" if not args.all else " (included via --all)"
         print(color(f"Runtime artifacts ({len(runtime_files)}){skip_msg}:", BOLD + YELLOW))
         for f in runtime_files:
-            print(f"  {color(f, YELLOW)}")
+            print(f"  {color(_fmt(f), YELLOW)}")
 
     files_to_commit = all_files if args.all else source_files
 
@@ -177,10 +185,14 @@ def main() -> int:
     # Stage only the files we want
     print()
     for line in files_to_commit:
-        path = line[3:]  # Strip "XY " prefix
-        if " -> " in path:
-            path = path.split(" -> ")[-1]
-        run(["git", "add", "--", path])
+        # Entries are stored as "XY\tpath" — split on tab to get the clean path
+        path = line.split("\t", 1)[-1].strip()
+        if not path:
+            continue
+        try:
+            run(["git", "add", "--", path])
+        except subprocess.CalledProcessError as exc:
+            print(color(f"[WARN] Could not stage '{path}': {exc}", YELLOW))
 
     # Commit message
     msg = args.message if args.message else f"update: {datetime.now().strftime('%Y-%m-%d %H:%M')}"

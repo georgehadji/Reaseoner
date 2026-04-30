@@ -46,6 +46,7 @@ from .serializers import (
     _ser_1,
     _ser_1_5,
     _ser_5,
+    _ser_synthesis,
 )
 
 logger = logging.getLogger(__name__)
@@ -510,8 +511,10 @@ async def run_stream(
 
         # ── Context Vetting Serializer ───────────────────────────────────
         def _ser_context_vetting(state: PipelineState) -> dict:
+            vetted = getattr(state, "vetted_context", None) or getattr(state, "web_discovery_results", None) or []
             return {
                 "context_quality": getattr(state, "context_quality", "unknown"),
+                "vetted_context": vetted[:10],
                 "tokens": state.phase_tokens.get("Phase 1.25: Context Vetting", {"input": 0, "output": 0}),
             }
 
@@ -545,7 +548,8 @@ async def run_stream(
 
         last_phase_num = max(p[0] for p in phases) if phases else 5
         synthesis_phase_num = last_phase_num + 1
-        phases += [(synthesis_phase_num, "Synthesis", pipeline._phase_synthesis, _ser_5)]
+        if state.method != "writing":
+            phases += [(synthesis_phase_num, "Synthesis", pipeline._phase_synthesis, _ser_synthesis)]
 
         CRITICAL_PHASES = {name for _, name, _, _ in phases}
         _LEGACY_CRITICAL = {
@@ -718,6 +722,8 @@ async def run_stream(
                     if cancel_event.is_set():
                         yield _event({"type": "cancelled", "message": "Pipeline stopped by user"})
                         return
+                    # Success — break the retry loop
+                    break
                 except asyncio.TimeoutError:
                     logger.error("Phase %s (%s) timed out after %ss", num, name, phase_timeout)
                     err_msg = f"Phase timeout: {name} exceeded {phase_timeout}s"

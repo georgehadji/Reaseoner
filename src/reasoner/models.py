@@ -121,7 +121,7 @@ class CritiqueScore:
     failure_resilience: float        # 0-10
     feasibility: float               # 0-10
     bias_flags: list[str]
-    steel_man: str                   # strongest counter-argument
+    steel_man: str                   # strongest charitable interpretation (best case FOR the candidate)
     # Penalises overconfident-but-wrong claims; sourced from the critique prompt.
     # Default 0.0 so deserialized CritiqueScores without this field still load cleanly.
     confidence_vs_accuracy_penalty: float = 0.0
@@ -172,10 +172,13 @@ class CriticDimensionScore:
     reasoning: float          # 0-10
     completeness: float       # 0-10
     helpfulness: float        # 0-10
+    # Penalises overconfident-but-wrong claims
+    confidence_vs_accuracy_penalty: float = 0.0
 
     @property
     def total(self) -> float:
-        return (self.factuality + self.reasoning + self.completeness + self.helpfulness) / 4.0
+        base = (self.factuality + self.reasoning + self.completeness + self.helpfulness) / 4.0
+        return max(0.0, base - self.confidence_vs_accuracy_penalty)
 
 
 @dataclass
@@ -574,7 +577,10 @@ class PipelineState:
                     "content": _get_attr(c, "content", "")[:content_limit],
                     "key_insights": (_get_attr(c, "key_insights", [])[:TRUNCATION.KEY_INSIGHTS] if use_neuro else _get_attr(c, "key_insights", [])),
                 }
-                for c in self.top_candidates or self.candidates
+                for c in (
+                    self.candidates if phase == "synthesis" and self.candidates
+                    else self.top_candidates or self.candidates
+                )
             ],
             "scores": [
                 {
@@ -970,6 +976,7 @@ class PipelineState:
                                 reasoning=float(v.get('reasoning') or 0),
                                 completeness=float(v.get('completeness') or 0),
                                 helpfulness=float(v.get('helpfulness') or 0),
+                                confidence_vs_accuracy_penalty=float(v.get('confidence_vs_accuracy_penalty') or 0),
                             )
                         except (TypeError, ValueError):
                             pass  # skip this dimension entry

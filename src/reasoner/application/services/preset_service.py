@@ -28,14 +28,15 @@ class PresetService:
         return gate_preset_name, is_auto, auto_tier
 
     def filter_routing(self, routing: dict[str, str], primary_id: str) -> dict[str, str]:
-        """Drop routing entries whose API key env var is missing; fall back to primary."""
+        """Fall back routing entries whose API key env var is missing to primary_id."""
         filtered: dict[str, str] = {}
         for role, model_id in routing.items():
             entry = _REGISTRY.get(model_id, {})
             env = entry.get("env")
             if env and not os.environ.get(env):
-                continue
-            filtered[role] = model_id
+                filtered[role] = primary_id
+            else:
+                filtered[role] = model_id
         return filtered
 
     def build_router(

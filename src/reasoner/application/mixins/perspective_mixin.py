@@ -23,6 +23,18 @@ class PerspectiveMixin(PipelineMixinProtocol):
     async def _phase_2_perspectives(self, state: PipelineState) -> None:
         self._log("PHASE-2", "Running multi-perspective analysis...", state)
 
+        # Warn when all perspective roles resolve to the same model (diversity collapse).
+        _perspective_roles = {"constructive", "destructive", "systemic", "minimalist"}
+        _active_models = {
+            getattr(self.router.routing_table.get(r, self.router.primary), "model", "")
+            for r in _perspective_roles
+        }
+        if len(_active_models) < 2:
+            state.pending_events.append({
+                "type": "phase_warning",
+                "message": "All perspectives using the same model — cross-lab diversity unavailable. Add API keys for Anthropic, OpenAI, or Google to improve result quality.",
+            })
+
         _PERSPECTIVE_HALLUCINATION_KEYWORDS = {"greek text", "greek characters", "parsing errors", "encoding issues", "unicode problems"}
 
         def _is_perspective_hallucinated(candidate: SolutionCandidate) -> bool:
@@ -140,7 +152,13 @@ class PerspectiveMixin(PipelineMixinProtocol):
                     self._log("PHASE-3", f"High penalty for {score.perspective}. Triggering recovery path.", state)
                     await self._run_recovery_path(state, candidate_to_check)
 
-        scored_perspectives = {s.perspective: s.total for s in state.scores}
+        def _pruning_score(score) -> float:
+            """Cap penalty at 3.0 so honest uncertainty can't eliminate a high-dimensional winner."""
+            capped_penalty = min(score.confidence_vs_accuracy_penalty, 3.0)
+            return (score.logical_consistency + score.evidence_support +
+                    score.failure_resilience + score.feasibility) / 4.0 - capped_penalty
+
+        scored_perspectives = {s.perspective: _pruning_score(s) for s in state.scores}
         top_p = sorted(scored_perspectives, key=scored_perspectives.get, reverse=True)[:self.top_k]
         state.top_candidates = [c for c in state.candidates if c.perspective in top_p]
 

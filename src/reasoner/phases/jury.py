@@ -43,7 +43,7 @@ def jury_critic_prompt(state: PipelineState) -> str:
         f'"helpfulness": <0-10>, '
         f'"confidence_vs_accuracy_penalty": <0.0-10.0>, '
         f'"bias_flags": [], '
-        f'"steel_man": "<strongest counter-argument>"'
+        f'"steel_man": "<strongest charitable interpretation of this candidate — best case FOR it>"'
         f'}}}}, '
         f'"ranking": {ranking_example}, '
         f'"dissenting_note": "<any notable disagreement or caveat>"}}'
@@ -58,4 +58,5 @@ def jury_verifier_prompt(state: PipelineState) -> str:
 JURY_META_EVAL_SYSTEM = "You are an analytical assistant. Assess reliability and bias. Output ONLY valid JSON."
 
 def jury_meta_eval_prompt(state: PipelineState) -> str:
-    return f'{get_language_instruction(state)}\n\nEvaluate the critics based on their scores:\n{json.dumps(state.critic_scores, indent=2)}\n\nAssess critic reliability, bias, and agreement rate.\n\nOutput JSON: {{"critic_reliability": {{...}}, "meta_insight": "..."}}'
+    from dataclasses import asdict
+    return f'{get_language_instruction(state)}\n\nEvaluate the critics based on their scores:\n{json.dumps([asdict(cs) for cs in state.critic_scores], indent=2)}\n\nAssess critic reliability, bias, and agreement rate.\n\nOutput JSON: {{"critic_reliability": {{...}}, "meta_insight": "..."}}'

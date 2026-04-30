@@ -129,7 +129,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
 
   // Direct Response / Web Search: render inline without a phase card
   if (name === 'Direct Response' || name === 'Web Search') {
-    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data, { omitSections: ['vetted_context'] });
     return <MarkdownRenderer>{md}</MarkdownRenderer>;
   }
 
@@ -171,7 +171,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
     scientificState &&
     (Array.isArray(scientificState.hypotheses) || Array.isArray(scientificState.test_results))
   ) {
-    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data, { omitSections: ['vetted_context'] });
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
@@ -187,7 +187,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
     socraticState &&
     (Array.isArray(socraticState.questions) || Array.isArray(socraticState.answers))
   ) {
-    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data, { omitSections: ['vetted_context'] });
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
@@ -302,7 +302,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
      Array.isArray(writingState.factcheck_reviews) ||
      typeof writingState.final_article === 'string')
   ) {
-    const md = buildMarkdownFromPhase(index, phaseNum, name, data);
+    const md = buildMarkdownFromPhase(index, phaseNum, name, data, { omitSections: ['vetted_context'] });
     return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>
         {vettedContext.length > 0 && <VettedContextBlock items={vettedContext} />}
@@ -320,7 +320,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
     ('core_solution' in data || 'action_blueprint' in data)
   ) {
     const md = buildMarkdownFromPhase(index, phaseNum, name, data, {
-      omitSections: ['critical_insights', 'action_blueprint', 'open_questions', 'sources'],
+      omitSections: ['critical_insights', 'action_blueprint', 'open_questions', 'sources', 'vetted_context'],
     });
     return (
       <SynthesisCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} highlights={synthesisHighlights} sources={synthesisSections?.sources} defaultOpen>
@@ -393,7 +393,10 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
 
   // Fallback to markdown for everything else
   const md = buildMarkdownFromPhase(index, phaseNum, name, data, {
-    omitSections: isSynthesisPhase(name) ? ['critical_insights', 'action_blueprint', 'open_questions', 'sources'] : undefined,
+    omitSections: [
+      ...(isSynthesisPhase(name) ? ['critical_insights', 'action_blueprint', 'open_questions', 'sources'] as const : []),
+      'vetted_context' as const
+    ],
   });
   return (
       <PhaseCard index={index} phase={phaseNum} name={name} tokens={tokens} models={models} subagents={subagents} duration={duration} defaultOpen={defaultOpen} forceOpen={forceOpen} compact={isCompact} status={errorPhases.includes(phaseNum) ? 'error' : 'completed'} quality={quality}>

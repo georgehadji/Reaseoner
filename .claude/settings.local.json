@@ -148,7 +148,8 @@
       "Bash(ruff --version)",
       "Bash(python -m ruff --version)",
       "Bash(mkdir -p E:/Documents/Vibe-Coding/Reasoner/docs/CODEMAPS)",
-      "Bash(mkdir -p E:/Documents/Vibe-Coding/Reasoner/.reports)"
+      "Bash(mkdir -p E:/Documents/Vibe-Coding/Reasoner/.reports)",
+      "Bash(PYTHONPATH=src python -c \"from reasoner.phases._universal import cot_detection_batch_prompt; print\\('OK'\\)\")"
     ]
   },
   "enableAllProjectMcpServers": true,

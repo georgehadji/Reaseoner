@@ -45,12 +45,12 @@ def extract_json(text: str) -> dict[str, Any]:
     Extract JSON object (dict) from LLM response.
     Raises ParseError if no object found.
     """
+    if not text or not text.strip():
+        return {}
+    
     parsed = extract_json_any(text)
     if isinstance(parsed, dict):
         return parsed
-    if isinstance(parsed, list):
-        # Graceful degradation: wrap list in a dict
-        return {"items": parsed}
     
     raise ParseError(
         f"Could not extract valid JSON object from response. "
@@ -110,7 +110,7 @@ def extract_json_any(text: str) -> Any:
     for pattern in fence_patterns:
         match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
         if match:
-            extracted = match.group(1).strip()
+            extracted = _strip_trailing_commas(match.group(1).strip())
             try:
                 return safe_json_loads(extracted, max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
@@ -118,7 +118,7 @@ def extract_json_any(text: str) -> Any:
 
     # Try direct parse
     try:
-        return safe_json_loads(text, max_depth=100)
+        return safe_json_loads(_strip_trailing_commas(text), max_depth=100)
     except (json.JSONDecodeError, JSONDepthExceededError):
         pass
 
@@ -142,21 +142,22 @@ def extract_json_any(text: str) -> Any:
     start_obj = text.find("{")
     start_arr = text.find("[")
     
-    # Try object extraction if it appears first
-    if start_obj != -1 and (start_arr == -1 or start_obj < start_arr):
+    # Always prefer objects over arrays — objects carry semantic meaning (keys)
+    # while arrays are often incidental or decorative in LLM responses.
+    if start_obj != -1:
         obj = _extract_balanced_structure(text, start_obj, "{", "}")
         if obj is not None:
             try:
-                return safe_json_loads(obj, max_depth=100)
+                return safe_json_loads(_strip_trailing_commas(obj), max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
                 pass
 
-    # Try array extraction
+    # Fallback to array extraction only if no object found
     if start_arr != -1:
         arr = _extract_balanced_structure(text, start_arr, "[", "]")
         if arr is not None:
             try:
-                return safe_json_loads(arr, max_depth=100)
+                return safe_json_loads(_strip_trailing_commas(arr), max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
                 pass
 
@@ -166,6 +167,12 @@ def extract_json_any(text: str) -> Any:
         return reconstructed
 
     return None
+
+
+def _strip_trailing_commas(text: str) -> str:
+    """Remove trailing commas before closing braces/brackets — LLMs emit these often."""
+    # Match comma followed by optional whitespace and a closing brace/bracket
+    return re.sub(r',\s*([}\]])', r'\1', text)
 
 
 def _extract_balanced_structure(text: str, start: int, open_char: str, close_char: str) -> str | None:

@@ -25,7 +25,7 @@ describe('useFeatureFlags', () => {
 
   it('persists feature flag changes to localStorage', () => {
     setEnabled('typed-errors', false);
-    const stored = JSON.parse(localStorage.getItem('reasoner-feature-flags') || '{}');
+    const stored = JSON.parse(localStorage.getItem('ara-feature-flags') || '{}');
     expect(stored['typed-errors']).toBe(false);
   });
 

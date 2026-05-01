@@ -488,6 +488,25 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         state.web_discovery_results = ranked_sources
         state.writing_state["retrieved_sources"] = ranked_sources
 
+        # ── Coverage heuristic: ensure breadth across subquestions ──
+        def _compute_coverage(sources: list[dict], subqs: list[dict]) -> dict:
+            covered = 0
+            coverage_detail = []
+            for sq in subqs:
+                q_text = sq.get("question", "").lower() if isinstance(sq, dict) else str(sq).lower()
+                keywords = [w for w in q_text.split() if len(w) > 4 and w not in {"about", "which", "what", "how", "have", "has", "been", "their", "these", "those"}]
+                matched = any(
+                    any(kw in (s.get("title", "") + " " + s.get("excerpt", "")).lower() for kw in keywords[:3])
+                    for s in sources
+                )
+                if matched:
+                    covered += 1
+                coverage_detail.append({"question": q_text[:60], "matched": matched})
+            ratio = covered / len(subqs) if subqs else 1.0
+            return {"ratio": ratio, "covered": covered, "total": len(subqs), "detail": coverage_detail}
+
+        coverage = _compute_coverage(ranked_sources, subquestions)
+
         # Diagnostics: record what happened
         diagnostics = {
             "queries_executed": len(all_queries),
@@ -498,9 +517,48 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 "news_source_type" if any(s.get("query_id") == "FALLBACK_NEWS" for s in all_sources) else None,
             ],
             "client_type": type(client).__name__,
+            "subquestion_coverage": coverage,
         }
         state.writing_state["retrieval_diagnostics"] = diagnostics
-        self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources. Diagnostics: {diagnostics}", state)
+        self._log("ARTICLE", f"Retrieved {len(ranked_sources)} ranked sources. Coverage: {coverage['covered']}/{coverage['total']} ({coverage['ratio']:.0%}). Diagnostics: {diagnostics}", state)
+
+        # Broader retrieval if coverage is poor (< 50%) and we have headroom
+        if coverage["ratio"] < 0.5 and len(ranked_sources) < ARTICLE_MAX_SOURCE_COUNT:
+            self._log("ARTICLE", f"Coverage low ({coverage['ratio']:.0%}) — triggering broader retrieval", state)
+            try:
+                broad_results = await client.search(
+                    f"{state.problem} comprehensive overview policy economy biodiversity",
+                    num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY * 2,
+                    domain=None,
+                )
+                if isinstance(broad_results, list):
+                    added = 0
+                    for res in broad_results:
+                        url = res.get("url", "")
+                        if not url and res.get("source") == "perplexity":
+                            url = res.get("url", "")
+                        if url and url not in seen_urls and len(ranked_sources) < ARTICLE_MAX_SOURCE_COUNT:
+                            seen_urls.add(url)
+                            ranked_sources.append(_normalize_source_record({
+                                "title": res.get("title", ""),
+                                "url": url,
+                                "date": res.get("published", ""),
+                                "authority_score": res.get("score", res.get("freshness_score", 0.0)),
+                                "excerpt": res.get("content", "")[:800],
+                                "source_type": res.get("source_type", "website"),
+                                "query_id": "BROAD",
+                                "query_text": state.problem,
+                            }))
+                            added += 1
+                    if added:
+                        self._log("ARTICLE", f"Broader retrieval added {added} sources", state)
+                        state.web_discovery_results = ranked_sources
+                        state.writing_state["retrieved_sources"] = ranked_sources
+                        diagnostics["fallback_attempts"].append("broad_coverage_search")
+                        coverage = _compute_coverage(ranked_sources, subquestions)
+                        diagnostics["subquestion_coverage"] = coverage
+            except Exception as exc:
+                self._log("ARTICLE", f"Broader retrieval failed: {exc}", state)
 
         if not ranked_sources and state.vetted_context:
             self._log("ARTICLE", "No sources from search — using Phase 3 vetted context as fallback", state)
@@ -531,6 +589,20 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 f"Source coverage is thin: {len(ranked_sources)} sources found, below target {ARTICLE_MIN_SOURCE_COUNT}",
                 state,
             )
+
+        # Bridge: populate generic vetted_context so Phase 1.5 Deep Read serializer can display sources
+        if ranked_sources:
+            state.vetted_context = [
+                {
+                    "title": s.get("title", ""),
+                    "url": s.get("url", ""),
+                    "summary": s.get("excerpt", ""),
+                    "key_facts": [],
+                    "relevant_quotes": [],
+                    "vetting_flags": [],
+                }
+                for s in ranked_sources
+            ]
 
     # ── Phase 3: Claim Extractor ───────────────────────────────────────────
 
@@ -646,11 +718,18 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         # Deduplicate revised claims
         seen_texts: set[str] = set()
         deduped: list[dict] = []
+        dropped_count = 0
         for c in revised_claims:
             text = c.get("text", "").strip().lower()
             if text and text not in seen_texts:
                 seen_texts.add(text)
                 deduped.append(c)
+            else:
+                dropped_count += 1
+                self._log("ARTICLE", f"Deduplicating claim: '{text[:60]}...'", state)
+
+        if dropped_count:
+            changes.append(f"Code deduplication removed {dropped_count} duplicate claim(s)")
 
         state.writing_state["claims"] = deduped
         state.writing_state["cove_changes_made"] = changes
@@ -957,7 +1036,19 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 lines.append(f"\n## {heading}\n")
                 lines.append(content + "\n")
 
-        article_text = "\n".join(lines)
+        article_text = "\n".join(lines).strip()
+
+        # BUG-FIX: If SOT synthesis produced no article text (e.g. LLM returned 
+        # empty content for all sections), try monolithic fallback once.
+        if not article_text and usable_claims:
+            self._log("ARTICLE", "SoT produced empty text — retrying with monolithic fallback", state)
+            await self._phase_article_synthesize_monolithic(state, claims_json)
+            # Re-read from state after monolithic fallback
+            article_text = state.writing_state.get("article", "")
+            if not article_text:
+                 self._log("ARTICLE", "Monolithic fallback also failed to produce text", state)
+            else:
+                 return # Exit early as monolithic synthesis already populated meta-data
 
         # Generate title/abstract from assembled article
         raw_meta, _ = await self._call_llm_cached(
@@ -1021,6 +1112,59 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 if content:
                     lines.append(content + "\n")
             article_text = "\n".join(lines)
+
+        # ── Retry + diagnostic fallback ──
+        claims = state.writing_state.get("claims", [])
+        if not article_text and not sections:
+            self._log("ARTICLE", "Monolithic synthesis returned empty — retrying with stronger prompt", state)
+            retry_raw, _ = await self._call_llm_cached(
+                role="article_synthesize_retry",
+                system_prompt=_SYNTHESIZER_SYSTEM,
+                user_prompt=(
+                    f"CRITICAL: The previous attempt produced NO CONTENT. "
+                    f"You MUST write a complete article with sections. "
+                    f"Do not return empty article or empty sections.\n\n"
+                    f"{self._synthesizer_prompt(state, claims_json)}"
+                ),
+                state=state,
+            )
+            try:
+                retry_data = extract_json(retry_raw)
+                article_text = retry_data.get("article", "")
+                sections = retry_data.get("sections", [])
+                if not article_text and sections:
+                    lines = []
+                    if retry_data.get("title"):
+                        lines.append(f"# {retry_data['title']}\n")
+                    for sec in sections:
+                        heading = sec.get("heading", "")
+                        content = sec.get("content", "")
+                        if heading:
+                            lines.append(f"\n## {heading}\n")
+                        if content:
+                            lines.append(content + "\n")
+                    article_text = "\n".join(lines)
+                if not article_text and not sections:
+                    raise ValueError("Retry also returned empty")
+                data = retry_data
+            except Exception as exc:
+                self._log("ARTICLE", f"Synthesis retry failed: {exc}", state)
+                state.errors.append(f"Article synthesize: retry failed: {exc}")
+                state.writing_state["synthesis_failed"] = True
+                state.writing_state["article"] = (
+                    f"# Synthesis Failed\n\n"
+                    f"The synthesizer could not produce article content from {len(claims)} verified claims.\n"
+                    f"This may indicate insufficient source coverage or a model formatting error.\n"
+                )
+                state.writing_state["sections"] = []
+                state.writing_state["abstract"] = "Insufficient evidence to produce a verified article."
+                state.writing_state["title"] = "Synthesis Failed"
+                state.writing_state["gaps_noted"] = ["No article content generated after retry"]
+                state.pending_events.append({
+                    "type": "phase_warning",
+                    "message": "Synthesis produced no content — output is a diagnostic report.",
+                })
+                return
 
         state.writing_state["article"] = article_text
         state.writing_state["sections"] = sections
@@ -1099,9 +1243,18 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         article = state.writing_state.get("article", "")
         claims = state.writing_state.get("claims", [])
         if not article:
-            self._log("ARTICLE", "No article for pre-mortem", state)
-            state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
-            return
+            if state.writing_state.get("synthesis_failed"):
+                self._log("ARTICLE", "Pre-mortem running on diagnostic output (synthesis failed)", state)
+                article = state.writing_state.get("article", "")
+            else:
+                self._log("ARTICLE", "No article for pre-mortem — attempting synthesis fallback", state)
+                claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
+                await self._phase_article_synthesize_monolithic(state, claims_json)
+                article = state.writing_state.get("article", "")
+                if not article:
+                    self._log("ARTICLE", "No article for pre-mortem after fallback", state)
+                    state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
+                    return
 
         if len(claims) > 20:
             self._log("ARTICLE", f"Truncating {len(claims)} claims to 20 for pre-mortem analysis", state)
@@ -1166,9 +1319,18 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         article = state.writing_state.get("article", "")
         claims = state.writing_state.get("claims", [])
         if not article:
-            self._log("ARTICLE", "No article to review", state)
-            state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
-            return
+            if state.writing_state.get("synthesis_failed"):
+                self._log("ARTICLE", "Critic running on diagnostic output (synthesis failed)", state)
+                article = state.writing_state.get("article", "")
+            else:
+                self._log("ARTICLE", "No article to review — attempting synthesis fallback", state)
+                claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
+                await self._phase_article_synthesize_monolithic(state, claims_json)
+                article = state.writing_state.get("article", "")
+                if not article:
+                    self._log("ARTICLE", "No article to review after fallback", state)
+                    state.pending_events.append({"type": "phase_warning", "message": "Skipped: no article draft available from Phase 9 (Synthesize)."})
+                    return
 
         import asyncio as _asyncio
         try:
@@ -1413,8 +1575,18 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
         # Build final article text
         lines: list[str] = []
-        if title:
-            lines.append(f"# {title}\n")
+        
+        # BUG-FIX: Handle empty article body gracefully.
+        # If we have verified claims but no article text, don't just say 'Synthesis Failed'
+        # if a title was already generated.
+        actual_title = title or (state.problem if not state.writing_state.get("insufficient_evidence") else "Synthesis Failed")
+        
+        if actual_title:
+            lines.append(f"# {actual_title}\n")
+            
+        if not article.strip() and not state.writing_state.get("insufficient_evidence"):
+            gaps.append("No article content generated after retry")
+            
         if abstract and not abstract_already_in_sections:
             if doc_type in ("paper", "thesis"):
                 lines.append(f"## Abstract\n\n{abstract}\n")
@@ -1508,6 +1680,11 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         except Exception as exc:
             self._log("ARTICLE", f"Humanize parse error: {exc}", state)
             state.errors.append(f"Article humanize: parse error: {exc}")
+            return
+
+        if not isinstance(data, dict):
+            self._log("ARTICLE", f"Humanize returned non-dict ({type(data).__name__}), skipping", state)
+            state.pending_events.append({"type": "phase_warning", "message": f"Humanize returned {type(data).__name__} instead of dict — skipping."})
             return
 
         humanized = clean_llm_artifacts(data.get("humanized_article", ""))

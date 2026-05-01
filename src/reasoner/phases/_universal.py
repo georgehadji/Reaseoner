@@ -72,7 +72,14 @@ def fusion_prompt(state: PipelineState, language: str) -> str:
 
     return (
         f'{lang_instruction}\n\nProblem: {_wrap_user_input(state.problem)}{web_context}{followup}\n\n'
-        f'First, choose exactly ONE task type from: analytical, strategic, creative, technical, predictive, hybrid. '
+        f'First, choose exactly ONE task type from: analytical, strategic, creative, technical, predictive, hybrid.\n'
+        f'\n'
+        f'DISAMBIGUATION (apply strictly):\n'
+        f'- "creative": ONLY if the user explicitly asks for original creative work (poem, story, fiction, satire, marketing copy).\n'
+        f'- "analytical": ANY request that asks for analysis, explanation, comparison, evaluation, research, or understanding of a real-world topic.\n'
+        f'- If the topic involves facts, data, evidence, or research-backed claims → "analytical" (NOT creative).\n'
+        f'- When in doubt between creative and analytical, choose "analytical".\n'
+        f'\n'
         f'Then, decompose the problem into a causal chain (max 5 steps). {jury_instr}\n\n'
         f'Output JSON: {{\n'
         f'  "task_type": "analytical",\n'

@@ -108,14 +108,34 @@ class OpenAICompatibleProvider(BaseLLMProvider):
             client_kwargs["default_headers"] = default_headers
         self.client = openai.AsyncOpenAI(**client_kwargs)
 
+    async def stream_complete(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        temperature: float = DEFAULT_TEMPERATURE,
+    ) -> AsyncIterator[str]:
+        # Simple stream implementation wrapping the underlying client
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user",   "content": user_prompt},
+            ],
+            "stream": True,
+        }
+        if temperature != 1.0:
+            kwargs["temperature"] = temperature
+        
+        async with self.client.chat.completions.create(**kwargs) as response:
+            async for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+
     # Models that support custom temperature values (0.0-2.0 range).
     # Note: OpenAI models (gpt-*, o1, o3) do NOT accept temperature parameters - they use temperature=1.0 fixed.
     _TEMPERATURE_SUPPORTED_MODELS = frozenset({
-        # DeepSeek
-        'deepseek-v4', 'deepseek-v3', 'deepseek-r1', 'deepseek-chat', 'deepseek-coder',
-        # Qwen
-        'qwen3-max', 'qwen3-plus', 'qwen3-turbo', 'qwen3.5-flash', 'qwen3.5-9b',
-        'qwen3.6-plus', 'qwen2.5', 'qwen-max',
         # Kimi
         'kimi-k2-5', 'kimi-k2-6',
         # GLM/ZhipuAI

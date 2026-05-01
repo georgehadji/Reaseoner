@@ -20,7 +20,9 @@ from typing import Optional
 _CSRF_TOKEN_MAX_AGE = 86400
 
 # Per-process CSRF signing secret (rotates on restart — acceptable for stateless tokens)
-_CSRF_SECRET = secrets.token_hex(32)
+# BUG-FIX: Use _get_csrf_secret() consistently so generation and verification use the same secret.
+# Previously _CSRF_SECRET was a process-local random value while verification used the env var,
+# causing token mismatch when CSRF_SECRET was set and RuntimeError when it was not.
 
 
 def _get_csrf_secret() -> bytes:
@@ -34,12 +36,15 @@ def _get_csrf_secret() -> bytes:
     return hashlib.sha256(raw.encode()).digest()
 
 
+_CSRF_SECRET = _get_csrf_secret()
+
+
 def generate_csrf_token() -> str:
     """Generate a token that embeds a signed expiry timestamp."""
     expiry = int(time.time()) + _CSRF_TOKEN_MAX_AGE
     nonce = secrets.token_urlsafe(16)
     payload = f"{expiry}:{nonce}"
-    sig = hmac.new(_CSRF_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()[:16]
+    sig = hmac.new(_CSRF_SECRET, payload.encode(), hashlib.sha256).hexdigest()[:16]
     return f"{payload}:{sig}"
 
 
@@ -71,7 +76,7 @@ def verify_csrf_token(signed: str) -> bool:
         expiry, nonce, sig = token.rsplit(":", 2)
         payload = f"{expiry}:{nonce}"
         expected_payload_sig = hmac.new(
-            _CSRF_SECRET.encode(), payload.encode(), hashlib.sha256
+            _CSRF_SECRET, payload.encode(), hashlib.sha256
         ).hexdigest()[:16]
         if not secrets.compare_digest(sig, expected_payload_sig):
             return False

@@ -366,6 +366,12 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                     num_results=ARTICLE_SEARCH_RESULTS_PER_QUERY,
                     domain=self.domain,
                 )
+                # BUG-FIX: Defensive check — client.search() may return a string or other
+                # non-list type in unexpected error conditions. Iterating over a string
+                # would yield single-character strings, causing 'str' has no attribute 'get'.
+                if not isinstance(results, list):
+                    self._log("ARTICLE", f"Search returned non-list ({type(results).__name__}), treating as empty.", state)
+                    return []
                 mapped = []
                 for res in results:
                     url = res.get("url", "")

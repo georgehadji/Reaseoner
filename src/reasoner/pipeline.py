@@ -28,7 +28,11 @@ def timed(func: Callable[..., T]) -> Callable[..., T]:
             return await func(self, *args, **kwargs)
         finally:
             elapsed = time.monotonic() - start
-            state = args[0] if args else None
+            # Robustly find state in args or kwargs
+            state = kwargs.get("state")
+            if state is None and args:
+                state = args[0]
+            
             if state is not None and hasattr(state, "phase_durations"):
                 state.phase_durations[func.__name__] = elapsed
             # Only log if we have a valid state object

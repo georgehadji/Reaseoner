@@ -650,18 +650,10 @@ class IntentConsistencyStage(PersuasionDefenseStage):
                         "Semantic drift was detected, suggesting the output "
                         "may be sensitive to persuasive framing. Provide a "
                         "concise explanation. Return ONLY a JSON object with "
-                        "a single key 'explanation'.
-
-"
-                        f"Original text:
-{generated_output}
-
-"
-                        f"Probe variants:
-"
-                        + "
----
-".join(variants)
+                        "a single key 'explanation'.\n\n"
+                        f"Original text:\n{generated_output}\n\n"
+                        f"Probe variants:\n"
+                        + "\n---\n".join(variants)
                     )
                     raw = await self.model_registry.call(
                         prompt, max_tokens=256, json_mode=True

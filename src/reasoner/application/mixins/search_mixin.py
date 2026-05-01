@@ -589,7 +589,10 @@ class SearchMixin(PipelineMixinProtocol):
                 async with semaphore:
                     return await task
 
-            await asyncio.gather(*[_with_limit(t) for t in tasks])
+            # BUG-FIX: Use return_exceptions=True to prevent a single failed deep-read
+            # task from crashing the entire gather and leaving vetted_context partially
+            # populated (which causes downstream str/dict confusion).
+            await asyncio.gather(*[_with_limit(t) for t in tasks], return_exceptions=True)
 
             # Score each deep-read result by BM25 on its extracted content so
             # the synthesis phase can surface the most on-topic sources.
@@ -630,11 +633,14 @@ class SearchMixin(PipelineMixinProtocol):
         # Handle both dict (raw LLM output) and Decomposition dataclass
         if isinstance(state.decomposition, dict):
             assumptions = state.decomposition.get("assumptions", [])
-        else:
+        elif hasattr(state.decomposition, "assumptions"):
             assumptions = [
                 {"text": a.text, "label": a.label.value}
                 for a in (state.decomposition.assumptions or [])
             ]
+        else:
+            # Fallback for unexpected types
+            assumptions = []
 
         uncertain = [a for a in assumptions if a.get("label") in ("HYPOTHESIS", "UNKNOWN")]
         if not uncertain:

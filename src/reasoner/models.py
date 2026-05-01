@@ -25,6 +25,17 @@ class TaskType(str, Enum):
     PREDICTIVE = "predictive"
     HYBRID = "hybrid"
 
+    @classmethod
+    def coerce(cls, value: str | "TaskType") -> "TaskType":
+        if isinstance(value, cls):
+            return value
+        raw = str(value).lower().strip()
+        try:
+            return cls(raw)
+        except ValueError:
+            return cls.HYBRID
+
+
 
 class ClaimLabel(str, Enum):
     VERIFIED = "VERIFIED"
@@ -294,6 +305,16 @@ class PipelineState:
     critic_scores: list["CriticScore"] = field(default_factory=list)
     verification_results: list["VerificationResult"] = field(default_factory=list)
     meta_evaluation: "MetaEvaluation | None" = None
+
+    @property
+    def synthesis(self) -> dict[str, Any] | None:
+        """Compatibility layer for old handler code expecting a dict."""
+        if self.final_solution:
+            return {
+                "core_solution": self.final_solution.core_solution,
+                "critical_insights": self.final_solution.critical_insights,
+            }
+        return None
 
     # ─────────────────────────────────────────────────────────────────────
     # NEW: Advanced Method States (v2.1)

@@ -140,6 +140,12 @@ export function sanitizeRequestHeaders(headers: Headers): Record<string, string>
     'accept',
     'accept-language',
     'content-type',
+    'stripe-signature',
+    'paypal-transmission-id',
+    'paypal-transmission-sig',
+    'paypal-transmission-time',
+    'paypal-cert-url',
+    'paypal-auth-algo',
     CSRF_HEADER,
   ]);
   const out: Record<string, string> = {};

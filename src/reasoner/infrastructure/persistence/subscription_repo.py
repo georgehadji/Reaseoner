@@ -6,6 +6,7 @@ Handles subscription upserts and quota tier synchronization.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import UUID, uuid4
 
@@ -24,15 +25,20 @@ class PostgresSubscriptionRepository:
         self._dsn = dsn
         self._pool_size = pool_size
         self._pool: asyncpg.Pool | None = None
+        self._pool_lock = asyncio.Lock()
 
     async def _get_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self._dsn,
-                min_size=1,
-                max_size=self._pool_size,
-            )
-        return self._pool
+        # BUG-FIX: Prevent race condition where concurrent coroutines create multiple pools.
+        if self._pool is not None:
+            return self._pool
+        async with self._pool_lock:
+            if self._pool is None:
+                self._pool = await asyncpg.create_pool(
+                    self._dsn,
+                    min_size=1,
+                    max_size=self._pool_size,
+                )
+            return self._pool
 
     async def upsert_subscription(self, sub: Subscription) -> None:
         """Idempotently update subscription in Postgres.

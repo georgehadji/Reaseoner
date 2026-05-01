@@ -42,30 +42,55 @@ def strip_prose_preamble(text: str) -> str:
 
 def extract_json(text: str) -> dict[str, Any]:
     """
-    Extract JSON from LLM response. Handles:
-    - Clean JSON
-    - JSON wrapped in outer markdown fences (stripped safely)
-    - JSON with leading/trailing prose
-    - Trailing commas
-    - Truncated JSON (token limit cut-off)
+    Extract JSON object (dict) from LLM response.
+    Raises ParseError if no object found.
+    """
+    parsed = extract_json_any(text)
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        # Graceful degradation: wrap list in a dict
+        return {"items": parsed}
     
-    Security: Input length limited to prevent ReDoS attacks.
+    raise ParseError(
+        f"Could not extract valid JSON object from response. "
+        f"First 200 chars: {text[:200]!r}"
+    )
+
+
+def extract_json_list(text: str) -> list[Any]:
+    """
+    Extract JSON array (list) from LLM response.
+    Raises ParseError if no array found.
+    """
+    parsed = extract_json_any(text)
+    if isinstance(parsed, list):
+        return parsed
+    if isinstance(parsed, dict):
+        # Graceful degradation: extract values from dict
+        return list(parsed.values())
+    
+    raise ParseError(
+        f"Could not extract valid JSON list from response. "
+        f"First 200 chars: {text[:200]!r}"
+    )
+
+
+def extract_json_any(text: str) -> Any:
+    """
+    Core extraction engine. Handles markdown fences, prose, and malformed JSON.
+    Returns dict, list, or None.
     """
     # CRITICAL: Limit input length to prevent regex DoS (ReDoS) attacks
-    # Regex patterns below can exhibit catastrophic backtracking on malicious input
-    MAX_INPUT_LENGTH = 100000  # 100KB should be more than enough for any LLM response
+    MAX_INPUT_LENGTH = 100000  
     if len(text) > MAX_INPUT_LENGTH:
         text = text[:MAX_INPUT_LENGTH]
     
     text = strip_perplexity_citations(text.strip())
-
-    # Guard against empty LLM responses (content filters, API errors, etc.)
     if not text:
-        logger.warning("extract_json received empty response; returning empty dict as fallback")
-        return {}
+        return None
 
-    # Strip leading/trailing markdown fence markers so downstream parsers
-    # see clean JSON even when the LLM ignored the "Output ONLY valid JSON" instruction.
+    # Strip markdown fences
     if text.startswith("```json"):
         text = text[7:].lstrip()
     elif text.startswith("```"):
@@ -73,19 +98,13 @@ def extract_json(text: str) -> dict[str, Any]:
     if text.rstrip().endswith("```"):
         text = text.rstrip()[:-3].rstrip()
 
-    # Try multiple approaches to extract JSON from code fences
-    # Approach 1: Match ```json ... ``` or ``` ... ``` anywhere
-    # Updated to handle both newline and non-newline endings for code blocks
-    # Note: Patterns use non-greedy matching but still vulnerable to ReDoS on very long input
     fence_patterns = [
-        r"```json\s*\n([\s\S]*?)\n```",      # ```json with newline ending
-        r"```\s*\n([\s\S]*?)\n```",          # ``` with newline ending
-        r"```json\s*\n([\s\S]*?)```",        # ```json without newline ending
-        r"```\s*\n([\s\S]*?)```",            # ``` without newline ending
-        r"^```json\s*\n([\s\S]*?)```\s*$",   # Full text with ```json
-        r"^```\s*\n([\s\S]*?)```\s*$",      # Full text with ```
-        r"```json\s*([\s\S]*?)\s*```",       # ```json with flexible spacing
-        r"```\s*([\s\S]*?)\s*```",           # ``` with flexible spacing
+        r"```json\s*\n([\s\S]*?)\n```",
+        r"```\s*\n([\s\S]*?)\n```",
+        r"```json\s*\n([\s\S]*?)```",
+        r"```\s*\n([\s\S]*?)```",
+        r"```json\s*([\s\S]*?)\s*```",
+        r"```\s*([\s\S]*?)\s*```",
     ]
 
     for pattern in fence_patterns:
@@ -95,7 +114,7 @@ def extract_json(text: str) -> dict[str, Any]:
             try:
                 return safe_json_loads(extracted, max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
-                pass  # Try next pattern
+                pass
 
     # Try direct parse
     try:
@@ -108,84 +127,69 @@ def extract_json(text: str) -> dict[str, Any]:
     partial_match = re.search(r'"core_analysis"\s*:\s*"((?:[^"\\]|\\.)*?)"(?:,\s*"|\s*})', text, re.DOTALL)
     if partial_match:
         core_analysis = partial_match.group(1)
-        # Try to extract other fields too
         insights_match = re.search(r'"key_insights"\s*:\s*\[(.*?)\]', text, re.DOTALL)
         insights = []
         if insights_match:
             insights_str = insights_match.group(1)
-            # Extract individual insights
-            for match in re.finditer(r'"((?:[^"\\]|\\.)*)"', insights_str):
-                insights.append(match.group(1))
-
+            for m in re.finditer(r'"((?:[^"\\]|\\.)*)"', insights_str):
+                insights.append(m.group(1))
         return {
             "core_analysis": core_analysis,
             "key_insights": insights[:5],
         }
 
-    # Find outermost JSON object by bracket counting
-    start = text.find("{")
-    if start != -1:
-        depth, in_str, escape = 0, False, False
-        for i, ch in enumerate(text[start:], start):
-            if escape:
-                escape = False
-                continue
-            if ch == "\\" and in_str:
-                escape = True
-                continue
-            if ch == '"' and not escape:
-                in_str = not in_str
-                continue
-            if not in_str:
-                if ch == "{":
-                    depth += 1
-                elif ch == "}":
-                    depth -= 1
-                    if depth == 0:
-                        candidate = text[start : i + 1]
-                        try:
-                            return safe_json_loads(candidate, max_depth=100)
-                        except (json.JSONDecodeError, JSONDepthExceededError):
-                            cleaned = re.sub(r",\s*([}\]])", r"\1", candidate)
-                            try:
-                                return safe_json_loads(cleaned, max_depth=100)
-                            except (json.JSONDecodeError, JSONDepthExceededError):
-                                # Try repairing unescaped quotes inside strings
-                                quote_repaired = _repair_json_quotes(candidate)
-                                if quote_repaired:
-                                    try:
-                                        return safe_json_loads(quote_repaired, max_depth=100)
-                                    except (json.JSONDecodeError, JSONDepthExceededError):
-                                        pass
-                                break  # found boundary but still invalid; try repair
+    # Find outermost structural boundaries
+    start_obj = text.find("{")
+    start_arr = text.find("[")
+    
+    # Try object extraction if it appears first
+    if start_obj != -1 and (start_arr == -1 or start_obj < start_arr):
+        obj = _extract_balanced_structure(text, start_obj, "{", "}")
+        if obj is not None:
+            try:
+                return safe_json_loads(obj, max_depth=100)
+            except (json.JSONDecodeError, JSONDepthExceededError):
+                pass
 
-        # Last resort: truncated JSON repair — close any open brackets/strings
-        candidate = text[start:]
-        for _ in range(10):  # Try repairing by progressively dropping the last incomplete item
-            repaired = _repair_truncated_json(candidate)
-            if repaired:
-                try:
-                    return safe_json_loads(repaired, max_depth=100)
-                except (json.JSONDecodeError, JSONDepthExceededError):
-                    # Fallback: chop off everything after the last comma and try again
-                    last_comma = candidate.rfind(",")
-                    if last_comma == -1:
-                        break
-                    candidate = candidate[:last_comma]
-            else:
-                break
+    # Try array extraction
+    if start_arr != -1:
+        arr = _extract_balanced_structure(text, start_arr, "[", "]")
+        if arr is not None:
+            try:
+                return safe_json_loads(arr, max_depth=100)
+            except (json.JSONDecodeError, JSONDepthExceededError):
+                pass
 
-    # Ultimate fallback: tolerant dict extraction for LLM outputs with
-    # unescaped quotes inside values.  We reconstruct the dict by scanning
-    # for keys and extracting values with a quote-aware state machine.
+    # Fallback for objects with unescaped quotes
     reconstructed = _extract_json_dict_fallback(text)
     if reconstructed:
         return reconstructed
 
-    raise ParseError(
-        f"Could not extract valid JSON from response. "
-        f"First 200 chars: {text[:200]!r}"
-    )
+    return None
+
+
+def _extract_balanced_structure(text: str, start: int, open_char: str, close_char: str) -> str | None:
+    """Extract a balanced structure (object or array) starting at index *start*."""
+    depth, in_str, escape = 0, False, False
+    for i, ch in enumerate(text[start:], start):
+        if escape:
+            escape = False
+            continue
+        if ch == "\\" and in_str:
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_str = not in_str
+            continue
+        if not in_str:
+            if ch == open_char:
+                depth += 1
+            elif ch == close_char:
+                depth -= 1
+                if depth == 0:
+                    return text[start : i + 1]
+    return None
+
 
 
 def _extract_json_dict_fallback(text: str) -> dict[str, Any] | None:

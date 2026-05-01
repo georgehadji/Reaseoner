@@ -49,7 +49,8 @@ CODING_SPEC_SYSTEM = (
 
 
 def coding_spec_prompt(state: PipelineState) -> str:
-    problem = _wrap_user_input(state.problem[:TRUNCATION["problem"]])
+    # BUG-FIX: TRUNCATION is a TruncationLimits object, not a dict. Use dot notation.
+    problem = _wrap_user_input(state.problem[:TRUNCATION.PROBLEM])
     return (
         f"Coding request:\n{problem}\n\n"
         "Produce a technical specification as JSON:\n"
@@ -85,7 +86,8 @@ CODING_GENERATE_SYSTEM = (
 
 
 def coding_generate_prompt(state: PipelineState, file_spec: dict) -> str:
-    problem = _wrap_user_input(state.problem[:TRUNCATION["problem"]])
+    # BUG-FIX: TRUNCATION is a TruncationLimits object, not a dict. Use dot notation.
+    problem = _wrap_user_input(state.problem[:TRUNCATION.PROBLEM])
     spec = state.coding_state.get("spec", {})
     arch = spec.get("architecture_summary", "")
     lang = spec.get("language", "")

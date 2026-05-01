@@ -191,10 +191,13 @@ class RateLimiter:
                 "limit_hour": self.config.requests_per_hour,
             }
     
-    def reset_client(self, client_id: str) -> None:
+    async def reset_client(self, client_id: str) -> None:
         """Reset rate limits for client."""
-        if client_id in self._buckets:
-            del self._buckets[client_id]
+        # BUG-FIX: Acquire lock before mutating shared bucket dictionary to prevent
+        # race conditions with concurrent is_allowed() calls that may be iterating
+        # over or reading from the same bucket.
+        async with self._lock_for(client_id):
+            self._buckets.pop(client_id, None)
     
     async def is_allowed_for_user(
         self,
@@ -261,9 +264,21 @@ class RateLimiter:
             info["remaining_hour"] = rph - bucket.requests_hour
             return True, info
 
-    def reset_all(self) -> None:
+    async def reset_all(self) -> None:
         """Reset all rate limits."""
-        self._buckets.clear()
+        # BUG-FIX: Acquire all locks before clearing buckets to prevent races with
+        # concurrent is_allowed() calls. In sharded mode we must hold all shard locks.
+        if self._sharded:
+            for lock in self._locks:
+                await lock.acquire()
+            try:
+                self._buckets.clear()
+            finally:
+                for lock in self._locks:
+                    lock.release()
+        else:
+            async with self._lock:
+                self._buckets.clear()
 
 
 # Global rate limiter instance

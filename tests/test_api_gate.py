@@ -58,7 +58,7 @@ async def test_force_pipeline_skips_gate(valid_run_payload):
     with patch("reasoner.api.streaming.HyperGateAgent") as mock_gate_cls:
         mock_gate_cls.return_value.decide = AsyncMock(return_value=None)
         with patch("reasoner.llm.ProviderRouter.from_model_ids", return_value=fake_router):
-            with patch("reasoner.pipeline.ARAPipeline._phase_0_classify", return_value=None):
+            with patch("reasoner.pipeline.ReasonerPipeline._phase_0_classify", return_value=None):
                 events = []
                 async for line in run_stream(req):
                     if line.startswith("data:"):
@@ -124,7 +124,7 @@ async def test_gate_failure_falls_back_to_pipeline(valid_run_payload):
         mock_gate.decide = AsyncMock(side_effect=RuntimeError("unexpected"))
 
         with patch("reasoner.llm.ProviderRouter.from_model_ids", return_value=fake_router):
-            with patch("reasoner.pipeline.ARAPipeline._phase_0_classify", return_value=None):
+            with patch("reasoner.pipeline.ReasonerPipeline._phase_0_classify", return_value=None):
                 events = []
                 async for line in run_stream(req):
                     if line.startswith("data:"):

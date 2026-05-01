@@ -106,8 +106,10 @@ class TokenAwareCache:
         """Lazy-init: load cache entries from disk on first use."""
         if self._loaded or not self.cache_dir:
             return
-        self._loaded = True
+        # BUG-FIX: Set _loaded AFTER successful load to prevent permanent cache disablement
+        # if _load_from_disk() raises an exception (e.g., disk I/O error, corrupted file).
         await self._load_from_disk()
+        self._loaded = True
     
     def _compute_key(self, problem: str, phase: str, model_id: str, prompt: str) -> str:
         """Compute cache key from inputs."""

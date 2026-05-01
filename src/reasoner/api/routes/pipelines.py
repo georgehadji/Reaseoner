@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from reasoner.api.auth_deps import require_csrf
 from reasoner.api.dependencies import get_current_user
@@ -40,11 +40,9 @@ async def get_event_stats(user: User = Depends(get_current_user)):
         event_store, _ = get_architecture_components()
         stats = await event_store.get_stats()
         return stats
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Event stats error: {e}")
-        return {"error": "Internal server error"}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/api/pipelines")
@@ -72,11 +70,9 @@ async def list_pipelines(
                 if _get_pipeline_owner(p.get("aggregate_id", p.get("id", ""))) in (None, user_id_str)
             ]
         return {"pipelines": pipelines, "total": len(pipelines)}
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"List pipelines error: {e}")
-        return {"error": "Internal server error", "pipelines": []}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.get("/api/pipelines/{pipeline_id}")
@@ -86,7 +82,6 @@ async def get_pipeline_status(
 ):
     """Get pipeline status from event store."""
     if not _check_pipeline_ownership(pipeline_id, user):
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     try:
         from reasoner.api import get_architecture_components
@@ -101,11 +96,9 @@ async def get_pipeline_status(
 
         result = await handler_registry.handle_query(query)
         return result
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Get pipeline error: {e}")
-        return {"error": "Internal server error"}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/api/pipelines/{pipeline_id}/resume")
@@ -116,7 +109,6 @@ async def resume_pipeline(
 ):
     """Resume a paused/failed pipeline from event history."""
     if not _check_pipeline_ownership(pipeline_id, user):
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     try:
         from reasoner.api import get_architecture_components
@@ -132,11 +124,9 @@ async def resume_pipeline(
         return result
     except ValueError as e:
         return {"error": str(e), "can_resume": False}
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Resume pipeline error: {e}")
-        return {"error": "Internal server error", "can_resume": False}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @router.post("/api/pipelines/{pipeline_id}/resume-stream")
@@ -146,7 +136,6 @@ async def resume_pipeline_stream(
     csrf_checked=Depends(require_csrf),
 ):
     if not _check_pipeline_ownership(pipeline_id, user):
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     """Resume a pipeline by reconstructing its context and starting a fresh stream.
 
@@ -173,11 +162,9 @@ async def resume_pipeline_stream(
         result = await handler_registry.handle_command(command)
     except ValueError as e:
         return {"error": str(e), "can_resume": False}
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Resume stream error: {e}")
-        return {"error": "Internal server error", "can_resume": False}
+        raise HTTPException(status_code=500, detail="Internal server error")
 
     problem = result.get("problem", "")
     preset = result.get("preset", "auto-budget")
@@ -222,7 +209,6 @@ async def delete_pipeline(
 ):
     """Delete pipeline and all events (GDPR compliance)."""
     if not _check_pipeline_ownership(pipeline_id, user):
-        from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Not authorized to access this pipeline")
     try:
         from reasoner.api import get_architecture_components
@@ -230,8 +216,6 @@ async def delete_pipeline(
         event_store, _ = get_architecture_components()
         await event_store.delete_aggregate(pipeline_id)
         return {"status": "deleted", "pipeline_id": pipeline_id}
-    except HTTPException:
-        raise
     except Exception as e:
         logger.error(f"Delete pipeline error: {e}")
-        return {"error": "Internal server error"}
+        raise HTTPException(status_code=500, detail="Internal server error")

@@ -38,6 +38,10 @@ async def _call_with_circuit(
         result = await asyncio.wait_for(coro, timeout=effective_timeout)
         await circuit.record_success()
         return result
+    except asyncio.CancelledError:
+        # BUG-FIX: Re-raise CancelledError without poisoning the circuit breaker.
+        # Task cancellation (client disconnect, timeout from upstream) is not a provider failure.
+        raise
     except Exception:
         await circuit.record_failure()
         raise
@@ -76,6 +80,19 @@ class ProviderRouter:
             return override
         attr = ROLE_TIMEOUTS.get(role)
         return getattr(TIMEOUTS, attr) if attr else TIMEOUTS.LLM_CALL
+
+    def _build_metadata(self, provider: BaseLLMProvider, response: str) -> dict[str, Any]:
+        """Build metadata dict for the LLM call."""
+        metadata = {
+            "model": provider.model,
+        }
+        if hasattr(provider, "last_input_tokens"):
+            metadata["input_tokens"] = provider.last_input_tokens
+        if hasattr(provider, "last_output_tokens"):
+            metadata["output_tokens"] = provider.last_output_tokens
+        if hasattr(provider, "last_cost_usd"):
+            metadata["cost_usd"] = provider.last_cost_usd
+        return metadata
 
     async def call(
         self,

@@ -7,6 +7,7 @@ All write operations are transactional to prevent race conditions.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from datetime import datetime, timezone
@@ -29,15 +30,20 @@ class PostgresQuotaRepository(QuotaRepository):
             os.environ.get("DB_POOL_SIZE", "10")
         )
         self._pool: asyncpg.Pool | None = None
+        self._pool_lock = asyncio.Lock()
 
     async def _get_pool(self) -> asyncpg.Pool:
-        if self._pool is None:
-            self._pool = await asyncpg.create_pool(
-                self._dsn,
-                min_size=1,
-                max_size=self._pool_size,
-            )
-        return self._pool
+        # BUG-FIX: Prevent race condition where concurrent coroutines create multiple pools.
+        if self._pool is not None:
+            return self._pool
+        async with self._pool_lock:
+            if self._pool is None:
+                self._pool = await asyncpg.create_pool(
+                    self._dsn,
+                    min_size=1,
+                    max_size=self._pool_size,
+                )
+            return self._pool
 
     async def get_quota(self, user_id: str) -> UsageQuota:
         pool = await self._get_pool()

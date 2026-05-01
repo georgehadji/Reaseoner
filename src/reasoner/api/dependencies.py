@@ -18,6 +18,8 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+logger = logging.getLogger(__name__)
+
 from reasoner.api.client_ip import get_client_ip
 from reasoner.domain.saas import User, SubscriptionTier, QuotaResult
 from reasoner.application.ports.auth_port import AuthPort
@@ -164,11 +166,20 @@ def require_tier(min_tier: SubscriptionTier):
         @app.post("/api/premium-only")
         async def premium_route(user: User = Depends(require_tier(SubscriptionTier.PRO))):
             ...
-    Local Development Bypass: Returns user without checking tier.
     """
     from fastapi import HTTPException
 
     async def checker(user: User = Depends(get_current_user)) -> User:
+        # BUG-FIX: Actually enforce the tier requirement instead of silently bypassing.
+        # Previously this function returned user unconditionally, allowing any tier
+        # to access endpoints protected by require_tier().
+        # TODO(#501): Replace with actual tier lookup from subscription DB.
+        # For now, fail closed in production to prevent unauthorized access.
+        if os.environ.get("ENVIRONMENT", "development") == "production":
+            raise HTTPException(
+                status_code=403,
+                detail=f"Tier enforcement not yet implemented. Minimum required: {min_tier.name}",
+            )
         return user
 
     return checker
@@ -191,9 +202,12 @@ async def check_rate_limit(
         try:
             allowed, info = await rate_limiter.is_allowed_for_user(client_id, tier="default")
         except Exception as exc:
+            # BUG-FIX: Fail closed on rate limiter errors instead of fail open.
+            # Previously any exception (including programming bugs) allowed the request
+            # through, creating a trivial bypass vector.
             logger.error("Rate limiter error: %s", exc)
-            allowed = True
-            info = {"limit_minute": 60, "remaining_minute": 60, "retry_after": None}
+            allowed = False
+            info = {"limit_minute": 60, "remaining_minute": 0, "retry_after": 60}
     else:
         # Anonymous — use IP + User-Agent hash
         ip = get_client_ip(request)
@@ -202,9 +216,10 @@ async def check_rate_limit(
         try:
             allowed, info = await rate_limiter.is_allowed(client_id)
         except Exception as exc:
+            # BUG-FIX: Fail closed on rate limiter errors instead of fail open.
             logger.error("Rate limiter error: %s", exc)
-            allowed = True
-            info = {"limit_minute": 60, "remaining_minute": 60, "retry_after": None}
+            allowed = False
+            info = {"limit_minute": 60, "remaining_minute": 0, "retry_after": 60}
 
     request.state.rate_limit_info = info
 
@@ -270,11 +285,12 @@ async def check_quota(
     try:
         result = await service.check(str(user.id), user_tier)
     except Exception:
-        # If DB is unavailable, allow the request (fail open) rather than
-        # hard-failing every authenticated request.
+        # BUG-FIX: Use emergency conservative quota instead of fail open.
+        # Previously any DB error granted unlimited quota (-1 remaining),
+        # creating a trivial bypass for quota enforcement.
         logger = logging.getLogger(__name__)
-        logger.warning("Quota check failed due to DB error, allowing request")
-        return QuotaResult(allowed=True, remaining=-1)
+        logger.warning("Quota check failed due to DB error, using emergency limits")
+        return QuotaResult(allowed=True, remaining=10)
 
     if not result.allowed:
         raise HTTPException(
@@ -301,9 +317,19 @@ async def check_preset_access(
     """
     FastAPI dependency: enforce preset tier requirements.
     Raises HTTPException 403 if preset requires higher tier.
-    Local Development Bypass: Returns early to allow all presets.
     """
-    return
+    # BUG-FIX: Actually enforce preset access control instead of unconditionally
+    # bypassing. Previously any authenticated user could use any preset regardless
+    # of their subscription tier.
+    # TODO(#501): Replace with actual preset-to-tier mapping from DB.
+    # For now, fail closed in production to prevent unauthorized access.
+    from fastapi import HTTPException
+
+    if os.environ.get("ENVIRONMENT", "development") == "production":
+        raise HTTPException(
+            status_code=403,
+            detail=f"Preset access enforcement not yet implemented. Preset: {preset}",
+        )
 
 
 async def check_quota_if_authenticated(

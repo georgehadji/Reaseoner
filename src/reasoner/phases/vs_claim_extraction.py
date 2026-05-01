@@ -34,14 +34,24 @@ class ExtractedClaimSet(BaseModel):
 
 
 async def _extract_claims(text: str, llm_client: _LLMClient | None) -> list[str]:
-    """Stub claim extraction: split on sentences for testing."""
+    """Extract factual claims from text using LLM, with sentence-split fallback."""
+    from reasoner.parsing import extract_json_list
+    
+    fallback = [s.strip() for s in text.replace("!", ".").replace("?", ".").split(".") if s.strip()]
     if llm_client is None:
-        # Simple sentence split fallback
-        return [s.strip() for s in text.replace("!", ".").replace("?", ".").split(".") if s.strip()]
-    prompt = f"Extract factual claims from this text as a JSON list of strings:\n{text}"
-    raw = await llm_client.generate(user=prompt)
-    # Fallback to sentence split if parsing fails
-    return [s.strip() for s in text.replace("!", ".").replace("?", ".").split(".") if s.strip()]
+        return fallback
+    
+    try:
+        prompt = f"Extract factual claims from this text as a JSON list of strings. Return ONLY the JSON list.\nText: {text}"
+        raw = await llm_client.generate(user=prompt)
+        claims = extract_json_list(raw)
+        if not claims:
+            return fallback
+        return [str(c) for c in claims]
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Claim extraction failed: {e}. Falling back to sentence split.")
+        return fallback
 
 
 async def extract_claims_from_vs_candidates(
@@ -61,11 +71,15 @@ async def extract_claims_from_vs_candidates(
 
     if config.mode == ClaimExtractionMode.UNION:
         tasks = [asyncio.create_task(_extract_claims(c.text, llm_client)) for c in candidates]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         all_claims: list[str] = []
         seen: set[str] = set()
-        for sublist in results:
-            for claim in sublist:
+        for res in results:
+            if isinstance(res, Exception):
+                import logging
+                logging.getLogger(__name__).error(f"Task failed in UNION claim extraction: {res}")
+                continue
+            for claim in res:
                 key = claim.lower().strip()
                 if key not in seen:
                     seen.add(key)
@@ -74,9 +88,19 @@ async def extract_claims_from_vs_candidates(
 
     # CONSENSUS
     tasks = [asyncio.create_task(_extract_claims(c.text, llm_client)) for c in candidates]
-    results = await asyncio.gather(*tasks)
-    claim_counts = Counter(claim.lower().strip() for sublist in results for claim in sublist)
-    consensus = [claim for sublist in results for claim in sublist if claim_counts[claim.lower().strip()] > len(candidates) / 2]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    # Filter out exceptions and flatten
+    valid_results: list[list[str]] = []
+    for res in results:
+        if isinstance(res, Exception):
+            import logging
+            logging.getLogger(__name__).error(f"Task failed in CONSENSUS claim extraction: {res}")
+            continue
+        valid_results.append(res)
+        
+    claim_counts = Counter(claim.lower().strip() for sublist in valid_results for claim in sublist)
+    consensus = [claim for sublist in valid_results for claim in sublist if claim_counts[claim.lower().strip()] > len(candidates) / 2]
     # Deduplicate while preserving first-seen order
     seen: set[str] = set()
     deduped: list[str] = []
@@ -86,3 +110,4 @@ async def extract_claims_from_vs_candidates(
             seen.add(key)
             deduped.append(claim)
     return ExtractedClaimSet(claims=deduped, source="consensus")
+

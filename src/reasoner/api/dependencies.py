@@ -15,6 +15,7 @@ import re
 from typing import Optional
 from uuid import UUID
 
+import asyncio
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
@@ -53,6 +54,57 @@ def _reset_rate_limiter_instance() -> None:
     _rate_limiter_instance = None
 
 security = HTTPBearer(auto_error=False)
+
+# ── User Provisioning Singleton ──
+_user_provision_pool: asyncpg.Pool | None = None
+_user_provision_lock = asyncio.Lock()
+_provisioned_user_ids: set[UUID] = set()
+
+
+async def _get_provision_pool() -> asyncpg.Pool:
+    """Singleton pool for lightweight user provisioning upserts."""
+    global _user_provision_pool
+    if _user_provision_pool is not None:
+        return _user_provision_pool
+    async with _user_provision_lock:
+        if _user_provision_pool is None:
+            import asyncpg
+            dsn = settings.DATABASE_URL.replace("+asyncpg", "")
+            _user_provision_pool = await asyncpg.create_pool(dsn, min_size=1, max_size=5)
+        return _user_provision_pool
+
+
+async def _ensure_user_in_db(user: User) -> None:
+    """Ensure OAuth user has a row in the local users table.
+
+    Idempotent upsert — safe to call on every request. Uses an in-memory
+    cache to avoid redundant DB writes for already-provisioned users.
+    """
+    if user.id in _provisioned_user_ids:
+        return
+    try:
+        pool = await _get_provision_pool()
+        await pool.execute(
+            """
+            INSERT INTO users (id, email, display_name, auth_provider, avatar_url, last_login_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                email = EXCLUDED.email,
+                display_name = EXCLUDED.display_name,
+                auth_provider = EXCLUDED.auth_provider,
+                avatar_url = EXCLUDED.avatar_url,
+                last_login_at = NOW()
+            """,
+            str(user.id),
+            user.email,
+            user.display_name,
+            user.auth_provider,
+            user.avatar_url,
+        )
+        _provisioned_user_ids.add(user.id)
+    except Exception as exc:
+        # Log but don't fail the request — auth already succeeded
+        logger.warning("User provisioning failed for %s: %s", user.id, exc)
 
 
 _BASE64URL_RE = re.compile(r'^[A-Za-z0-9_-]+$')
@@ -135,6 +187,7 @@ async def get_current_user(
 
     try:
         user = await _resolve_auth_token(credentials.credentials)
+        await _ensure_user_in_db(user)
         request.state.user = user
         return user
     except HTTPException:
@@ -152,6 +205,7 @@ async def get_optional_user(
         return None
     try:
         user = await _resolve_auth_token(credentials.credentials)
+        await _ensure_user_in_db(user)
         request.state.user = user
         return user
     except Exception:

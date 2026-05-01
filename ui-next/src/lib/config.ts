@@ -159,7 +159,6 @@ export const METHOD_PHASES: Record<string, MethodPhase[]> = {
   writing: [
     { id: 0, name: 'Classification', short: 'Classify' },
     { id: 1, name: 'Decomposition', short: 'Decompose' },
-    { id: 1.5, name: 'Deep Read', short: 'Read' },
     { id: 2, name: 'Decompose Topic', short: 'Topic' },
     { id: 2.5, name: 'Retrieve Sources', short: 'Sources' },
     { id: 3, name: 'Extract Claims (CoVE)', short: 'Claims' },

@@ -110,7 +110,7 @@ def extract_json_any(text: str) -> Any:
     for pattern in fence_patterns:
         match = re.search(pattern, text, re.MULTILINE | re.DOTALL)
         if match:
-            extracted = _strip_trailing_commas(match.group(1).strip())
+            extracted = _sanitize_json_escapes(_strip_trailing_commas(match.group(1).strip()))
             try:
                 return safe_json_loads(extracted, max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
@@ -118,7 +118,7 @@ def extract_json_any(text: str) -> Any:
 
     # Try direct parse
     try:
-        return safe_json_loads(_strip_trailing_commas(text), max_depth=100)
+        return safe_json_loads(_sanitize_json_escapes(_strip_trailing_commas(text)), max_depth=100)
     except (json.JSONDecodeError, JSONDepthExceededError):
         pass
 
@@ -148,7 +148,7 @@ def extract_json_any(text: str) -> Any:
         obj = _extract_balanced_structure(text, start_obj, "{", "}")
         if obj is not None:
             try:
-                return safe_json_loads(_strip_trailing_commas(obj), max_depth=100)
+                return safe_json_loads(_sanitize_json_escapes(_strip_trailing_commas(obj)), max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
                 pass
 
@@ -157,7 +157,7 @@ def extract_json_any(text: str) -> Any:
         arr = _extract_balanced_structure(text, start_arr, "[", "]")
         if arr is not None:
             try:
-                return safe_json_loads(_strip_trailing_commas(arr), max_depth=100)
+                return safe_json_loads(_sanitize_json_escapes(_strip_trailing_commas(arr)), max_depth=100)
             except (json.JSONDecodeError, JSONDepthExceededError):
                 pass
 
@@ -167,6 +167,23 @@ def extract_json_any(text: str) -> Any:
         return reconstructed
 
     return None
+
+
+def _sanitize_json_escapes(text: str) -> str:
+    r"""Fix invalid escape sequences that LLMs emit inside JSON strings.
+
+    Common invalid escapes:
+      \\'  ->  '   (single quotes don't need escaping in JSON)
+      \\0  ->  removed or \\u0000
+      \\xNN -> \\u00NN (hex escapes are not valid in JSON)
+    """
+    # Fix \\' inside strings — JSON strings only need \" for quotes
+    text = re.sub(r"(?<!\\)\\'", "'", text)
+    # Fix \\0 (null byte escape — invalid in JSON)
+    text = re.sub(r"(?<!\\)\\0", "", text)
+    # Fix \\xNN hex escapes → \u00NN
+    text = re.sub(r"(?<!\\)\\x([0-9a-fA-F]{2})", lambda m: f"\\u00{m.group(1).upper()}", text)
+    return text
 
 
 def _strip_trailing_commas(text: str) -> str:

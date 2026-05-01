@@ -59,7 +59,7 @@ class WebSocketManager:
     - Heartbeat/ping-pong
     """
     
-    def __init__(self, max_connections: int = 1000, max_replay_events: int = 100):
+    def __init__(self, max_connections: int = 5000, max_replay_events: int = 100):
         # Active connections: {connection_id: websocket}
         self.active_connections: Dict[str, WebSocket] = {}
         

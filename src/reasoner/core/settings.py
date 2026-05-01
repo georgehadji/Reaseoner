@@ -37,11 +37,11 @@ except ImportError:
 class Settings:
     """Application settings derived from environment variables."""
 
-    RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
-    RATE_LIMIT_PER_HOUR: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "1000"))
-    RATE_LIMIT_BURST: int = int(os.getenv("RATE_LIMIT_BURST", "10"))
-    MEMORY_LIMIT_MB: int = int(os.getenv("MEMORY_LIMIT_MB", "1024"))
-    MEMORY_WARNING_MB: int = int(os.getenv("MEMORY_WARNING_MB", "768"))
+    RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "300"))
+    RATE_LIMIT_PER_HOUR: int = int(os.getenv("RATE_LIMIT_PER_HOUR", "5000"))
+    RATE_LIMIT_BURST: int = int(os.getenv("RATE_LIMIT_BURST", "50"))
+    MEMORY_LIMIT_MB: int = int(os.getenv("MEMORY_LIMIT_MB", "4096"))
+    MEMORY_WARNING_MB: int = int(os.getenv("MEMORY_WARNING_MB", "3072"))
     REQUEST_TIMEOUT_SECONDS: float = float(
         os.getenv("REQUEST_TIMEOUT_SECONDS", "300.0")
     )
@@ -78,8 +78,8 @@ class Settings:
     AUTH_DB_PATH: str = os.getenv("AUTH_DB_PATH", "src/reasoner/auth_keys.db")
 
     # ── Rate Limiter / Circuit Breaker Mode ──
-    RATE_LIMITER_MODE: str = os.getenv("RATE_LIMITER_MODE", "memory")
-    CIRCUIT_BREAKER_MODE: str = os.getenv("CIRCUIT_BREAKER_MODE", "memory")
+    RATE_LIMITER_MODE: str = os.getenv("RATE_LIMITER_MODE", "redis")
+    CIRCUIT_BREAKER_MODE: str = os.getenv("CIRCUIT_BREAKER_MODE", "redis")
 
     # ── CORS ──
     CORS_ORIGINS: str = os.getenv(
@@ -122,7 +122,7 @@ class Settings:
 
     # ── Database ──
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
-    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "50"))
 
     @property
     def internal_api_base_url(self) -> str:

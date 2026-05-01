@@ -537,7 +537,12 @@ async def run_stream(
             _noop._is_silent_noop = True  # type: ignore[attr-defined]
             phases.append((1, "Decomposition", _noop, _ser_1))
             phases.append((1.25, "Context Vetting", _noop, _ser_context_vetting))
-        phases.append((1.5, "Deep Read", pipeline._phase_deep_read, _ser_1_5))
+        # Deep Read: only for non-writing methods. Writing pipelines do their own
+        # source retrieval and vetting in method-specific phases (e.g., Retrieve Sources).
+        # Running generic Deep Read here would find no sources because Context Vetting
+        # is skipped for writing methods (see _noop above).
+        if state.method != "writing":
+            phases.append((1.5, "Deep Read", pipeline._phase_deep_read, _ser_1_5))
 
         flow = build_default_flow_registry(pipeline)
         # Prefer state.method (set by article detection or HyperGate before this point)
@@ -1075,7 +1080,12 @@ async def run_stream_cached(req: RunRequest, user_id: str | None = None) -> Asyn
         cached = await _load_cache(key)
         if cached:
             has_fatal_error = any(ev.get("type") == "done" and ev.get("errors") for ev in cached)
-            if not has_fatal_error:
+            # Also skip cache replay if any phase had errors — code may have been fixed
+            has_phase_error = any(
+                ev.get("type") == "phase_complete" and ev.get("data", {}).get("error")
+                for ev in cached
+            )
+            if not has_fatal_error and not has_phase_error:
                 for ev in cached:
                     yield _event({**ev, "cached": True} if ev.get("type") == "start" else ev)
                     if ev.get("type") in ("phase_start", "phase_complete"):

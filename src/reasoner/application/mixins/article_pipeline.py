@@ -1367,6 +1367,37 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
         if corrections:
             await self._apply_corrections_to_article(state, corrections, source="critic")
+            
+        # BUG-FIX: Quality Gate. If the score was very low (< 5.0) and 
+        # must_revise was true, perform a second (final) critique pass after 
+        # potential revisions to get an accurate final score and catch remaining issues.
+        # This triggers even if corrections was empty, to verify the low score.
+        if data.get("overall_score", 0) < 5.0 and data.get("must_revise", False):
+            self._log("ARTICLE", "Initial score low — performing final verification critique pass", state)
+            article_revised = state.writing_state.get("article", "")
+            try:
+                raw_final, _ = await asyncio.wait_for(
+                    self._call_llm_cached(
+                        role="article_critic",
+                        system_prompt=_CRITIC_SYSTEM,
+                        user_prompt=self._critic_prompt(state, article_revised, claims),
+                        state=state,
+                    ),
+                    timeout=45.0,
+                )
+                final_data = extract_json(raw_final)
+                state.writing_state["critic_score"] = final_data.get("overall_score", 0)
+                state.writing_state["must_revise"] = final_data.get("must_revise", False)
+                self._log("ARTICLE", f"Final quality check: score={final_data.get('overall_score', 0)}", state)
+                
+                if final_data.get("overall_score", 0) < 3.0:
+                    self._log("ARTICLE", "CRITICAL QUALITY WARNING: Article quality remains below threshold after revision.", state)
+                    state.pending_events.append({
+                        "type": "phase_warning",
+                        "message": "Final Journal Review score is critically low. Article may contain logic gaps or unsupported claims.",
+                    })
+            except Exception as exc:
+                self._log("ARTICLE", f"Final critique pass failed: {exc}", state)
 
     def _critic_prompt(self, state: PipelineState, article: str, claims: list[dict]) -> str:
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
@@ -1893,9 +1924,15 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
         # Find the field's array — tolerate missing closing ]
         m = re.search(rf'"{field}"\s*:\s*\[(.*)', clean, re.DOTALL)
-        if not m:
-            return []
-        arr_text = m.group(1)
+        if m:
+            arr_text = m.group(1)
+        else:
+            # BUG-FIX: If field name not found, try to extract a bare list 
+            # if the text starts with '[' (common LLM failure mode)
+            if clean.startswith("["):
+                arr_text = clean[1:]
+            else:
+                return []
 
         # Extract individual objects with a bracket balancer (tolerates truncation)
         items: list[dict] = []

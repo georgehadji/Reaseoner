@@ -58,12 +58,27 @@ class SupabaseAuthAdapter(AuthPort):
                 bytes=hashlib.sha256(str(supabase_user.id).encode()).digest()[:16]
             )
 
+            # Extract provider from app_metadata (set by Supabase Auth)
+            provider = None
+            if supabase_user.app_metadata:
+                provider = supabase_user.app_metadata.get("provider")
+
+            # Extract avatar from user_metadata (common OAuth field)
+            avatar_url = None
+            if supabase_user.user_metadata:
+                avatar_url = (
+                    supabase_user.user_metadata.get("avatar_url")
+                    or supabase_user.user_metadata.get("picture")
+                )
+
             return User(
                 id=user_id,
                 email=supabase_user.email or "",
                 display_name=supabase_user.user_metadata.get("full_name")
                 if supabase_user.user_metadata
                 else None,
+                auth_provider=provider,
+                avatar_url=avatar_url,
             )
         except AuthenticationError:
             raise

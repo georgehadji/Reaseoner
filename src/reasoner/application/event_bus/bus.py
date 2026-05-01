@@ -48,7 +48,7 @@ class EventBus:
         self._running = False
         self._max_queue_size: int = max_queue_size
         self._task_queue: asyncio.Queue[tuple[DomainEvent, EventHandler]] | None = None
-        self._semaphore = asyncio.Semaphore(100)  # Max 100 concurrent handler executions
+        self._semaphore = asyncio.Semaphore(200)  # Max 200 concurrent handler executions
     
     def subscribe(
         self,

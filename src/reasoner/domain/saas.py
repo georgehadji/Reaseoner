@@ -39,6 +39,8 @@ class User:
     email: str
     display_name: Optional[str] = None
     scopes: set[str] = field(default_factory=set)
+    auth_provider: Optional[str] = None
+    avatar_url: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 

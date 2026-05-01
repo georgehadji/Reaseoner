@@ -38,7 +38,7 @@ def _get_scraper_client() -> httpx.AsyncClient:
                 _shared_scraper_client = httpx.AsyncClient(
                     limits=httpx.Limits(
                         max_keepalive_connections=10,
-                        max_connections=20,
+                        max_connections=100,
                         keepalive_expiry=60.0,
                     ),
                     timeout=TIMEOUTS.SCRAPER,

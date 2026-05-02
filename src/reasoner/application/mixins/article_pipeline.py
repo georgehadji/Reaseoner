@@ -30,6 +30,7 @@ from reasoner.sanitization import clean_llm_artifacts
 from reasoner.application.mixins._protocol import PipelineMixinProtocol
 from reasoner.core.search import get_search_client
 from reasoner.core.constants import (
+    ARTICLE_CRITIC_MAX_WORDS,
     ARTICLE_MAX_SOURCE_COUNT,
     ARTICLE_MAX_SOURCES_FOR_CLAIM_EXTRACTION,
     ARTICLE_MIN_CLAIM_SUPPORT_RATIO,
@@ -92,6 +93,124 @@ def is_referential_followup(problem: str, history: list) -> bool:
         return False
     lower = problem.lower()
     return any(sig in lower for sig in _REFERENTIAL_SIGNALS)
+
+
+# ── Style Extraction ────────────────────────────────────────────────────────
+
+_AUTHOR_STYLE_PROFILES: dict[str, str] = {
+    "gladwell": (
+        "Malcolm Gladwell style: Open with a specific, concrete anecdote or character-driven scene. "
+        "Use counter-intuitive hooks that challenge conventional wisdom. Connect disparate domains or "
+        "ideas through unexpected parallels. Prefer narrative storytelling over dry exposition. "
+        "Use specific characters, scenes, and dialogue rather than abstractions. Build tension through "
+        "gradual revelation. End with a surprising insight that reframes the opening anecdote."
+    ),
+    "orwell": (
+        "George Orwell style: Direct, unadorned prose. Prefer short words over long ones. "
+        "Use concrete imagery to make abstract ideas visceral. Be politically engaged but intellectually honest. "
+        "Avoid cliches, dying metaphors, and pretentious diction."
+    ),
+    "thompson": (
+        "Hunter S. Thompson style: Gonzo journalism. First-person immersion. Savage wit and dark humor. "
+        "Rambling, drug-fueled prose poetry mixed with razor-sharp political insight. Never neutral."
+    ),
+}
+
+_PUBLICATION_VOICE_PROFILES: dict[str, str] = {
+    "new yorker": (
+        "New Yorker voice: Sophisticated but accessible. Assume intelligent reader. "
+        "Use long-form narrative journalism structure. Prefer scene-setting over thesis-statement openings. "
+        "Wry, understated humor. Deep reporting with literary flair. Frequent use of specific detail "
+        "and direct quotation. Avoid bullet points, numbered lists, and academic hedging."
+    ),
+    "atlantic": (
+        "Atlantic voice: Intellectual curiosity. Big-idea journalism. Connect current events "
+        "to historical patterns. Clear thesis with evidence-based argumentation. Accessible to educated generalist."
+    ),
+    "economist": (
+        "Economist voice: Anonymous, collective voice. Dry wit. Data-driven. "
+        "Prefers third-person. Concise but comprehensive. Frequent use of comparisons and analogies."
+    ),
+}
+
+
+def _extract_style_instructions(problem: str) -> str:
+    """Extract style, persona, publication, and tone instructions from the problem text.
+    
+    Returns a structured style brief suitable for injecting into prompts.
+    """
+    lower = problem.lower()
+    parts: list[str] = []
+    
+    # Detect author/persona references
+    author_patterns = [
+        (r"in\s+the\s+style\s+of\s+([\w\s\.]+?)(?:\.|,|$|\s+for\s+)", "author"),
+        (r"like\s+([\w\s\.]+?)(?:\.|,|$|\s+for\s+)", "author"),
+        (r"in\s+the\s+manner\s+of\s+([\w\s\.]+?)(?:\.|,|$)", "author"),
+        (r"written\s+by\s+([\w\s\.]+?)(?:\.|,|$)", "author"),
+    ]
+    detected_authors: list[str] = []
+    for pattern, kind in author_patterns:
+        for match in re.finditer(pattern, lower):
+            name = match.group(1).strip()
+            if len(name) > 2:
+                detected_authors.append(name)
+    
+    # Map detected author names to profiles
+    for author_name in detected_authors:
+        author_key = author_name.replace(" ", "").replace(".", "").replace("malcolm", "").strip()
+        # Try direct match first, then fuzzy
+        for key, profile in _AUTHOR_STYLE_PROFILES.items():
+            if key in author_name or author_name in key:
+                parts.append(f"Author Voice — {profile}")
+                break
+        else:
+            # Generic author instruction if no profile exists
+            parts.append(f"Author Voice — Write in the style of {author_name.title()}. Emulate their distinctive voice, sentence rhythm, and characteristic approach to storytelling.")
+    
+    # Detect publication references
+    publication_patterns = [
+        (r"for\s+(?:the\s+)?([\w\s]+?\s+magazine|\w+\s+magazine)", "publication"),
+        (r"for\s+(?:the\s+)?([\w\s]+?\s+journal|\w+\s+journal)", "publication"),
+        (r"for\s+(?:the\s+)?(new\s+yorker|atlantic|economist|wired|vanity\s+fair)", "publication"),
+        (r"in\s+(?:the\s+)?(new\s+yorker|atlantic|economist|wired|vanity\s+fair)", "publication"),
+    ]
+    detected_pubs: list[str] = []
+    for pattern, kind in publication_patterns:
+        for match in re.finditer(pattern, lower):
+            pub = match.group(1).strip()
+            if len(pub) > 2:
+                detected_pubs.append(pub)
+    
+    for pub_name in detected_pubs:
+        pub_key = pub_name.replace(" ", "").replace("the", "").strip()
+        for key, profile in _PUBLICATION_VOICE_PROFILES.items():
+            if key in pub_name or pub_name in key:
+                parts.append(f"Publication Voice — {profile}")
+                break
+        else:
+            parts.append(f"Publication Voice — Write for {pub_name.title()}. Match their editorial tone, assumed audience, and structural conventions.")
+    
+    # Detect tone markers
+    tone_patterns = [
+        (r"(humorous|witty|satirical|ironic)", "tone"),
+        (r"(serious|somber|grave)", "tone"),
+        (r"(conversational|casual|informal)", "tone"),
+        (r"(formal|academic|scholarly)", "tone"),
+        (r"(lyrical|poetic|evocative)", "tone"),
+        (r"(journalistic|reportorial)", "tone"),
+    ]
+    detected_tones: list[str] = []
+    for pattern, kind in tone_patterns:
+        for match in re.finditer(pattern, lower):
+            detected_tones.append(match.group(1))
+    if detected_tones:
+        parts.append(f"Tone — {'; '.join(t.title() + ' tone' for t in detected_tones)}")
+    
+    if not parts:
+        return ""
+    
+    return "\n\n".join(parts)
 
 
 # ── Data Contracts ──────────────────────────────────────────────────────────
@@ -242,6 +361,13 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
     async def _phase_article_decompose(self, state: PipelineState) -> None:
         doc_type = detect_document_type(state.problem)
         state.writing_state["document_type"] = doc_type
+        
+        # Extract and store style instructions from the problem text
+        style_brief = _extract_style_instructions(state.problem)
+        state.writing_state["style_brief"] = style_brief
+        if style_brief:
+            self._log("ARTICLE", f"Style brief extracted: {style_brief[:120]}...", state)
+        
         self._log("ARTICLE", f"Document type detected: {doc_type}", state)
         self._log("ARTICLE", "Decomposing topic into subquestions...", state)
         raw, _ = await self._call_llm_cached(
@@ -325,6 +451,37 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
     # ── Phase 2.5: Retrieval (per subquestion) ─────────────────────────────
 
+    def _is_creative_style(self, state: PipelineState) -> bool:
+        """Detect whether the requested style is narrative/creative (needs anecdotal sources)."""
+        style_brief = state.writing_state.get("style_brief", {})
+        if not style_brief:
+            return False
+        # Known narrative-heavy authors
+        narrative_authors = {
+            "malcolm gladwell", "atul gawande", "susan orlean", "jon krakauer",
+            "michael lewis", "david foster wallace", "hunter s. thompson",
+            "truman capote", "joan didion", "john mcphee", "jane jacobs",
+        }
+        author = style_brief.get("author", "").lower()
+        if author and any(a in author for a in narrative_authors):
+            return True
+        # Known narrative publications
+        narrative_publications = {
+            "the new yorker", "atlantic", "harpers", "vanity fair", "gq",
+            "esquire", "longreads", "narratively", "lapham's quarterly",
+        }
+        publication = style_brief.get("publication", "").lower()
+        if publication and any(p in publication for p in narrative_publications):
+            return True
+        # Genre/tone hints
+        genre = style_brief.get("genre", "").lower()
+        tone = style_brief.get("tone", "").lower()
+        if any(k in genre for k in ("creative", "narrative", "literary", "longform")):
+            return True
+        if any(k in tone for k in ("conversational", "narrative", "storytelling", "intimate")):
+            return True
+        return False
+
     async def _phase_article_retrieve(self, state: PipelineState) -> None:
         self._log("ARTICLE", "Retrieving sources per subquestion...", state)
         subquestions = state.writing_state.get("subquestions", [])
@@ -342,6 +499,9 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         import asyncio as _asyncio
 
         lang = (getattr(state, "detected_language", None) or "en").lower()
+        is_creative = self._is_creative_style(state)
+        if is_creative:
+            self._log("ARTICLE", "Creative/narrative style detected — adding anecdote and story query variants", state)
 
         def _build_variants(sq) -> list[tuple[str, str]]:
             """Return (query_text, query_id) pairs for a subquestion."""
@@ -353,6 +513,14 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                     variants.append(f"{q_text} evidence analysis")
                 if "overview" not in q_text.lower():
                     variants.append(f"{q_text} overview")
+                # Creative/narrative style: add story and anecdote variants
+                if is_creative:
+                    if "story" not in q_text.lower():
+                        variants.append(f"{q_text} story")
+                    if "anecdote" not in q_text.lower():
+                        variants.append(f"{q_text} anecdote")
+                    if "case study" not in q_text.lower():
+                        variants.append(f"{q_text} case study")
             return [(v, q_id) for v in variants]
 
         all_queries: list[tuple[str, str]] = []
@@ -743,6 +911,69 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             state,
         )
 
+        # ── Spot-check: re-verify a sample of claims with stricter prompt ──
+        await self._spot_check_claims(state, deduped, sources, changes)
+
+    async def _spot_check_claims(
+        self, state: PipelineState, deduped: list[dict], sources: list[dict], changes: list[str]
+    ) -> None:
+        """Re-verify a random sample of verified claims with a hostile reviewer prompt.
+
+        Downgrades any claim that fails the stricter spot-check to "weak" status.
+        This catches false positives from the standard CoVE verification flow.
+        """
+        if not deduped:
+            return
+        import random
+        verified_claims = [c for c in deduped if c.get("status") == "verified"]
+        spot_check_count = max(1, len(verified_claims) // 5)  # 20% or at least 1
+        spot_check_targets = random.sample(verified_claims, min(spot_check_count, len(verified_claims)))
+        if not spot_check_targets:
+            return
+        self._log("ARTICLE", f"Spot-checking {len(spot_check_targets)} verified claims...", state)
+        for claim in spot_check_targets:
+            claim_text = claim.get("text", "")
+            claim_id = claim.get("id", "")
+            # Find the source excerpt for this claim
+            claim_url = claim.get("source_url", "")
+            source_excerpt = ""
+            for s in sources:
+                if s.get("url", "") == claim_url:
+                    source_excerpt = s.get("excerpt", "")
+                    break
+
+            spot_prompt = (
+                f'{phases.get_language_instruction(state)}\n\n'
+                f'Source Excerpt:\n{source_excerpt[:2000]}\n\n'
+                f'Claim: "{claim_text}"\n\n'
+                f'CRITICAL: You are a HOSTILE reviewer. Your ONLY job is to find reasons to REJECT this claim.\n'
+                f'Does the source excerpt EXPLICITLY and DIRECTLY support this exact claim?\n'
+                f'Rules:\n'
+                f'- If the excerpt mentions the topic but does NOT contain the exact claim, answer REJECTED.\n'
+                f'- If the excerpt supports a weaker or different version of the claim, answer REJECTED.\n'
+                f'- Only answer VERIFIED if the excerpt unambiguously confirms the claim.\n'
+                f'- Quote the exact supporting passage if verified.\n\n'
+                f'Output JSON: {{"verdict": "verified|rejected", "reasoning": "...", "supporting_quote": "..."}}'
+            )
+            try:
+                raw_spot, _ = await self._call_llm_cached(
+                    role="article_cove_spotcheck",
+                    system_prompt=(
+                        "You are a hostile fact-checker. You are paid to REJECT claims. "
+                        "Be maximally skeptical. Only approve claims with explicit, direct evidence."
+                    ),
+                    user_prompt=spot_prompt,
+                    state=state,
+                )
+                spot_data = extract_json(raw_spot)
+                if spot_data.get("verdict") == "rejected":
+                    self._log("ARTICLE", f"Spot-check REJECTED claim {claim_id}: {claim_text[:80]}...", state)
+                    claim["status"] = "weak"
+                    claim["spot_check_note"] = spot_data.get("reasoning", "Spot-check rejection")
+                    changes.append(f"Spot-check downgraded {claim_id} to weak")
+            except Exception as exc:
+                self._log("ARTICLE", f"Spot-check failed for {claim_id}: {exc}", state)
+
     # ── Phase 3.5: Adversarial Verifier ────────────────────────────────────
 
     async def _phase_article_verify(self, state: PipelineState) -> None:
@@ -1023,6 +1254,99 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
                 })
             else:
                 written_sections.append(result)
+
+        # ── Section Quality Gate: detect and re-synthesize meta-commentary ──
+        _META_COMMENTARY_PATTERNS = [
+            r"gap between the provided claim",
+            r"not possible without inventing",
+            r"not fully supported",
+            r"constructing a section",
+            r"the claims provided do not directly address",
+            r"the single verified claim offers",
+            r"is not an exploration or story",
+            r"therefore, .{0,50}is not possible",
+            r"meta-commentary",
+            r"pipeline limitation",
+        ]
+        
+        async def _resynthesize_section(section_idx: int, section: dict) -> dict:
+            """Re-synthesize a single section with a stronger anti-meta prompt."""
+            async with semaphore:
+                sec_claim_ids = skeleton_sections[section_idx].get("claim_ids", [])
+                sec_claims = [c for c in usable_claims if c.get("id", "") in sec_claim_ids] or usable_claims
+                sec_claims_json = json.dumps(sec_claims, indent=2, ensure_ascii=False)
+                style_brief = state.writing_state.get("style_brief", "")
+                style_section = f"\nStyle Brief:\n{style_brief}\n" if style_brief else ""
+                
+                raw_sec, _ = await self._call_llm_cached(
+                    role="article_sot_solve_retry",
+                    system_prompt=phases.ARTICLE_SOT_SOLVE_SYSTEM,
+                    user_prompt=(
+                        f'{phases.get_language_instruction(state)}\n\n'
+                        f'Topic: {state.problem}\n\n'
+                        f'Section: {section.get("heading", "")}\n\n'
+                        f'Claims (use these as evidence):\n{sec_claims_json}\n\n'
+                        f'CRITICAL: The previous attempt produced meta-commentary instead of actual prose. '
+                        f'You MUST write genuine article content for this section.\n'
+                        f'Rules:\n'
+                        f'- Write ONLY about the section heading\n'
+                        f'- NEVER mention claim gaps, pipeline limitations, or why content is missing\n'
+                        f'- NEVER write "the claims do not support", "there is a gap", or similar\n'
+                        f'- Synthesize available claims into coherent prose\n'
+                        f'- Draw connections between claims and the section topic\n'
+                        f'- If evidence is thin, write a shorter but substantive section\n'
+                        f'- Inline [Source: URL] citations\n'
+                        f'- Do not invent new facts\n'
+                        f'- Target word count: {skeleton_sections[section_idx].get("word_count", 200)}\n'
+                        f'{style_section}\n'
+                        f'Output JSON: {{"content": "...", "word_count": 200}}'
+                    ),
+                    state=state,
+                )
+                try:
+                    sec_data = extract_json(raw_sec)
+                    return {
+                        "heading": section.get("heading", ""),
+                        "content": sec_data.get("content", ""),
+                        "word_count": sec_data.get("word_count", 0),
+                    }
+                except Exception as exc:
+                    self._log("ARTICLE", f"SoT section retry parse error: {exc}", state)
+                    return section
+        
+        resynthesis_tasks = []
+        resynthesis_indices = []
+        for i, sec in enumerate(written_sections):
+            content = sec.get("content", "")
+            if any(re.search(p, content, re.IGNORECASE) for p in _META_COMMENTARY_PATTERNS):
+                self._log("ARTICLE", f"Section '{sec.get('heading', '')}' contains meta-commentary — flagging for re-synthesis", state)
+                resynthesis_tasks.append(_resynthesize_section(i, sec))
+                resynthesis_indices.append(i)
+        
+        if resynthesis_tasks:
+            retry_results = await asyncio.gather(*resynthesis_tasks, return_exceptions=True)
+            for idx, retry_result in enumerate(retry_results):
+                sec_idx = resynthesis_indices[idx]
+                if isinstance(retry_result, Exception):
+                    self._log("ARTICLE", f"Section re-synthesis {sec_idx} failed: {retry_result}", state)
+                else:
+                    written_sections[sec_idx] = retry_result
+                    self._log("ARTICLE", f"Section '{retry_result.get('heading', '')}' re-synthesized successfully", state)
+        
+        # ── Fallback expansion: merge empty sections into neighbors ──
+        merged_sections: list[dict] = []
+        for i, sec in enumerate(written_sections):
+            content = sec.get("content", "").strip()
+            if not content and i > 0 and merged_sections:
+                # Merge empty section into previous by appending heading as a subheading
+                prev = merged_sections[-1]
+                prev_heading = prev.get("heading", "")
+                empty_heading = sec.get("heading", "")
+                self._log("ARTICLE", f"Merging empty section '{empty_heading}' into '{prev_heading}'", state)
+                prev["content"] = prev.get("content", "") + f"\n\n### {empty_heading}\n\n[Content merged: insufficient source support for dedicated section.]\n"
+            else:
+                merged_sections.append(sec)
+        written_sections = merged_sections
 
         state.writing_state["sot_sections"] = written_sections
 
@@ -1309,6 +1633,117 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         if pm_corrections:
             await self._apply_corrections_to_article(state, pm_corrections, source="pre_mortem")
 
+        # Auto re-synthesize weak sections identified by pre-mortem
+        weak_sections = data.get("weak_sections", [])
+        if weak_sections:
+            await self._re_synthesize_weak_sections(state, weak_sections)
+
+    async def _re_synthesize_weak_sections(
+        self, state: PipelineState, weak_sections: list[str]
+    ) -> None:
+        """Re-synthesize article sections flagged as weak by pre-mortem analysis.
+
+        Matches weak section descriptions against current section headings,
+        then rewrites matched sections with stronger evidence integration.
+        """
+        current_sections = state.writing_state.get("sections", [])
+        if not current_sections:
+            self._log("ARTICLE", "No sections available for weak-section re-synthesis", state)
+            return
+
+        claims = state.writing_state.get("claims", [])
+        usable_claims = [c for c in claims if c.get("status") in ("verified", "weak")]
+        claims_json = json.dumps(usable_claims, indent=2, ensure_ascii=False)
+
+        matched_indices: list[int] = []
+        for ws in weak_sections:
+            ws_lower = ws.lower().strip()
+            for i, sec in enumerate(current_sections):
+                heading = sec.get("heading", "").lower().strip() if isinstance(sec, dict) else getattr(sec, "heading", "").lower().strip()
+                if heading and (heading in ws_lower or ws_lower in heading or any(word in ws_lower for word in heading.split() if len(word) > 4)):
+                    if i not in matched_indices:
+                        matched_indices.append(i)
+                        self._log("ARTICLE", f"Pre-mortem flagged section '{heading}' as weak — queuing re-synthesis", state)
+                    break
+
+        if not matched_indices:
+            self._log("ARTICLE", f"Pre-mortem flagged {len(weak_sections)} weak sections but none matched current headings", state)
+            return
+
+        style_brief = state.writing_state.get("style_brief", "")
+        style_section = f"\nStyle Brief:\n{style_brief}\n" if style_brief else ""
+
+        async def _rewrite_one(sec_idx: int) -> dict:
+            sec = current_sections[sec_idx]
+            heading = sec.get("heading", "") if isinstance(sec, dict) else getattr(sec, "heading", "")
+            word_count = sec.get("word_count", 200) if isinstance(sec, dict) else getattr(sec, "word_count", 200)
+            sec_claim_ids = sec.get("claim_ids", []) if isinstance(sec, dict) else getattr(sec, "claim_ids", [])
+            sec_claims = [c for c in usable_claims if c.get("id", "") in sec_claim_ids] or usable_claims
+            sec_claims_json = json.dumps(sec_claims, indent=2, ensure_ascii=False)
+
+            raw, _ = await self._call_llm_cached(
+                role="article_pre_mortem_rewrite",
+                system_prompt=phases.ARTICLE_SOT_SOLVE_SYSTEM,
+                user_prompt=(
+                    f'{phases.get_language_instruction(state)}\n\n'
+                    f'Topic: {state.problem}\n\n'
+                    f'Section: {heading}\n\n'
+                    f'Claims (use these as evidence):\n{sec_claims_json}\n\n'
+                    f'CRITICAL: This section was flagged as WEAK in pre-mortem analysis. '
+                    f'You MUST strengthen it significantly.\n'
+                    f'Rules:\n'
+                    f'- Write ONLY about the section heading\n'
+                    f'- Integrate claims more tightly with the section theme\n'
+                    f'- Add specific evidence, examples, or data where available\n'
+                    f'- Address potential counterarguments briefly\n'
+                    f'- NEVER output meta-commentary about limitations or gaps\n'
+                    f'- Inline [Source: URL] citations\n'
+                    f'- Do not invent new facts\n'
+                    f'- Target word count: {word_count}\n'
+                    f'{style_section}\n'
+                    f'Output JSON: {{"content": "...", "word_count": {word_count}}}'
+                ),
+                state=state,
+            )
+            try:
+                sec_data = extract_json(raw)
+                return {
+                    "heading": heading,
+                    "content": sec_data.get("content", ""),
+                    "word_count": sec_data.get("word_count", 0),
+                }
+            except Exception as exc:
+                self._log("ARTICLE", f"Weak section re-synthesis parse error for '{heading}': {exc}", state)
+                return sec if isinstance(sec, dict) else {"heading": heading, "content": getattr(sec, "content", ""), "word_count": word_count}
+
+        rewrite_tasks = [_rewrite_one(i) for i in matched_indices]
+        try:
+            results = await asyncio.gather(*rewrite_tasks, return_exceptions=True)
+            for idx, result in enumerate(results):
+                sec_idx = matched_indices[idx]
+                if isinstance(result, Exception):
+                    self._log("ARTICLE", f"Weak section re-synthesis {sec_idx} failed: {result}", state)
+                    continue
+                if result.get("content", "").strip():
+                    current_sections[sec_idx] = result
+                    self._log("ARTICLE", f"Section '{result.get('heading', '')}' re-synthesized after pre-mortem", state)
+
+            # Reassemble article from revised sections
+            lines: list[str] = []
+            for sec in current_sections:
+                heading = sec.get("heading", "") if isinstance(sec, dict) else getattr(sec, "heading", "")
+                content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+                if content and content.strip():
+                    lines.append(f"\n## {heading}\n")
+                    lines.append(content + "\n")
+            revised_article = "\n".join(lines).strip()
+            if revised_article:
+                state.writing_state["article"] = revised_article
+                state.writing_state["sections"] = current_sections
+                self._log("ARTICLE", f"Article re-assembled after pre-mortem weak-section re-synthesis", state)
+        except Exception as exc:
+            self._log("ARTICLE", f"Weak section re-synthesis batch failed: {exc}", state)
+
     # ── Phase 4.5: Final Critic ────────────────────────────────────────────
 
     async def _phase_article_critic(self, state: PipelineState) -> None:
@@ -1399,7 +1834,44 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             except Exception as exc:
                 self._log("ARTICLE", f"Final critique pass failed: {exc}", state)
 
+    def _truncate_for_critic(self, article: str, max_words: int = ARTICLE_CRITIC_MAX_WORDS) -> str:
+        """Smart-truncate an article for the critic prompt.
+
+        Preserves the beginning (~40%), end (~40%), and a sample from the middle
+        (~20%) so the reviewer sees structural coherence, conclusion validity,
+        and a representative body sample. Adds a truncation notice.
+        """
+        words = article.split()
+        if len(words) <= max_words:
+            return article
+
+        head_words = int(max_words * 0.4)
+        tail_words = int(max_words * 0.4)
+        mid_budget = max_words - head_words - tail_words
+
+        head = words[:head_words]
+        tail = words[-tail_words:]
+
+        # Sample from the middle
+        middle_start = head_words
+        middle_end = len(words) - tail_words
+        middle_available = middle_end - middle_start
+        if middle_available > 0 and mid_budget > 0:
+            step = max(1, middle_available // mid_budget)
+            middle = words[middle_start:middle_end:step][:mid_budget]
+        else:
+            middle = []
+
+        truncated = " ".join(head + ["[… middle section truncated for brevity …]"] + middle + ["[… end section continues …]"] + tail)
+        return (
+            f"[NOTE: This article has been truncated from {len(words)} words to "
+            f"approximately {max_words} words for review. Focus on structural, "
+            f"evidentiary, and logical issues visible in the excerpt.]\n\n"
+            f"{truncated}"
+        )
+
     def _critic_prompt(self, state: PipelineState, article: str, claims: list[dict]) -> str:
+        article_for_critic = self._truncate_for_critic(article)
         claims_json = json.dumps(claims, indent=2, ensure_ascii=False)
         doc_type = state.writing_state.get("document_type", "article")
         if doc_type in ("paper", "thesis"):
@@ -1424,7 +1896,7 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
         return (
             f'{phases.get_language_instruction(state)}\n\n'
             f'Document type: {doc_type}\n\n'
-            f'Article:\n{article}\n\n'
+            f'Article:\n{article_for_critic}\n\n'
             f'Original Claims:\n{claims_json}\n\n'
             f'{reviewer_role} Find:\n'
             f'{criteria}\n'
@@ -1441,17 +1913,68 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
 
     # ── Revision helper ────────────────────────────────────────────────────
 
+    def _group_corrections_by_section(
+        self, corrections: list[dict], sections: list[dict]
+    ) -> dict[str, list[dict]]:
+        """Map corrections to section headings based on the 'location' field.
+
+        Falls back to a '__unmapped__' bucket for corrections whose location
+        cannot be matched to any known section heading.
+        """
+        section_headings = {s.get("heading", "").lower().strip(): s.get("heading", "") for s in sections}
+        groups: dict[str, list[dict]] = {}
+        for c in corrections:
+            loc = c.get("location", "").lower().strip()
+            matched_heading = "__unmapped__"
+            for lower_heading, original_heading in section_headings.items():
+                if lower_heading and (lower_heading in loc or loc in lower_heading):
+                    matched_heading = original_heading
+                    break
+            groups.setdefault(matched_heading, []).append(c)
+        return groups
+
+    async def _revise_section(
+        self, state: PipelineState, heading: str, content: str, corrections: list[dict], source: str
+    ) -> str:
+        """Ask the LLM to revise a single section based on targeted corrections."""
+        corrections_text = "\n".join(
+            f"- [{c.get('action', 'revise')}] {c.get('issue', '')} → {c.get('suggestion', '')}"
+            for c in corrections
+        )
+        user_prompt = (
+            f"{phases.get_language_instruction(state)}\n\n"
+            f"Revise ONLY the section below. Do NOT rewrite the entire article.\n\n"
+            f"SECTION: {heading}\n\n"
+            f"CORRECTIONS ({source}):\n{corrections_text}\n\n"
+            f"ORIGINAL SECTION TEXT:\n{content}\n\n"
+            f"Output ONLY the revised section text (no headings, no explanations)."
+        )
+        revised, _ = await self._call_llm_cached(
+            role="article_revise_section",
+            system_prompt=(
+                "You are a precision editor. You revise the given section to address "
+                "the listed corrections. You output ONLY the revised section text. "
+                "You do NOT add explanations, headings, or commentary."
+            ),
+            user_prompt=user_prompt,
+            state=state,
+        )
+        return revised.strip()
+
     async def _apply_corrections_to_article(
         self,
         state: PipelineState,
         corrections: list[dict],
         source: str = "critic",
     ) -> None:
-        """Call the article_revise LLM role to apply corrections to the current article draft.
+        """Apply corrections to the article draft.
 
-        Verifies the article actually changed by comparing content hash. If no change
-        occurred, logs a warning and retries with a stronger revision prompt that
-        explicitly requires rewriting flagged sections.
+        Strategy:
+        1. If sections are available and corrections can be mapped to sections,
+           revise each section independently (cheaper, more focused).
+        2. Fall back to full-article revision if section-targeted revision fails
+           or sections are not available.
+        3. Verify the article actually changed by comparing content hash.
         """
         article = state.writing_state.get("article", "")
         if not article or not corrections:
@@ -1463,7 +1986,70 @@ class ArticlePipelineMixin(PipelineMixinProtocol):
             return hashlib.sha256(text.strip().encode("utf-8")).hexdigest()
 
         original_hash = _content_hash(article)
+        sections = state.writing_state.get("sections", [])
 
+        # ── Strategy 1: section-targeted revision ──
+        if sections and len(sections) > 1:
+            grouped = self._group_corrections_by_section(corrections, sections)
+            # Only use section-targeted path if we successfully mapped some corrections
+            if len(grouped) > 1 or (len(grouped) == 1 and "__unmapped__" not in grouped):
+                self._log("ARTICLE", f"Applying corrections via section-targeted revision ({len(grouped)} sections)", state)
+                section_map = {s.get("heading", ""): s for s in sections}
+                revision_tasks = []
+                revision_headings = []
+                for heading, sec_corrections in grouped.items():
+                    if heading == "__unmapped__":
+                        continue
+                    sec = section_map.get(heading, {})
+                    content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+                    if content:
+                        revision_tasks.append(
+                            self._revise_section(state, heading, content, sec_corrections, source)
+                        )
+                        revision_headings.append(heading)
+
+                if revision_tasks:
+                    try:
+                        revised_sections = await asyncio.gather(*revision_tasks, return_exceptions=True)
+                        any_changed = False
+                        for heading, result in zip(revision_headings, revised_sections):
+                            if isinstance(result, Exception):
+                                self._log("ARTICLE", f"Section revision failed for '{heading}': {result}", state)
+                                continue
+                            if result and len(result) >= 20:
+                                sec = section_map.get(heading, {})
+                                original_content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+                                if result != original_content:
+                                    if isinstance(sec, dict):
+                                        sec["content"] = result
+                                    any_changed = True
+                                    self._log("ARTICLE", f"Section '{heading}' revised", state)
+
+                        if any_changed:
+                            # Reassemble article from revised sections
+                            lines: list[str] = []
+                            for sec in sections:
+                                heading = sec.get("heading", "") if isinstance(sec, dict) else getattr(sec, "heading", "")
+                                content = sec.get("content", "") if isinstance(sec, dict) else getattr(sec, "content", "")
+                                if content and content.strip():
+                                    lines.append(f"\n## {heading}\n")
+                                    lines.append(content + "\n")
+                            revised_article = "\n".join(lines).strip()
+                            revised_hash = _content_hash(revised_article)
+                            if revised_hash != original_hash:
+                                state.writing_state["article"] = revised_article
+                                state.writing_state["article_revised"] = revised_article
+                                state.writing_state["sections"] = sections
+                                self._log("ARTICLE", f"Section-targeted revision applied {len(corrections)} corrections", state)
+                                return
+                            else:
+                                self._log("ARTICLE", "Section-targeted revision produced same hash — falling back", state)
+                        else:
+                            self._log("ARTICLE", "No sections changed in targeted revision — falling back", state)
+                    except Exception as exc:
+                        self._log("ARTICLE", f"Section-targeted revision failed: {exc} — falling back", state)
+
+        # ── Strategy 2: full-article revision (fallback) ──
         corrections_text = "\n".join(
             f"- [{c.get('action', 'revise')}] {c.get('issue', '')} → {c.get('suggestion', '')}"
             for c in corrections

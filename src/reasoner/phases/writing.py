@@ -25,9 +25,16 @@ ARTICLE_COVE_VERIFY_SYSTEM = (
 )
 
 ARTICLE_COVE_ANSWER_SYSTEM = (
-    "You are an independent researcher. Answer the verification questions based ONLY on the sources. "
-    "Do not refer to the draft claims. For each question, explicitly state whether the evidence "
-    "supports, contradicts, or is insufficient to evaluate the target claim. "
+    "You are a HOSTILE reviewer whose bonus depends on REJECTING claims. "
+    "Answer the verification questions based ONLY on the sources. "
+    "Do not refer to the draft claims. "
+    "CRITICAL SKEPTICISM RULES:\n"
+    "1. If a source mentions the topic but does NOT explicitly contain the exact statement or an unambiguous paraphrase, answer INSUFFICIENT.\n"
+    "2. Do NOT infer support from tangential mentions, general discussions, or related topics.\n"
+    "3. Do NOT give the benefit of the doubt. When in doubt, reject.\n"
+    "4. For each 'supports' answer, you MUST cite the exact sentence or passage from the source that directly confirms the claim.\n"
+    "5. If the source discusses the general topic but not the specific claim, the verdict is INSUFFICIENT — never SUPPORTS.\n"
+    "6. Watch for claims that slightly exaggerate, generalize, or rephrase source text — downgrade these.\n"
     + JSON_ONLY_FOOTER
 )
 
@@ -74,15 +81,21 @@ def article_cove_answer_prompt(state, questions_json: str, sources_json: str) ->
         f'{get_language_instruction(state)}\n\n'
         f'Sources:\n{sources_json}\n\n'
         f'Answer these verification questions INDEPENDENTLY using ONLY the sources above. '
-        f'CRITICAL: Be skeptical. If a source mentions the topic but does NOT directly support the specific numerical claim, '
+        f'CRITICAL: Be skeptical. If a source mentions the topic but does NOT directly support the specific claim, '
         f'state "insufficient evidence" rather than "supports". '
         f'Flag any claim that generalizes beyond what the source explicitly states. '
         f'Do not refer to any draft claims. For each question, explicitly state whether '
         f'the evidence supports, contradicts, or is insufficient.\n\n'
+        f'VERDICT RULES:\n'
+        f'- SUPPORTS: The source contains an EXACT or unambiguous paraphrase of the claim. You must quote the supporting passage.\n'
+        f'- CONTRADICTS: The source explicitly says the opposite. You must quote the contradicting passage.\n'
+        f'- INSUFFICIENT: The source mentions the topic but does not directly confirm or deny the specific claim.\n'
+        f'When in doubt, choose INSUFFICIENT. Do not give benefit of the doubt.\n\n'
         f'Questions:\n{questions_json}\n\n'
         f'Output JSON: {{"answers": [{{'
         f'"question": "...", "answer": "...", "verdict": "supports|contradicts|insufficient", '
-        f'"confidence": 0.8, "reasoning": "..."'
+        f'"confidence": 0.8, "reasoning": "...", '
+        f'"supporting_quote": "exact passage from source that supports this (empty if insufficient or contradicts)"'
         f'}}]}}'
     )
 
@@ -232,18 +245,23 @@ def academic_sot_skeleton_prompt(state, claims_json: str) -> str:
 
 def article_sot_solve_prompt(state, section: dict, claims_json: str) -> str:
     section_heading = section.get("heading", "")
+    style_brief = state.writing_state.get("style_brief", "")
+    style_section = f"\nStyle Brief:\n{style_brief}\n" if style_brief else ""
     return (
         f'{get_language_instruction(state)}\n\n'
         f'Topic: {state.problem}\n\n'
         f'Section: {section_heading}\n\n'
-        f'Relevant Claims (use ONLY these):\n{claims_json}\n\n'
+        f'Relevant Claims (use these as your evidence):\n{claims_json}\n\n'
         f'Write this section. Rules:\n'
         f'- SCOPE CONSTRAINT: Write ONLY about "{section_heading}". Do NOT include content that belongs in other sections.\n'
-        f'- If the provided claims do not directly support "{section_heading}", state the gap explicitly rather than importing off-topic content.\n'
-        f'- Use ONLY the provided claims\n'
+        f'- If claims are sparse for this section, synthesize what you can from available claims and note any limitations briefly at the end of the section.\n'
+        f'- NEVER output meta-commentary about pipeline limitations, claim gaps, or why a section cannot be written.\n'
+        f'- NEVER write sentences like "The claims do not directly address..." or "Constructing this section is not possible...".\n'
+        f'- Use the provided claims as evidence and draw connections to the section topic where possible.\n'
         f'- Inline [Source: URL] citations\n'
         f'- Do not invent new facts\n'
-        f'- Target word count: {section.get("word_count", 200)}\n\n'
+        f'- Target word count: {section.get("word_count", 200)}\n'
+        f'{style_section}\n'
         f'Output JSON: {{"content": "...", "word_count": 200}}'
     )
 
@@ -406,8 +424,27 @@ WRITING_HUMANIZE_SYSTEM = (
 
 
 def writing_humanize_prompt(state: PipelineState, article: str) -> str:
+    style_brief = state.writing_state.get("style_brief", {})
+    style_hint = ""
+    if style_brief.get("author") or style_brief.get("publication"):
+        author = style_brief.get("author", "")
+        publication = style_brief.get("publication", "")
+        parts = []
+        if author:
+            parts.append(f"in the style of {author}")
+        if publication:
+            parts.append(f"for {publication}")
+        if parts:
+            style_hint = (
+                f"CRITICAL STYLE CONSTRAINT: The article was requested to be written {' '.join(parts)}. "
+                f"When rewriting, preserve the distinctive voice, rhythm, and register of that author/publication. "
+                f"Do NOT flatten it into generic 'human' prose. "
+                f"Remove AI tells while keeping the stylistic fingerprints intact: "
+                f"sentence rhythm, vocabulary level, narrative devices, and tonal quirks.\n\n"
+            )
     return (
         f'{get_language_instruction(state)}\n\n'
+        f'{style_hint}'
         f'Article to humanize:\n{_wrap_external_content(article)}\n\n'
         f'Step 1 — Audit: List every specific AI-writing tell you find. '
         f'Be concrete: quote the phrase or pattern, not just the category.\n\n'
@@ -418,7 +455,8 @@ def writing_humanize_prompt(state: PipelineState, article: str) -> str:
         f'- Keep the same language as the input\n'
         f'- Vary sentence length: mix short punchy sentences with longer ones\n'
         f'- Use direct simple language; prefer is/are/has over elaborate substitutes\n'
-        f'- Have a point of view where the evidence supports one\n\n'
+        f'- Have a point of view where the evidence supports one\n'
+        f"- If a specific author/publication style was requested above, preserve that style's voice\n\n"
         f'Output JSON: {{"ai_tells": ["<specific quoted pattern>", ...], '
         f'"humanized_article": "<full rewritten article>"}}'
     )

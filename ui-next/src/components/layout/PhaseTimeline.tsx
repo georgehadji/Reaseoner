@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useMemo } from 'react';
 import { METHOD_PHASES } from '@/lib/config';
 import { cn } from '@/lib/utils';
 
@@ -14,7 +15,7 @@ interface PhaseTimelineProps {
   onCollapseAll?: () => void;
 }
 
-export function PhaseTimeline({
+function PhaseTimelineComponent({
   method,
   currentPhase,
   completedPhases,
@@ -25,7 +26,17 @@ export function PhaseTimeline({
   onCollapseAll,
 }: PhaseTimelineProps) {
   const normalized = method.replace(/_/g, '-');
-  const phases = METHOD_PHASES[normalized] || METHOD_PHASES['multi-perspective'];
+  const phases = useMemo(() => METHOD_PHASES[normalized] || METHOD_PHASES['multi-perspective'], [normalized]);
+  const statusMap = useMemo(() => {
+    const map = new Map<number, 'pending' | 'active' | 'completed' | 'error'>();
+    phases.forEach((p) => {
+      if (errorPhases.includes(p.id)) map.set(p.id, 'error');
+      else if (currentPhase === p.id) map.set(p.id, 'active');
+      else if (completedPhases.includes(p.id)) map.set(p.id, 'completed');
+      else map.set(p.id, 'pending');
+    });
+    return map;
+  }, [phases, currentPhase, completedPhases, errorPhases]);
 
   return (
     <nav
@@ -33,7 +44,9 @@ export function PhaseTimeline({
       aria-live="polite"
       className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--border)] bg-[var(--bg)]/90 px-4 py-2 backdrop-blur-sm"
     >
-      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin pb-px">
+      <div className="relative flex flex-1 items-center gap-1.5 overflow-x-auto scrollbar-thin pb-px">
+        {/* Fade gradient indicating more content on the right */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-6 bg-gradient-to-l from-[var(--bg)] to-transparent z-10" />
         {phases.map((p) => {
           const isCompleted = completedPhases.includes(p.id);
           const isActive = currentPhase === p.id;
@@ -45,6 +58,7 @@ export function PhaseTimeline({
               type="button"
               disabled={!isCompleted}
               onClick={() => onPhaseClick?.(p.id)}
+              aria-label={`${p.name} \u2014 ${isActive ? 'In progress' : isError ? 'Error' : isCompleted ? 'Completed' : 'Pending'}`}
               className={cn(
                 'flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-3 py-2.5 text-left',
                 'transition-all duration-300 ease-out',
@@ -116,3 +130,13 @@ export function PhaseTimeline({
     </nav>
   );
 }
+
+export const PhaseTimeline = React.memo(PhaseTimelineComponent, (prev, next) => {
+  return (
+    prev.method === next.method &&
+    prev.currentPhase === next.currentPhase &&
+    prev.completedPhases.length === next.completedPhases.length &&
+    prev.errorPhases?.length === next.errorPhases?.length &&
+    JSON.stringify(prev.phaseDurations) === JSON.stringify(next.phaseDurations)
+  );
+});

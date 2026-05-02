@@ -25,8 +25,9 @@ import { PipelineError } from '@/hooks/usePipelineStream';
 
 import { ChatFeed, ChatFeedMessage, RenderedPhase } from '@/components/chat/ChatFeed';
 import { ChatErrorBoundary } from '@/components/chat/ChatErrorBoundary';
+import { PipelineSkeleton } from '@/components/chat/PipelineSkeleton';
 import { PhaseEvent, Conversation, RunFollowupRequest, ConversationTurn } from '@/lib/types';
-import { METHOD_PHASES, LIMITS, PIPELINE_DEFAULTS } from '@/lib/config';
+import { METHOD_PHASES, METHOD_DESCRIPTIONS, LIMITS, PIPELINE_DEFAULTS } from '@/lib/config';
 import { buildMarkdownFromPhases } from '@/lib/markdown';
 import { saveConversation } from '@/lib/db';
 import { conversationToMessages } from '@/lib/conversation-history';
@@ -1057,7 +1058,15 @@ export default function ChatPage() {
         </header>
 
         {hasMessages && activeAssistantMsg && (
-          <PhaseTimeline
+          <div>
+            <div className="px-4 pt-2 text-xs text-[var(--text-muted)]">
+              <Tooltip text={METHOD_DESCRIPTIONS[autoSelectedMethod.replace(/_/g, '-')] || ''}>
+                <span className="cursor-help">
+                  Method: <span className="text-[var(--text)]">{autoSelectedMethod.replace(/_/g, '-').replace(/\b\w/g, (l) => l.toUpperCase())}</span>
+                </span>
+              </Tooltip>
+            </div>
+            <PhaseTimeline
             method={autoSelectedMethod}
             currentPhase={currentPhase}
             completedPhases={completedPhases}
@@ -1066,9 +1075,11 @@ export default function ChatPage() {
             onExpandAll={() => setPhaseOpenMode('expand')}
             onCollapseAll={() => setPhaseOpenMode('collapse')}
           />
+          </div>
         )}
 
         <div
+          id="main-content"
           ref={scrollContainerRef}
           className="relative flex-1 overflow-y-auto scroll-smooth scrollbar-gray"
           style={{
@@ -1079,6 +1090,9 @@ export default function ChatPage() {
           {hasMessages ? (
             <>
               <ChatErrorBoundary fallback={<div className="p-4 text-red-500">Display error. Please refresh.</div>}>
+                {activeAssistantMsg && activeAssistantMsg.phases?.length === 0 && activeAssistantMsg.isStreaming && (
+                  <PipelineSkeleton method={autoSelectedMethod} />
+                )}
                 <ChatFeed
                   messages={messages}
                   onScrollToBottom={dismissIndicator}
@@ -1087,6 +1101,7 @@ export default function ChatPage() {
                   errorPhases={errorPhases}
                   onFeedback={handleFeedback}
                   onContinueGenerating={handleContinueGenerating}
+                  currentPhaseName={activeAssistantMsg?.currentPhaseName}
                 />
               </ChatErrorBoundary>
             </>

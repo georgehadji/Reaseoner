@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { Conversation } from '@/lib/types';
 import { Plus, PanelLeft, Trash2, Brain, History, Play, Search } from 'lucide-react';
@@ -65,7 +65,7 @@ function MemoryStatus() {
   );
 }
 
-export function Sidebar({
+function SidebarComponent({
   conversations,
   onLoad,
   onDelete,
@@ -147,7 +147,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={toggleSidebar}
-              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
+              className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-2)] hover:text-[var(--text)]"
               aria-label="Collapse sidebar"
             >
               <PanelLeft className="h-4 w-4" />
@@ -293,7 +293,7 @@ export function Sidebar({
                                   <button
                                     type="button"
                                     onClick={(e) => { e.stopPropagation(); onResume(conv.pipeline_id!); }}
-                                    className="cursor-pointer flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)]"
+                                    className="cursor-pointer flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--accent)]"
                                     aria-label="Resume pipeline"
                                   >
                                     <Play className="h-4 w-4" />
@@ -303,7 +303,7 @@ export function Sidebar({
                               <button
                                 type="button"
                                 onClick={(e) => { e.stopPropagation(); onDelete(conv.id); }}
-                                className="cursor-pointer flex h-10 w-10 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-red-400"
+                                className="cursor-pointer flex h-11 w-11 items-center justify-center rounded-lg text-[var(--text-muted)] transition-colors hover:bg-[var(--surface-3)] hover:text-red-400"
                                 aria-label="Delete"
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -339,7 +339,7 @@ export function Sidebar({
           <button
             type="button"
             onClick={toggleSidebar}
-            className="fixed left-3 top-3 z-50 hidden h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] shadow-[var(--shadow)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] sm:flex"
+            className="fixed left-3 top-3 z-50 hidden h-11 w-11 cursor-pointer items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--text-muted)] shadow-[var(--shadow)] transition-all hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)] sm:flex"
             aria-label="Open sidebar"
           >
             <PanelLeft className="h-4 w-4" />
@@ -349,3 +349,12 @@ export function Sidebar({
     </>
   );
 }
+
+export const Sidebar = React.memo(SidebarComponent, (prev, next) => {
+  return (
+    prev.conversations.length === next.conversations.length &&
+    prev.conversationId === next.conversationId &&
+    prev.lastUserPrompt === next.lastUserPrompt &&
+    prev.lastAssistantResponse === next.lastAssistantResponse
+  );
+});

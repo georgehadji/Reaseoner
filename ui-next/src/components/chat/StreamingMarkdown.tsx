@@ -4,6 +4,13 @@ import { memo } from 'react';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { TEXT_SIZES } from '@/lib/config';
 
+/**
+ * StreamingMarkdown — renders finalized markdown content with an optional cursor.
+ * NOTE: Do NOT use this for live SSE streaming. During active streaming,
+ * ChatFeed renders raw text directly to avoid re-parsing the full Markdown
+ * AST on every chunk. Use this only for content that is complete but needs
+ * a decorative cursor (e.g., typewriter effects on cached/history content).
+ */
 interface StreamingMarkdownProps {
   text: string;
   isStreaming?: boolean;

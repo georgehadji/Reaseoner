@@ -225,7 +225,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
                 const tier = String(idea.creativity_tier ?? 'conventional');
                 const prob = typeof idea.probability === 'number' ? idea.probability : null;
                 return (
-                  <div key={i} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                  <div key={i} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-sm font-semibold ${phaseTextClass}`}>{String(idea.title ?? '')}</span>
                       <span className={`text-xs font-medium ${tierColor[tier] ?? 'text-slate-400'}`}>{tier}</span>
@@ -246,10 +246,10 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
                 const clusterIdeas = Array.isArray(cluster.ideas) ? cluster.ideas as Record<string, unknown>[] : [];
                 const keptIdeas = clusterIdeas.filter(i => i.keep !== false);
                 return (
-                  <div key={ci} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                  <div key={ci} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2">
                     <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${phaseTextClass}`}>{String(cluster.theme ?? `Theme ${ci + 1}`)}</p>
                     {keptIdeas.map((idea, ii) => (
-                      <div key={ii} className="flex items-center gap-2 py-1 border-t border-white/5">
+                      <div key={ii} className="flex items-center gap-2 py-1 border-t border-[var(--border)]">
                         <span className={`text-xs flex-1 ${phaseTextClass}`}>{String(idea.title ?? '')}</span>
                         <span className="text-xs opacity-50">N:{String(idea.novelty ?? '—')} F:{String(idea.feasibility ?? '—')} I:{String(idea.impact ?? '—')}</span>
                       </div>
@@ -266,7 +266,7 @@ export const PhaseRenderer = memo(function PhaseRenderer({ phase, onComplete, fo
                 const steps = Array.isArray(dev.steps) ? dev.steps as string[] : [];
                 const risks = Array.isArray(dev.risks) ? dev.risks as string[] : [];
                 return (
-                  <div key={di} className="rounded-lg border border-white/10 bg-white/5 px-3 py-3 space-y-2">
+                  <div key={di} className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 py-3 space-y-2">
                     <p className={`text-sm font-semibold ${phaseTextClass}`}>{String(dev.title ?? '')}</p>
                     {!!dev.use_case && <p className={`text-xs opacity-80 ${phaseTextClass}`}>{String(dev.use_case)}</p>}
                     {steps.length > 0 && (

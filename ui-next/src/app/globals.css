@@ -24,12 +24,12 @@
     --border:        rgba(128, 128, 128, 0.15);
     --border-strong: rgba(128, 128, 128, 0.30);
 
-    /* Primary accent — Security Blue (corporate, trustworthy) */
-    --accent:       #707070; /* Medium Gray */
-    --accent-hover: #505050; /* Darker Gray */
-    --accent-text:  #F0F0F0; /* Off-White */
-    --accent-dim:   rgba(112, 112, 112, 0.15);
-    --accent-glow:  0 0 40px rgba(112, 112, 112, 0.25);
+    /* Primary accent — Muted Steel Blue (trustworthy, visible) */
+    --accent:       #5B8DB8;
+    --accent-hover: #7BA3C8;
+    --accent-text:  #FFFFFF;
+    --accent-dim:   rgba(91, 141, 184, 0.15);
+    --accent-glow:  0 0 40px rgba(91, 141, 184, 0.20);
 
     /* Secondary accent — Cyan (tech, precision) */
     --accent-2:     #909090; /* Light Medium Gray */
@@ -39,10 +39,10 @@
     --shadow:    0 2px 8px rgba(0, 0, 0, 0.60);
     --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.80), 0 0 0 1px rgba(128, 128, 128, 0.08);
 
-    /* Error — desaturated red for alerts */
-    --red:        #404040; /* Dark Gray for error */
-    --red-bg:     rgba(64, 64, 64, 0.10);
-    --red-border: rgba(64, 64, 64, 0.25);
+    /* Error — visible red for alerts */
+    --red:        #EF4444;
+    --red-bg:     rgba(239, 68, 68, 0.10);
+    --red-border: rgba(239, 68, 68, 0.25);
 
     /* Radius */
     --radius: 0.75rem;
@@ -74,11 +74,11 @@
     --border:        rgba(160, 160, 160, 0.10);
     --border-strong: rgba(160, 160, 160, 0.25);
 
-    --accent:       #707070; /* Medium Gray */
-    --accent-hover: #505050; /* Darker Gray */
-    --accent-text:  #F0F0F0; /* Off-White */
-    --accent-dim:   rgba(112, 112, 112, 0.10);
-    --accent-glow:  0 0 24px rgba(112, 112, 112, 0.15);
+    --accent:       #2563EB;
+    --accent-hover: #3B82F6;
+    --accent-text:  #FFFFFF;
+    --accent-dim:   rgba(37, 99, 235, 0.10);
+    --accent-glow:  0 0 24px rgba(37, 99, 235, 0.15);
 
     --accent-2:     #909090; /* Light Medium Gray */
     --accent-2-dim: rgba(144, 144, 144, 0.10);
@@ -86,9 +86,9 @@
     --shadow:    0 2px 8px rgba(0, 0, 0, 0.10);
     --shadow-lg: 0 20px 60px rgba(0, 0, 0, 0.10), 0 0 0 1px rgba(128, 128, 128, 0.06);
 
-    --red:        #404040; /* Dark Gray for error */
-    --red-bg:     rgba(64, 64, 64, 0.07);
-    --red-border: rgba(64, 64, 64, 0.20);
+    --red:        #DC2626;
+    --red-bg:     rgba(220, 38, 38, 0.07);
+    --red-border: rgba(220, 38, 38, 0.20);
   }
 
   * { box-sizing: border-box; }
@@ -109,10 +109,10 @@
     transition: outline-offset 0.15s ease, box-shadow 0.15s ease;
   }
 
-  /* Subtle text shadow for headings on dark bg for extra pop */
-  h1, h2, h3 {
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  }
+  /* Hero headings only — scoped via class, not global tag */
+  /* h1,h2,h3 text-shadow removed: caused halos in light mode and
+     reduced sharpness on high-DPI screens. Use .hero-heading for
+     decorative glow on landing page. */
 
   /* Smooth color transitions on text elements */
   p, span, li {
@@ -596,5 +596,47 @@
     color: var(--accent-text);
     font-weight: 600;
     z-index: 9999;
+  }
+
+  /* Decorative hero heading glow — scoped to landing page only */
+  .hero-heading {
+    text-shadow: 0 0 40px rgba(224, 224, 224, 0.35), 0 0 100px rgba(160, 160, 160, 0.18);
+  }
+}
+
+/* ============================================================
+   Accessibility — Reduced motion preference
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Utility: re-enable transitions for opacity/color state changes */
+  .preserve-transition,
+  .preserve-transition::before,
+  .preserve-transition::after {
+    transition-duration: 150ms !important;
+  }
+}
+
+/* ============================================================
+   Skeleton loading animation
+   ============================================================ */
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 1; }
   }
 }

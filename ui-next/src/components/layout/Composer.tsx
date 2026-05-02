@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { useAppStore } from '@/stores/app-store';
 import { EXAMPLE_PROMPTS, LIMITS, TIMING, API } from '@/lib/config';
 import { cn } from '@/lib/utils';
@@ -62,7 +62,9 @@ function AttachmentChip({ att, onRemove }: AttachmentChipProps) {
   );
 }
 
-export function Composer({ running, onSubmit, onStop, centered, isFollowup }: ComposerProps) {
+export const Composer = React.memo(ComposerComponent);
+
+function ComposerComponent({ running, onSubmit, onStop, centered, isFollowup }: ComposerProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const composerText = useAppStore((s) => s.composerText);
@@ -78,7 +80,15 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
 
   const [estimate, setEstimate] = useState<{ tokens: number; cost: string; duration: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const fileErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const estimateReqIdRef = useRef(0);
+
+  function showFileError(message: string) {
+    if (fileErrorTimerRef.current) clearTimeout(fileErrorTimerRef.current);
+    setFileError(message);
+    fileErrorTimerRef.current = setTimeout(() => setFileError(null), 4000);
+  }
 
   const fetchEstimate = useCallback(async (text: string, preset: string) => {
     if (!text.trim() || text.trim().length < 3) { setEstimate(null); return; }
@@ -132,17 +142,25 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
 
   function processFiles(files: FileList | null) {
     if (!files) return;
+    let added = false;
     for (const file of Array.from(files)) {
-      if (attachments.length >= LIMITS.maxAttachments) { alert('Maximum 5 files allowed.'); break; }
-      if (file.size > LIMITS.maxFileSizeBytes) { alert(`"${file.name}" exceeds the size limit.`); continue; }
-      if (!ALLOWED_TYPES.includes(file.type)) { alert(`"${file.type}" not supported.`); continue; }
+      if (attachments.length >= LIMITS.maxAttachments) { showFileError('Maximum 5 files allowed.'); break; }
+      if (file.size > LIMITS.maxFileSizeBytes) { showFileError(`"${file.name}" exceeds the size limit.`); continue; }
+      if (!ALLOWED_TYPES.includes(file.type)) { showFileError(`"${file.type}" is not a supported file type.`); continue; }
       addAttachment(file);
+      added = true;
     }
+    if (added) setFileError(null);
   }
 
   function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     processFiles(e.target.files);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  function clearFileError() {
+    if (fileError) setFileError(null);
+    if (fileErrorTimerRef.current) clearTimeout(fileErrorTimerRef.current);
   }
 
   function handleDragOver(e: React.DragEvent) {
@@ -184,7 +202,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
           onClick={() => fileInputRef.current?.click()}
           disabled={attachments.length >= 5 || running}
           className={cn(
-            'flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border text-[var(--text-muted)] transition-all',
+            'flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl border text-[var(--text-muted)] transition-all',
             attachments.length >= 5 || running
               ? 'cursor-not-allowed border-[var(--border)] opacity-40'
               : 'border-[var(--border)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-2)] hover:text-[var(--text)]',
@@ -261,7 +279,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         <button
           type="button"
           onClick={onStop}
-          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl bg-[#606060]/15 text-[#A0A0A0] transition-colors hover:bg-[#606060]/25"
+          className="flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl bg-[#606060]/15 text-[#A0A0A0] transition-colors hover:bg-[#606060]/25"
           aria-label="Stop"
         >
           <Square className="h-3.5 w-3.5 fill-current" />
@@ -274,7 +292,7 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         onClick={onSubmit}
         disabled={!hasContent}
         className={cn(
-          'flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl font-semibold text-white transition-all',
+          'flex h-11 w-11 cursor-pointer items-center justify-center rounded-xl font-semibold text-white transition-all',
           hasContent
             ? 'bg-[var(--accent)] hover:bg-[var(--accent-hover)] hover:shadow-[var(--accent-glow)]'
             : 'bg-[var(--surface-3)] text-[var(--text-subtle)] cursor-not-allowed',
@@ -311,10 +329,15 @@ export function Composer({ running, onSubmit, onStop, centered, isFollowup }: Co
         </div>
       )}
 
+      {fileError && (
+        <div className="mx-3 mt-2 rounded-lg border border-[var(--red-border)] bg-[var(--red-bg)] px-3 py-2 text-sm text-[var(--red)]">
+          {fileError}
+        </div>
+      )}
       <textarea
         ref={textareaRef}
         value={composerText}
-        onChange={(e) => { setComposerText(e.target.value); autoResize(); }}
+        onChange={(e) => { setComposerText(e.target.value); autoResize(); clearFileError(); }}
         onKeyDown={handleKeyDown}
         placeholder={isImageMode ? 'Describe the image you want to generate…' : 'Ask anything…'}
         rows={1}

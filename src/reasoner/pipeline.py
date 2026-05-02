@@ -179,6 +179,8 @@ class ReasonerPipeline(
     }
 
     def __init__(self, router: ProviderRouter, preset_name: str | None = None, initial_state: PipelineState | None = None, complexity: str | None = None, batch_critique_jury: bool = False, **kwargs) -> None:
+        if router is None:
+            raise TypeError("router cannot be None")
         self.router = router
         self.preset_name = preset_name
         self.initial_state = initial_state
@@ -199,7 +201,7 @@ class ReasonerPipeline(
             phase_configs=self.phase_configs,
             token_cache=token_cache,
             caching_enabled=TOKEN_OPTIMIZATION["caching"],
-            cascading_routing=self.router.cascading_routing,
+            cascading_routing=getattr(self.router, 'cascading_routing', None),
             cascading_quality_check=True,
             prompt_compression=TOKEN_OPTIMIZATION["neuro_compression"],
         )

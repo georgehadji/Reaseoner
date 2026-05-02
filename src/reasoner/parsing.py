@@ -161,6 +161,14 @@ def extract_json_any(text: str) -> Any:
             except (json.JSONDecodeError, JSONDepthExceededError):
                 pass
 
+    # Try to repair truncated JSON (token-limit cutoffs) before falling back
+    repaired = _repair_truncated_json(text)
+    if repaired:
+        try:
+            return safe_json_loads(_sanitize_json_escapes(_strip_trailing_commas(repaired)), max_depth=100)
+        except (json.JSONDecodeError, JSONDepthExceededError):
+            pass
+
     # Fallback for objects with unescaped quotes
     reconstructed = _extract_json_dict_fallback(text)
     if reconstructed:

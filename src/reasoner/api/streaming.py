@@ -410,11 +410,14 @@ async def run_stream(
             agent_model=agent_model,
         )
         # DEBUG: log a few routing entries so we can verify presets are fresh
+        # Defensive: test fakes may use _primary instead of primary (see _stream_direct_answer)
+        _primary_for_log = getattr(router, "primary", None) or getattr(router, "_primary", None)
+        _routing_table = getattr(router, "routing_table", {})
         logger.info(
             "Preset '%s' primary=%s sample_routing=%s",
             effective_preset_name,
-            getattr(router.primary, "model", router.primary),
-            {k: router.routing_table.get(k).model if router.routing_table.get(k) else None for k in list(router.routing_table)[:3]},
+            getattr(_primary_for_log, "model", "unknown") if _primary_for_log else "unknown",
+            {k: _routing_table.get(k).model if _routing_table.get(k) else None for k in list(_routing_table)[:3]},
         )
 
         if not req.force_pipeline:
@@ -667,7 +670,11 @@ async def run_stream(
                             f"Phase timed out after {timeout_seconds}s"
                         )
                     wait = min(keepalive_interval, remaining)
-                    done, _ = await asyncio.wait({phase_task, cancel_watch}, timeout=wait)
+                    done, _ = await asyncio.wait(
+                        {phase_task, cancel_watch},
+                        timeout=wait,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
                     if cancel_watch in done:
                         if not phase_task.done():
                             phase_task.cancel()
@@ -700,7 +707,7 @@ async def run_stream(
                 return
 
             # Silent no-ops (e.g. writing pipeline skips generic decomposition/vetting)
-            if getattr(fn, "_is_silent_noop", False):
+            if getattr(fn, "_is_silent_noop", False) is True:
                 await fn(state)
                 continue
 

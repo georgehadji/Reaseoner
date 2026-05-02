@@ -170,6 +170,28 @@ export const METHOD_PHASES: Record<string, MethodPhase[]> = {
   ],
 };
 
+/** Human-friendly descriptions for each reasoning method. */
+export const METHOD_DESCRIPTIONS: Record<string, string> = {
+  'multi-perspective': 'Analyzes your problem from multiple expert viewpoints simultaneously',
+  'debate': 'Pits opposing arguments against each other and finds consensus',
+  'jury': 'Multiple independent agents evaluate evidence and vote on a verdict',
+  'research': 'Iterative web search with source verification and synthesis',
+  'scientific': 'Generates hypotheses, designs falsification tests, and reports findings',
+  'socratic': 'Asks probing questions to surface hidden assumptions and deepen understanding',
+  'pre-mortem': 'Imagines failure scenarios and works backwards to prevent them',
+  'bayesian': 'Updates beliefs probabilistically as new evidence arrives',
+  'dialectical': 'Thesis → antithesis → synthesis through structured contradiction',
+  'analogical': 'Maps your problem to a distant domain and transfers insights back',
+  'delphi': 'Expert panels with iterative feedback and dissent surfacing',
+  'cove': 'Drafts an answer, verifies claims, then revises based on evidence',
+  'sot': 'Skeleton-of-thought: outlines first, then fills sections in parallel',
+  'tot': 'Tree-of-thought: explores multiple reasoning branches and selects the best',
+  'pot': 'Program-of-thought: writes and executes code to solve the problem',
+  'self-discover': 'Self-discovers and adapts the best reasoning structure for your problem',
+  'writing': 'Researches, outlines, drafts, fact-checks, and assembles a polished article',
+  'brainstorming': 'Generates ideas, clusters them, and develops the most promising',
+};
+
 /** Example prompts shown in the centered empty-state composer. */
 export const EXAMPLE_PROMPTS: string[] = [
   'Should I bootstrap or raise VC?',
